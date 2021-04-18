@@ -68,11 +68,14 @@ static const char* TAG = "vfs_fat";
 static ssize_t vfs_fat_write(void* p, int fd, const void * data, size_t size);
 static off_t vfs_fat_lseek(void* p, int fd, off_t size, int mode);
 static ssize_t vfs_fat_read(void* ctx, int fd, void * dst, size_t size);
+static ssize_t vfs_fat_pread(void *ctx, int fd, void *dst, size_t size, off_t offset);
+static ssize_t vfs_fat_pwrite(void *ctx, int fd, const void *src, size_t size, off_t offset);
 static int vfs_fat_open(void* ctx, const char * path, int flags, int mode);
 static int vfs_fat_close(void* ctx, int fd);
 static int vfs_fat_fstat(void* ctx, int fd, struct stat * st);
-static int vfs_fat_stat(void* ctx, const char * path, struct stat * st);
 static int vfs_fat_fsync(void* ctx, int fd);
+#ifdef CONFIG_VFS_SUPPORT_DIR
+static int vfs_fat_stat(void* ctx, const char * path, struct stat * st);
 static int vfs_fat_link(void* ctx, const char* n1, const char* n2);
 static int vfs_fat_unlink(void* ctx, const char *path);
 static int vfs_fat_rename(void* ctx, const char *src, const char *dst);
@@ -87,6 +90,7 @@ static int vfs_fat_rmdir(void* ctx, const char* name);
 static int vfs_fat_access(void* ctx, const char *path, int amode);
 static int vfs_fat_truncate(void* ctx, const char *path, off_t length);
 static int vfs_fat_utime(void* ctx, const char *path, const struct utimbuf *times);
+#endif // CONFIG_VFS_SUPPORT_DIR
 
 static vfs_fat_ctx_t* s_fat_ctxs[FF_VOLUMES] = { NULL, NULL };
 //backwards-compatibility with esp_vfs_fat_unregister()
@@ -102,7 +106,7 @@ static size_t find_context_index_by_path(const char* base_path)
     return FF_VOLUMES;
 }
 
-static size_t find_unused_context_index()
+static size_t find_unused_context_index(void)
 {
     for(size_t i=0; i<FF_VOLUMES; i++) {
         if (!s_fat_ctxs[i]) {
@@ -129,11 +133,14 @@ esp_err_t esp_vfs_fat_register(const char* base_path, const char* fat_drive, siz
         .write_p = &vfs_fat_write,
         .lseek_p = &vfs_fat_lseek,
         .read_p = &vfs_fat_read,
+        .pread_p = &vfs_fat_pread,
+        .pwrite_p = &vfs_fat_pwrite,
         .open_p = &vfs_fat_open,
         .close_p = &vfs_fat_close,
         .fstat_p = &vfs_fat_fstat,
-        .stat_p = &vfs_fat_stat,
         .fsync_p = &vfs_fat_fsync,
+#ifdef CONFIG_VFS_SUPPORT_DIR
+        .stat_p = &vfs_fat_stat,
         .link_p = &vfs_fat_link,
         .unlink_p = &vfs_fat_unlink,
         .rename_p = &vfs_fat_rename,
@@ -148,6 +155,7 @@ esp_err_t esp_vfs_fat_register(const char* base_path, const char* fat_drive, siz
         .access_p = &vfs_fat_access,
         .truncate_p = &vfs_fat_truncate,
         .utime_p = &vfs_fat_utime,
+#endif // CONFIG_VFS_SUPPORT_DIR
     };
     size_t ctx_size = sizeof(vfs_fat_ctx_t) + max_files * sizeof(FIL);
     vfs_fat_ctx_t* fat_ctx = (vfs_fat_ctx_t*) ff_memalloc(ctx_size);
@@ -201,19 +209,6 @@ esp_err_t esp_vfs_fat_unregister_path(const char* base_path)
     return ESP_OK;
 }
 
-esp_err_t esp_vfs_fat_unregister()
-{
-    if (s_fat_ctx == NULL) {
-        return ESP_ERR_INVALID_STATE;
-    }
-    esp_err_t err = esp_vfs_fat_unregister_path(s_fat_ctx->base_path);
-    if (err != ESP_OK) {
-        return err;
-    }
-    s_fat_ctx = NULL;
-    return ESP_OK;
-}
-
 static int get_next_fd(vfs_fat_ctx_t* fat_ctx)
 {
     for (size_t i = 0; i < fat_ctx->max_files; ++i) {
@@ -251,9 +246,7 @@ static int fresult_to_errno(FRESULT fr)
 {
     switch(fr) {
         case FR_DISK_ERR:       return EIO;
-        case FR_INT_ERR:
-            assert(0 && "fatfs internal error");
-            return EIO;
+        case FR_INT_ERR:        return EIO;
         case FR_NOT_READY:      return ENODEV;
         case FR_NO_FILE:        return ENOENT;
         case FR_NO_PATH:        return ENOENT;
@@ -314,6 +307,7 @@ static int vfs_fat_open(void* ctx, const char * path, int flags, int mode)
         errno = ENFILE;
         return -1;
     }
+
     FRESULT res = f_open(&fat_ctx->files[fd], path, fat_mode_conv(flags));
     if (res != FR_OK) {
         file_cleanup(fat_ctx, fd);
@@ -322,6 +316,40 @@ static int vfs_fat_open(void* ctx, const char * path, int flags, int mode)
         errno = fresult_to_errno(res);
         return -1;
     }
+
+#ifdef CONFIG_FATFS_USE_FASTSEEK
+    FIL* file = &fat_ctx->files[fd];
+    //fast-seek is only allowed in read mode, since file cannot be expanded
+    //to use it.
+    if(!(fat_mode_conv(flags) & (FA_WRITE))) {
+        DWORD *clmt_mem =  ff_memalloc(sizeof(DWORD) * CONFIG_FATFS_FAST_SEEK_BUFFER_SIZE);
+        if (clmt_mem == NULL) {
+            f_close(file);
+            file_cleanup(fat_ctx, fd);
+            _lock_release(&fat_ctx->lock);
+            ESP_LOGE(TAG, "open: Failed to pre-allocate CLMT buffer for fast-seek");
+            errno = ENOMEM;
+            return -1;
+        }
+
+        file->cltbl = clmt_mem;
+        file->cltbl[0] = CONFIG_FATFS_FAST_SEEK_BUFFER_SIZE;
+        res = f_lseek(file, CREATE_LINKMAP);
+        ESP_LOGD(TAG, "%s: fast-seek has: %s",
+                __func__,
+                (res == FR_OK) ? "activated" : "failed");
+        if(res != FR_OK) {
+            ESP_LOGW(TAG, "%s: fast-seek not activated reason code: %d",
+                    __func__, res);
+            //If linkmap creation fails, fallback to the non fast seek.
+            ff_memfree(file->cltbl);
+            file->cltbl = NULL;
+        }
+    } else {
+        file->cltbl = NULL;
+    }
+#endif
+
     // O_APPEND need to be stored because it is not compatible with FA_OPEN_APPEND:
     //  - FA_OPEN_APPEND means to jump to the end of file only after open()
     //  - O_APPEND means to jump to the end only before each write()
@@ -373,6 +401,86 @@ static ssize_t vfs_fat_read(void* ctx, int fd, void * dst, size_t size)
     return read;
 }
 
+static ssize_t vfs_fat_pread(void *ctx, int fd, void *dst, size_t size, off_t offset)
+{
+    ssize_t ret = -1;
+    vfs_fat_ctx_t *fat_ctx = (vfs_fat_ctx_t *) ctx;
+    _lock_acquire(&fat_ctx->lock);
+    FIL *file = &fat_ctx->files[fd];
+    const off_t prev_pos = f_tell(file);
+
+    FRESULT f_res = f_lseek(file, offset);
+
+    if (f_res != FR_OK) {
+        ESP_LOGD(TAG, "%s: fresult=%d", __func__, f_res);
+        errno = fresult_to_errno(f_res);
+        goto pread_release;
+    }
+
+    unsigned read = 0;
+    f_res = f_read(file, dst, size, &read);
+    if (f_res == FR_OK) {
+        ret = read;
+    } else {
+        ESP_LOGD(TAG, "%s: fresult=%d", __func__, f_res);
+        errno = fresult_to_errno(f_res);
+        // No return yet - need to restore previous position
+    }
+
+    f_res = f_lseek(file, prev_pos);
+    if (f_res != FR_OK) {
+        ESP_LOGD(TAG, "%s: fresult=%d", __func__, f_res);
+        if (ret >= 0) {
+            errno = fresult_to_errno(f_res);
+        } // else f_read failed so errno shouldn't be overwritten
+        ret = -1; // in case the read was successful but the seek wasn't
+    }
+
+pread_release:
+    _lock_release(&fat_ctx->lock);
+    return ret;
+}
+
+static ssize_t vfs_fat_pwrite(void *ctx, int fd, const void *src, size_t size, off_t offset)
+{
+    ssize_t ret = -1;
+    vfs_fat_ctx_t *fat_ctx = (vfs_fat_ctx_t *) ctx;
+    _lock_acquire(&fat_ctx->lock);
+    FIL *file = &fat_ctx->files[fd];
+    const off_t prev_pos = f_tell(file);
+
+    FRESULT f_res = f_lseek(file, offset);
+
+    if (f_res != FR_OK) {
+        ESP_LOGD(TAG, "%s: fresult=%d", __func__, f_res);
+        errno = fresult_to_errno(f_res);
+        goto pwrite_release;
+    }
+
+    unsigned wr = 0;
+    f_res = f_write(file, src, size, &wr);
+    if (f_res == FR_OK) {
+        ret = wr;
+    } else {
+        ESP_LOGD(TAG, "%s: fresult=%d", __func__, f_res);
+        errno = fresult_to_errno(f_res);
+        // No return yet - need to restore previous position
+    }
+
+    f_res = f_lseek(file, prev_pos);
+    if (f_res != FR_OK) {
+        ESP_LOGD(TAG, "%s: fresult=%d", __func__, f_res);
+        if (ret >= 0) {
+            errno = fresult_to_errno(f_res);
+        } // else f_write failed so errno shouldn't be overwritten
+        ret = -1; // in case the write was successful but the seek wasn't
+    }
+
+pwrite_release:
+    _lock_release(&fat_ctx->lock);
+    return ret;
+}
+
 static int vfs_fat_fsync(void* ctx, int fd)
 {
     vfs_fat_ctx_t* fat_ctx = (vfs_fat_ctx_t*) ctx;
@@ -394,6 +502,12 @@ static int vfs_fat_close(void* ctx, int fd)
     vfs_fat_ctx_t* fat_ctx = (vfs_fat_ctx_t*) ctx;
     _lock_acquire(&fat_ctx->lock);
     FIL* file = &fat_ctx->files[fd];
+
+#ifdef CONFIG_FATFS_USE_FASTSEEK
+    ff_memfree(file->cltbl);
+    file->cltbl = NULL;
+#endif
+
     FRESULT res = f_close(file);
     file_cleanup(fat_ctx, fd);
     _lock_release(&fat_ctx->lock);
@@ -423,6 +537,8 @@ static off_t vfs_fat_lseek(void* ctx, int fd, off_t offset, int mode)
         errno = EINVAL;
         return -1;
     }
+
+    ESP_LOGD(TAG, "%s: offset=%ld, filesize:=%d", __func__, new_pos, f_size(file));
     FRESULT res = f_lseek(file, new_pos);
     if (res != FR_OK) {
         ESP_LOGD(TAG, "%s: fresult=%d", __func__, res);
@@ -436,6 +552,7 @@ static int vfs_fat_fstat(void* ctx, int fd, struct stat * st)
 {
     vfs_fat_ctx_t* fat_ctx = (vfs_fat_ctx_t*) ctx;
     FIL* file = &fat_ctx->files[fd];
+    memset(st, 0, sizeof(*st));
     st->st_size = f_size(file);
     st->st_mode = S_IRWXU | S_IRWXG | S_IRWXO | S_IFREG;
     st->st_mtime = 0;
@@ -443,6 +560,8 @@ static int vfs_fat_fstat(void* ctx, int fd, struct stat * st)
     st->st_ctime = 0;
     return 0;
 }
+
+#ifdef CONFIG_VFS_SUPPORT_DIR
 
 static inline mode_t get_stat_mode(bool is_dir)
 {
@@ -561,12 +680,12 @@ static int vfs_fat_link(void* ctx, const char* n1, const char* n2)
     }
 fail3:
     f_close(pf2);
-    free(pf2);
 fail2:
     f_close(pf1);
-    free(pf1);
 fail1:
     free(buf);
+    free(pf2);
+    free(pf1);
     if (res != FR_OK) {
         ESP_LOGD(TAG, "%s: fresult=%d", __func__, res);
         errno = fresult_to_errno(res);
@@ -763,11 +882,17 @@ static int vfs_fat_access(void* ctx, const char *path, int amode)
 static int vfs_fat_truncate(void* ctx, const char *path, off_t length)
 {
     FRESULT res;
-    FIL* file;
+    FIL* file = NULL;
 
     int ret = 0;
-    
+
     vfs_fat_ctx_t* fat_ctx = (vfs_fat_ctx_t*) ctx;
+
+    if (length < 0) {
+        errno = EINVAL;
+        ret = -1;
+        goto out;
+    }
 
     _lock_acquire(&fat_ctx->lock);
     prepend_drive_to_path(fat_ctx, &path, NULL);
@@ -792,9 +917,8 @@ static int vfs_fat_truncate(void* ctx, const char *path, off_t length)
         goto out;
     }
 
-    res = f_size(file);
-
-    if (res < length) {
+    long sz = f_size(file);
+    if (sz < length) {
         _lock_release(&fat_ctx->lock);
         ESP_LOGD(TAG, "truncate does not support extending size");
         errno = EPERM;
@@ -887,3 +1011,5 @@ static int vfs_fat_utime(void *ctx, const char *path, const struct utimbuf *time
 
     return 0;
 }
+
+#endif // CONFIG_VFS_SUPPORT_DIR

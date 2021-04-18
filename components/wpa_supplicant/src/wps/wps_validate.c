@@ -95,22 +95,11 @@ static int wps_validate_response_type(const u8 *response_type, int mandatory)
 
 static int valid_config_methods(u16 val, int wps2)
 {
+#ifndef CONFIG_WPA_WPS_WARS
 	if (wps2) {
-		if ((val & 0x6000) && !(val & WPS_CONFIG_DISPLAY)) {
-			wpa_printf(MSG_INFO, "WPS-STRICT: Physical/Virtual "
-				   "Display flag without old Display flag "
-				   "set");
-			return 0;
-		}
 		if (!(val & 0x6000) && (val & WPS_CONFIG_DISPLAY)) {
 			wpa_printf(MSG_INFO, "WPS-STRICT: Display flag "
 				   "without Physical/Virtual Display flag");
-			return 0;
-		}
-		if ((val & 0x0600) && !(val & WPS_CONFIG_PUSHBUTTON)) {
-			wpa_printf(MSG_INFO, "WPS-STRICT: Physical/Virtual "
-				   "PushButton flag without old PushButton "
-				   "flag set");
 			return 0;
 		}
 		if (!(val & 0x0600) && (val & WPS_CONFIG_PUSHBUTTON)) {
@@ -120,6 +109,7 @@ static int valid_config_methods(u16 val, int wps2)
 		}
 	}
 
+#endif
 	return 1;
 }
 
@@ -2011,7 +2001,7 @@ int wps_validate_m7_encr(const struct wpabuf *tlvs, int ap, int wps2)
 		ret = -99;
 		goto _out;
 	}
-	
+
 	if (tlvs == NULL) {
 		wpa_printf(MSG_INFO, "WPS-STRICT: No TLVs in M7 encrypted "
 			   "settings");

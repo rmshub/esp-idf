@@ -73,8 +73,8 @@ static bta_hf_client_co_cb_t *bta_hf_client_co_cb_ptr;
 #define bta_hf_client_co_cb (*bta_hf_client_co_cb_ptr)
 #endif /* HFP_DYNAMIC_MEMORY == FALSE */
 
-static UINT8 hf_air_mode;
-static UINT8 hf_inout_pkt_size;
+static UINT8 hf_air_mode = BTM_SCO_AIR_MODE_UNKNOWN;
+static UINT8 hf_inout_pkt_size = 0;
 
 /*******************************************************************************
 **
@@ -223,6 +223,9 @@ void bta_hf_client_sco_co_open(UINT16 handle, UINT8 air_mode, UINT8 inout_pkt_si
 
 #if (HFP_DYNAMIC_MEMORY == TRUE)
 error_exit:;
+    hf_air_mode = BTM_SCO_AIR_MODE_UNKNOWN;
+    hf_inout_pkt_size = 0;
+
     if (bta_hf_client_co_cb_ptr) {
         osi_free(bta_hf_client_co_cb_ptr);
         bta_hf_client_co_cb_ptr = NULL;
@@ -271,6 +274,9 @@ void bta_hf_client_sco_co_close(void)
     } else {
         // Nothing to do
     }
+
+    hf_air_mode = BTM_SCO_AIR_MODE_UNKNOWN;
+    hf_inout_pkt_size = 0;
 }
 
 /*******************************************************************************
@@ -323,7 +329,9 @@ uint32_t bta_hf_client_sco_co_out_data(UINT8 *p_buf)
         return btc_hf_client_outgoing_data_cb_to_app(p_buf, hf_raw_pkt_size);
     } else if (hf_air_mode == BTM_SCO_AIR_MODE_TRANSPNT) {
         // mSBC
-
+        if(bta_hf_client_co_cb_ptr == NULL) {
+            return 0;
+        }
         if (hf_inout_pkt_size == BTM_MSBC_FRAME_SIZE / 2) {
             if (bta_hf_client_co_cb.encode_first_pkt){
                 UINT32 size = btc_hf_client_outgoing_data_cb_to_app((UINT8 *)bta_hf_client_co_cb.encoder.as16PcmBuffer, HF_SBC_ENC_RAW_DATA_SIZE);

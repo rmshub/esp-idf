@@ -2,7 +2,21 @@ ESP-IDF Programming Guide
 =========================
 :link_to_translation:`zh_CN:[中文]`
 
-This is the documentation for Espressif IoT Development Framework (`esp-idf <https://github.com/espressif/esp-idf>`_). ESP-IDF is the official development framework for the `ESP32 <https://espressif.com/en/products/hardware/esp32/overview>`_ chip.
+This is the documentation for Espressif IoT Development Framework (`esp-idf <https://github.com/espressif/esp-idf>`_). ESP-IDF is the official development framework for the `ESP32, ESP32-S and ESP32-C Series SoCs <https://www.espressif.com/en/products/hardware/socs>`_.
+
+.. only:: html
+
+    This document describes using ESP-IDF with the {IDF_TARGET_NAME} SoC. To switch to a different SoC target, choose target from the dropdown in the upper left.
+
+.. only:: latex
+
+    This document describes using ESP-IDF with the {IDF_TARGET_NAME} SoC.
+
+.. only:: esp32c3
+
+    .. warning::
+
+        Not all documents are updated for ESP32-C3 yet.
 
 ==================  ==================  ==================
 |Get Started|_      |API Reference|_    |H/W Reference|_
@@ -14,24 +28,24 @@ This is the documentation for Espressif IoT Development Framework (`esp-idf <htt
 `API Guides`_       `Contribute`_       `Resources`_
 ==================  ==================  ==================
 
-.. |Get Started| image:: ../_static/get-started.gif
+.. |Get Started| image:: ../_static/get-started.png
 .. _Get Started: get-started/index.html
 
-.. |API Reference| image:: ../_static/api-reference.gif
+.. |API Reference| image:: ../_static/api-reference.png
 .. _API Reference: api-reference/index.html
 
-.. |H/W Reference| image:: ../_static/hw-reference.gif
+.. |H/W Reference| image:: ../_static/hw-reference.png
 .. _H/W Reference: hw-reference/index.html
 
-.. |API Guides| image:: ../_static/api-guides.gif
+.. |API Guides| image:: ../_static/api-guides.png
 .. _API Guides: api-guides/index.html
 
 .. _Libraries and Frameworks: libraries-and-frameworks/index.html
 
-.. |Contribute| image:: ../_static/contribute.gif
+.. |Contribute| image:: ../_static/contribute.png
 .. _Contribute: contribute/index.html
 
-.. |Resources| image:: ../_static/resources.gif
+.. |Resources| image:: ../_static/resources.png
 .. _Resources: resources.html
 
 
@@ -39,7 +53,6 @@ This is the documentation for Espressif IoT Development Framework (`esp-idf <htt
    :hidden:
 
    Get Started <get-started/index>
-   Get Started (CMake Preview) <get-started-cmake/index>
    API Reference <api-reference/index>
    H/W Reference <hw-reference/index>
    API Guides <api-guides/index>
@@ -50,8 +63,7 @@ This is the documentation for Espressif IoT Development Framework (`esp-idf <htt
    Copyrights <COPYRIGHT>
    About <about>
    语言/Languages <languages>
-   Guide Downloads <https://readthedocs.com/projects/espressif-esp-idf/downloads/>
-   
+
 * :ref:`genindex`
 
 

@@ -38,11 +38,38 @@ Heap corruption detection allows you to detect various types of heap memory erro
 Assertions
 ^^^^^^^^^^
 
-The heap implementation (``multi_heap.c``, etc.) includes a lot of assertions which will fail if the heap memory is corrupted. To detect heap corruption most effectively, ensure that assertions are enabled in ``make menuconfig`` under ``Compiler options``.
+The heap implementation (``multi_heap.c``, etc.) includes a lot of assertions which will fail if the heap memory is corrupted. To detect heap corruption most effectively, ensure that assertions are enabled in the project configuration menu under ``Compiler options`` -> :ref:`CONFIG_COMPILER_OPTIMIZATION_ASSERTION_LEVEL`.
 
 If a heap integrity assertion fails, a line will be printed like ``CORRUPT HEAP: multi_heap.c:225 detected at 0x3ffbb71c``. The memory address which is printed is the address of the heap structure which has corrupt content.
 
 It's also possible to manually check heap integrity by calling :cpp:func:`heap_caps_check_integrity_all` or related functions. This function checks all of requested heap memory for integrity, and can be used even if assertions are disabled. If the integrity check prints an error, it will also contain the address(es) of corrupt heap structures.
+
+Memory Allocation Failed Hook
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Users can use :cpp:func:`heap_caps_register_failed_alloc_callback` to register a callback that will be invoked every time a allocation
+operation fails.
+
+Additionaly user can enable a generation of a system abort if allocation operation fails by following the steps below:
+- In the project configuration menu, navigate to ``Component config`` -> ``Heap Memory Debugging`` and select ``Abort if memory allocation fails`` option (see :ref:`CONFIG_HEAP_ABORT_WHEN_ALLOCATION_FAILS`).
+
+The example below show how to register a allocation failure callback::
+
+  #include "esp_heap_caps.h"
+
+  void heap_caps_alloc_failed_hook(size_t requested_size, uint32_t caps, const char *function_name)
+  {
+    printf("%s was called but failed to allocate %d bytes with 0x%X capabilities. \n",function_name, requested_size, caps);
+  }
+
+  void app_main()
+  {
+      ...
+      esp_err_t error = heap_caps_register_failed_alloc_callback(heap_caps_alloc_failed_hook);
+      ...
+      void *ptr = heap_caps_malloc(allocation_size, MALLOC_CAP_DEFAULT);
+      ...
+  }
 
 Finding Heap Corruption
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -53,7 +80,7 @@ Memory corruption can be one of the hardest classes of bugs to find and fix, as 
 - Increasing the Heap memory debugging `Configuration`_ level to "Light impact" or "Comprehensive" can give you a more accurate message with the first corrupt memory address.
 - Adding regular calls to :cpp:func:`heap_caps_check_integrity_all` or :cpp:func:`heap_caps_check_integrity_addr` in your code will help you pin down the exact time that the corruption happened. You can move these checks around to "close in on" the section of code that corrupted the heap.
 - Based on the memory address which is being corrupted, you can use :ref:`JTAG debugging <jtag-debugging-introduction>` to set a watchpoint on this address and have the CPU halt when it is written to.
-- If you don't have JTAG, but you do know roughly when the corruption happens, then you can set a watchpoint in software just beforehand via :cpp:func:`esp_set_watchpoint`. A fatal exception will occur when the watchpoint triggers. For example ``esp_set_watchpoint(0, (void *)addr, 4, ESP_WATCHPOINT_STORE``. Note that watchpoints are per-CPU and are set on the current running CPU only, so if you don't know which CPU is corrupting memory then you will need to call this function on both CPUs.
+- If you don't have JTAG, but you do know roughly when the corruption happens, then you can set a watchpoint in software just beforehand via :cpp:func:`esp_cpu_set_watchpoint`. A fatal exception will occur when the watchpoint triggers. For example ``esp_cpu_set_watchpoint(0, (void *)addr, 4, ESP_WATCHPOINT_STORE``. Note that watchpoints are per-CPU and are set on the current running CPU only, so if you don't know which CPU is corrupting memory then you will need to call this function on both CPUs.
 - For buffer overflows, `heap tracing`_ in ``HEAP_TRACE_ALL`` mode lets you see which callers are allocating which addresses from the heap. See `Heap Tracing To Find Heap Corruption`_ for more details. If you can find the function which allocates memory with an address immediately before the address which is corrupted, this will probably be the function which overflows the buffer.
 - Calling :cpp:func:`heap_caps_dump` or :cpp:func:`heap_caps_dump_all` can give an indication of what heap blocks are surrounding the corrupted region and may have overflowed/underflowed/etc.
 
@@ -62,7 +89,7 @@ Configuration
 
 Temporarily increasing the heap corruption detection level can give more detailed information about heap corruption errors.
 
-In ``make menuconfig``, under ``Component config`` there is a menu ``Heap memory debugging``. The setting :ref:`CONFIG_HEAP_CORRUPTION_DETECTION` can be set to one of three levels:
+In the project configuration menu, under ``Component config`` there is a menu ``Heap memory debugging``. The setting :ref:`CONFIG_HEAP_CORRUPTION_DETECTION` can be set to one of three levels:
 
 Basic (no poisoning)
 ++++++++++++++++++++
@@ -117,6 +144,16 @@ Calls to :cpp:func:`heap_caps_check_integrity` may print errors relating to 0xFE
 - For free heap blocks, the checker expects to find all bytes set to 0xFE. Any other values indicate a use-after-free bug where free memory has been incorrectly overwritten.
 - For allocated heap blocks, the behaviour is the same as for `Light Impact` mode. The canary bytes 0xABBA1234 and 0xBAAD5678 are checked at the head and tail of each allocated buffer, and any variation indicates a buffer overrun/underrun.
 
+.. _heap-task-tracking:
+
+Heap Task Tracking
+------------------
+
+Heap Task Tracking can be used to get per task info for heap memory allocation.
+Application has to specify the heap capabilities for which the heap allocation is to be tracked.
+
+Example code is provided in :example:`system/heap_task_tracking`
+
 .. _heap-tracing:
 
 Heap Tracing
@@ -143,7 +180,7 @@ Standalone Mode
 
 Once you've identified the code which you think is leaking:
 
-- Under ``make menuconfig``, navigate to ``Component settings`` -> ``Heap Memory Debugging`` -> ``Heap tracing`` and select ``Standalone`` option (see :ref:`CONFIG_HEAP_TRACING_DEST`).
+- In the project configuration menu, navigate to ``Component settings`` -> ``Heap Memory Debugging`` -> ``Heap tracing`` and select ``Standalone`` option (see :ref:`CONFIG_HEAP_TRACING_DEST`).
 - Call the function :cpp:func:`heap_trace_init_standalone` early in the program, to register a buffer which can be used to record the memory trace.
 - Call the function :cpp:func:`heap_trace_start` to begin recording all mallocs/frees in the system. Call this immediately before the piece of code which you suspect is leaking memory.
 - Call the function :cpp:func:`heap_trace_stop` to stop the trace once the suspect piece of code has finished executing.
@@ -205,7 +242,7 @@ In ``HEAP_TRACE_LEAKS`` mode, for each traced memory allocation which has not al
 - ``caller 0x...`` gives the call stack of the call to malloc()/free(), as a list of PC addresses.
   These can be decoded to source files and line numbers, as shown above.
 
-The depth of the call stack recorded for each trace entry can be configured in ``make menuconfig``, under ``Heap Memory Debugging`` -> ``Enable heap tracing`` -> ``Heap tracing stack depth``. Up to 10 stack frames can be recorded for each allocation (the default is 2). Each additional stack frame increases the memory usage of each ``heap_trace_record_t`` record by eight bytes.
+The depth of the call stack recorded for each trace entry can be configured in the project configuration menu, under ``Heap Memory Debugging`` -> ``Enable heap tracing`` -> ``Heap tracing stack depth``. Up to 10 stack frames can be recorded for each allocation (the default is 2). Each additional stack frame increases the memory usage of each ``heap_trace_record_t`` record by eight bytes.
 
 Finally, the total number of 'leaked' bytes (bytes allocated but not freed while trace was running) is printed, and the total number of allocations this represents.
 
@@ -217,9 +254,9 @@ Host-Based Mode
 
 Once you've identified the code which you think is leaking:
 
-- Under ``make menuconfig``, navigate to ``Component settings`` -> ``Heap Memory Debugging`` -> ``Heap tracing`` and select ``Host-Based`` option (see :ref:`CONFIG_HEAP_TRACING_DEST`).
-- Under ``make menuconfig``, navigate to ``Component settings`` -> ``Application Level Tracing`` -> ``Data Destination``  and select ``Trace memory``.
-- Under ``make menuconfig``, navigate to ``Component settings`` -> ``Application Level Tracing`` -> ``FreeRTOS SystemView Tracing`` and check ``SystemView Tracing Enable``.
+- In the project configuration menu, navigate to ``Component settings`` -> ``Heap Memory Debugging`` -> :ref:`CONFIG_HEAP_TRACING_DEST` and select ``Host-Based``.
+- In the project configuration menu, navigate to ``Component settings`` -> ``Application Level Tracing`` -> :ref:`CONFIG_APPTRACE_DESTINATION` and select ``Trace memory``.
+- In the project configuration menu, navigate to ``Component settings`` -> ``Application Level Tracing`` -> ``FreeRTOS SystemView Tracing`` and enable :ref:`CONFIG_SYSVIEW_ENABLE`.
 - Call the function :cpp:func:`heap_trace_init_tohost` early in the program, to initialize JTAG heap tracing module.
 - Call the function :cpp:func:`heap_trace_start` to begin recording all mallocs/frees in the system. Call this immediately before the piece of code which you suspect is leaking memory.
   In host-based mode argument to this function is ignored and heap tracing module behaves like ``HEAP_TRACE_ALL`` was passed: all allocations and deallocations are sent to the host.
@@ -250,7 +287,7 @@ An example::
 
 To gather and analyse heap trace do the following on the host:
 
-1.  Build the program and download it to the target as described in :doc:`Build and Flash </get-started/make-project>`.
+1.  Build the program and download it to the target as described in :ref:`Getting Started Guide <get-started-build>`.
 
 2.  Run OpenOCD (see :doc:`JTAG Debugging </api-guides/jtag-debugging/index>`).
 
@@ -267,24 +304,24 @@ To gather and analyse heap trace do the following on the host:
 
     tb heap_trace_start
     commands
-    mon esp32 sysview start file:///tmp/heap.svdat
+    mon esp sysview start file:///tmp/heap.svdat
     c
     end
 
     tb heap_trace_stop
     commands
-    mon esp32 sysview stop
+    mon esp sysview stop
     end
 
     c
 
 Using this file GDB will connect to the target, reset it, and start tracing when program hits breakpoint at :cpp:func:`heap_trace_start`. Trace data will be saved to ``/tmp/heap_log.svdat``. Tracing will be stopped when program hits breakpoint at :cpp:func:`heap_trace_stop`.
 
-4. Run GDB using the following command ``xtensa-esp32-elf-gdb -x gdbinit </path/to/program/elf>``
+4. Run GDB using the following command ``{IDF_TARGET_TOOLCHAIN_PREFIX}-gdb -x gdbinit </path/to/program/elf>``
 
 5. Quit GDB when program stops at :cpp:func:`heap_trace_stop`. Trace data are saved in ``/tmp/heap.svdat``
 
-6. Run processing script ``$IDF_PATH/tools/esp_app_trace/sysviewtrace_proc.py /tmp/heap_log.svdat </path/to/program/elf>``
+6. Run processing script ``$IDF_PATH/tools/esp_app_trace/sysviewtrace_proc.py -p -b </path/to/program/elf> /tmp/heap_log.svdat``
 
 The output from the heap trace will look something like this::
 
@@ -402,4 +439,4 @@ One way to differentiate between "real" and "false positive" memory leaks is to 
 API Reference - Heap Tracing
 ----------------------------
 
-.. include:: /_build/inc/esp_heap_trace.inc
+.. include-build-file:: inc/esp_heap_trace.inc

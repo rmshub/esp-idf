@@ -17,13 +17,13 @@
 #include "esp_gdbstub_common.h"
 #include "sdkconfig.h"
 
-#define UART_NUM CONFIG_CONSOLE_UART_NUM
+#define UART_NUM CONFIG_ESP_CONSOLE_UART_NUM
 
-void esp_gdbstub_target_init()
+void esp_gdbstub_target_init(void)
 {
 }
 
-int esp_gdbstub_getchar()
+int esp_gdbstub_getchar(void)
 {
     while (REG_GET_FIELD(UART_STATUS_REG(UART_NUM), UART_RXFIFO_CNT) == 0) {
         ;
@@ -42,7 +42,7 @@ void esp_gdbstub_putchar(int c)
 int esp_gdbstub_readmem(intptr_t addr)
 {
     if (addr < 0x20000000 || addr >= 0x80000000) {
-        /* see cpu_configure_region_protection */
+        /* see esp_cpu_configure_region_protection */
         return -1;
     }
     uint32_t val_aligned = *(uint32_t *)(addr & (~3));

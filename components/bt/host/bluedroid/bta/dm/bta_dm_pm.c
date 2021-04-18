@@ -23,7 +23,7 @@
  *
  ******************************************************************************/
 
-// #include <assert.h>
+#include <assert.h>
 #include <string.h>
 
 #include "bta/bta_sys.h"
@@ -46,7 +46,7 @@ static void bta_dm_pm_timer_cback(void *p_tle);
 static void bta_dm_pm_btm_cback(BD_ADDR bd_addr, tBTM_PM_STATUS status, UINT16 value, UINT8 hci_status);
 static BOOLEAN bta_dm_pm_park(BD_ADDR peer_addr);
 static BOOLEAN bta_dm_pm_sniff(tBTA_DM_PEER_DEVICE *p_peer_dev, UINT8 index);
-static BOOLEAN bta_dm_pm_is_sco_active ();
+static BOOLEAN bta_dm_pm_is_sco_active (void);
 static void bta_dm_pm_hid_check(BOOLEAN bScoActive);
 static void bta_dm_pm_set_sniff_policy(tBTA_DM_PEER_DEVICE *p_dev, BOOLEAN bDisable);
 static void bta_dm_pm_stop_timer_by_index(tBTA_PM_TIMER *p_timer,
@@ -973,6 +973,17 @@ void bta_dm_pm_btm_status(tBTA_DM_MSG *p_data)
     default:
         break;
     }
+
+    if ( bta_dm_cb.p_sec_cback ) {
+        if (p_data->pm_status.status <= BTM_PM_STS_PARK
+            /*&& p_data->pm_status.status >= BTM_PM_STS_ACTIVE*/  // comparison is always true due to limited range of data type
+            ) {
+            tBTA_DM_SEC conn;
+            conn.mode_chg.mode = p_data->pm_status.status;
+            bdcpy(conn.mode_chg.bd_addr, p_data->pm_status.bd_addr);
+            bta_dm_cb.p_sec_cback(BTA_DM_PM_MODE_CHG_EVT, (tBTA_DM_SEC *)&conn);
+        }
+    }
 }
 
 
@@ -1001,7 +1012,7 @@ void bta_dm_pm_timer(tBTA_DM_MSG *p_data)
 ** Returns          BOOLEAN. TRUE if SCO active, else FALSE
 **
 *******************************************************************************/
-static BOOLEAN bta_dm_pm_is_sco_active ()
+static BOOLEAN bta_dm_pm_is_sco_active (void)
 {
     int j;
     BOOLEAN bScoActive = FALSE;
@@ -1159,4 +1170,3 @@ tBTA_DM_CONTRL_STATE bta_dm_pm_obtain_controller_state(void)
 }
 
 #endif
-

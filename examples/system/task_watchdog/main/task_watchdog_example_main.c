@@ -42,7 +42,7 @@ void reset_task(void *arg)
     }
 }
 
-void app_main()
+void app_main(void)
 {
     printf("Initialize TWDT\n");
     //Initialize or reinitialize TWDT
@@ -52,7 +52,7 @@ void app_main()
 #ifndef CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0
     esp_task_wdt_add(xTaskGetIdleTaskHandleForCPU(0));
 #endif
-#ifndef CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU1
+#if CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU1 && !CONFIG_FREERTOS_UNICORE
     esp_task_wdt_add(xTaskGetIdleTaskHandleForCPU(1));
 #endif
 

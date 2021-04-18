@@ -9,24 +9,28 @@ COMPONENT_ADD_INCLUDEDIRS := include
 
 LIBS := btdm_app
 
-COMPONENT_ADD_LDFLAGS     := -lbt -L $(COMPONENT_PATH)/controller/lib \
+COMPONENT_ADD_LDFLAGS     := -lbt -L $(COMPONENT_PATH)/controller/lib/esp32 \
                            $(addprefix -l,$(LIBS))
 
 # re-link program if BT binary libs change
-COMPONENT_ADD_LINKER_DEPS := $(patsubst %,$(COMPONENT_PATH)/controller/lib/lib%.a,$(LIBS))
+COMPONENT_ADD_LINKER_DEPS := $(patsubst %,$(COMPONENT_PATH)/controller/lib/esp32/lib%.a,$(LIBS))
 
 COMPONENT_SUBMODULES += controller/lib
+COMPONENT_ADD_LDFRAGMENTS += linker.lf
 
-ifeq ($(GCC_NOT_5_2_0), 1)
+
 # TODO: annotate fallthroughs in Bluedroid code with comments
 CFLAGS += -Wno-implicit-fallthrough
-endif
+
+COMPONENT_ADD_INCLUDEDIRS +=    include/esp32/include
+COMPONENT_SRCDIRS +=  controller/esp32
 
 ifdef CONFIG_BT_BLUEDROID_ENABLED
 
 COMPONENT_PRIV_INCLUDEDIRS +=   host/bluedroid/bta/include                   \
                                 host/bluedroid/bta/ar/include                \
                                 host/bluedroid/bta/av/include                \
+                                host/bluedroid/bta/hf_ag/include             \
                                 host/bluedroid/bta/hf_client/include         \
                                 host/bluedroid/bta/dm/include                \
                                 host/bluedroid/bta/gatt/include              \
@@ -46,6 +50,7 @@ COMPONENT_PRIV_INCLUDEDIRS +=   host/bluedroid/bta/include                   \
                                 host/bluedroid/btc/profile/std/gatt/include  \
                                 host/bluedroid/btc/profile/std/gap/include   \
                                 host/bluedroid/btc/profile/std/a2dp/include  \
+                                host/bluedroid/btc/profile/std/hid/include   \
                                 host/bluedroid/btc/profile/std/include       \
                                 host/bluedroid/btc/include                   \
                                 host/bluedroid/btif/include                  \
@@ -64,7 +69,7 @@ COMPONENT_PRIV_INCLUDEDIRS +=   host/bluedroid/bta/include                   \
                                 host/bluedroid/stack/rfcomm/include          \
                                 host/bluedroid/stack/include                 \
                                 host/bluedroid/utils/include                 \
-                                host/bluedroid/common/include
+                                host/bluedroid/common/include                \
 
 COMPONENT_ADD_INCLUDEDIRS +=    host/bluedroid/api/include/api       \
 								common/osi/include
@@ -77,6 +82,7 @@ COMPONENT_SRCDIRS +=    host/bluedroid/bta/dm                      \
                         host/bluedroid/bta/ar                      \
                         host/bluedroid/bta/sys                     \
                         host/bluedroid/bta/jv                      \
+                        host/bluedroid/bta/hf_ag                   \
                         host/bluedroid/bta/hf_client               \
                         host/bluedroid/bta                         \
                         host/bluedroid/btif                        \
@@ -94,7 +100,9 @@ COMPONENT_SRCDIRS +=    host/bluedroid/bta/dm                      \
                         host/bluedroid/btc/profile/std/a2dp        \
                         host/bluedroid/btc/profile/std/avrc        \
                         host/bluedroid/btc/profile/std/spp         \
+                        host/bluedroid/btc/profile/std/hf_ag       \
                         host/bluedroid/btc/profile/std/hf_client   \
+                        host/bluedroid/btc/profile/std/hid         \
                         host/bluedroid/btc/profile                 \
                         host/bluedroid/stack/btm                   \
                         host/bluedroid/stack/btu                   \
@@ -116,76 +124,110 @@ COMPONENT_SRCDIRS +=    host/bluedroid/bta/dm                      \
                         host/bluedroid
 
 
-ifeq ($(GCC_NOT_5_2_0), 1)
 host/bluedroid/bta/sdp/bta_sdp_act.o: CFLAGS += -Wno-unused-const-variable
 host/bluedroid/btc/core/btc_config.o: CFLAGS += -Wno-unused-const-variable
 host/bluedroid/stack/btm/btm_sec.o: CFLAGS += -Wno-unused-const-variable
 host/bluedroid/stack/smp/smp_keys.o: CFLAGS += -Wno-unused-const-variable
-endif
 
 COMPONENT_PRIV_INCLUDEDIRS += common/btc/include              	   \
 							  common/include
 
 COMPONENT_SRCDIRS += common/osi                         		   \
-					 common/btc/core
+					 common/btc/core                               \
 
+ifdef CONFIG_BLE_MESH
+
+COMPONENT_SRCDIRS += esp_ble_mesh/mesh_core/bluedroid_host
+
+endif
 endif
 
 ifdef CONFIG_BLE_MESH
-    COMPONENT_ADD_INCLUDEDIRS += esp_ble_mesh/mesh_core             \
-                                 esp_ble_mesh/mesh_core/include     \
-                                 esp_ble_mesh/mesh_core/settings    \
-                                 esp_ble_mesh/btc/include           \
-                                 esp_ble_mesh/mesh_models/include   \
-                                 esp_ble_mesh/api/core/include      \
-                                 esp_ble_mesh/api/models/include    \
-                                 esp_ble_mesh/api
+COMPONENT_ADD_INCLUDEDIRS += esp_ble_mesh/mesh_common/include           \
+                             esp_ble_mesh/mesh_common/tinycrypt/include \
+                             esp_ble_mesh/mesh_core                     \
+                             esp_ble_mesh/mesh_core/include             \
+                             esp_ble_mesh/mesh_core/storage             \
+                             esp_ble_mesh/btc/include                   \
+                             esp_ble_mesh/mesh_models/common/include    \
+                             esp_ble_mesh/mesh_models/client/include    \
+                             esp_ble_mesh/mesh_models/server/include    \
+                             esp_ble_mesh/api/core/include              \
+                             esp_ble_mesh/api/models/include            \
+                             esp_ble_mesh/api
 
-    COMPONENT_SRCDIRS +=    esp_ble_mesh/mesh_core               \
-                            esp_ble_mesh/mesh_core/settings      \
-                            esp_ble_mesh/btc                     \
-                            esp_ble_mesh/mesh_models             \
-                            esp_ble_mesh/api/core                \
-                            esp_ble_mesh/api/models 
+COMPONENT_SRCDIRS += esp_ble_mesh/mesh_common               \
+                     esp_ble_mesh/mesh_common/tinycrypt/src \
+                     esp_ble_mesh/mesh_core                 \
+                     esp_ble_mesh/mesh_core/storage         \
+                     esp_ble_mesh/btc                       \
+                     esp_ble_mesh/mesh_models/common        \
+                     esp_ble_mesh/mesh_models/client        \
+                     esp_ble_mesh/mesh_models/server        \
+                     esp_ble_mesh/api/core                  \
+                     esp_ble_mesh/api/models
 endif
 
 
 ifdef CONFIG_BT_NIMBLE_ENABLED
+
 COMPONENT_ADD_INCLUDEDIRS += host/nimble/nimble/nimble/include                     \
                              host/nimble/nimble/nimble/host/include                \
                              host/nimble/nimble/porting/nimble/include             \
                              host/nimble/nimble/porting/npl/freertos/include       \
                              host/nimble/nimble/nimble/host/services/ans/include   \
                              host/nimble/nimble/nimble/host/services/bas/include   \
+                             host/nimble/nimble/nimble/host/services/dis/include   \
                              host/nimble/nimble/nimble/host/services/gap/include   \
                              host/nimble/nimble/nimble/host/services/gatt/include  \
                              host/nimble/nimble/nimble/host/services/ias/include   \
+                             host/nimble/nimble/nimble/host/services/ipss/include  \
                              host/nimble/nimble/nimble/host/services/lls/include   \
                              host/nimble/nimble/nimble/host/services/tps/include   \
                              host/nimble/nimble/nimble/host/util/include           \
                              host/nimble/nimble/nimble/host/store/ram/include      \
                              host/nimble/nimble/nimble/host/store/config/include   \
-                             host/nimble/nimble/ext/tinycrypt/include              \
                              host/nimble/esp-hci/include                           \
                              host/nimble/port/include
+
+ifndef CONFIG_BT_NIMBLE_CRYPTO_STACK_MBEDTLS
+COMPONENT_ADD_INCLUDEDIRS += host/nimble/nimble/ext/tinycrypt/include
+endif
 
 COMPONENT_SRCDIRS += host/nimble/nimble/nimble/host/src                            \
                      host/nimble/nimble/porting/nimble/src                         \
                      host/nimble/nimble/porting/npl/freertos/src                   \
-                     host/nimble/nimble/ext/tinycrypt/src                          \
                      host/nimble/nimble/nimble/host/services/ans/src               \
                      host/nimble/nimble/nimble/host/services/bas/src               \
+                     host/nimble/nimble/nimble/host/services/dis/src               \
                      host/nimble/nimble/nimble/host/services/gap/src               \
                      host/nimble/nimble/nimble/host/services/gatt/src              \
                      host/nimble/nimble/nimble/host/services/ias/src               \
+                     host/nimble/nimble/nimble/host/services/ipss/src              \
                      host/nimble/nimble/nimble/host/services/lls/src               \
                      host/nimble/nimble/nimble/host/services/tps/src               \
                      host/nimble/nimble/nimble/host/util/src                       \
                      host/nimble/nimble/nimble/host/store/ram/src                  \
                      host/nimble/nimble/nimble/host/store/config/src               \
-                     host/nimble/esp-hci/src
+                     host/nimble/esp-hci/src                                       \
+                     host/nimble/port/src
+
+ifndef CONFIG_BT_NIMBLE_CRYPTO_STACK_MBEDTLS
+COMPONENT_SRCDIRS += host/nimble/nimble/ext/tinycrypt/src
+endif
 
 COMPONENT_OBJEXCLUDE += host/nimble/nimble/nimble/host/store/config/src/ble_store_config_conf.o
+
+ifdef CONFIG_BLE_MESH
+COMPONENT_PRIV_INCLUDEDIRS += common/btc/include 	\
+			      common/include
+
+COMPONENT_SRCDIRS += common/osi 		\
+					 common/btc/core 	\
+					 esp_ble_mesh/mesh_core/nimble_host
+
+COMPONENT_ADD_INCLUDEDIRS += common/osi/include
+endif
 
 ifdef CONFIG_BT_NIMBLE_MESH
 

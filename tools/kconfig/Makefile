@@ -165,7 +165,7 @@ check-lxdialog  := $(SRCDIR)/lxdialog/check-lxdialog.sh
 # Use recursively expanded variables so we do not call gcc unless
 # we really need to do so. (Do not call gcc as part of make mrproper)
 CFLAGS += $(shell $(CONFIG_SHELL) $(check-lxdialog) -ccflags) \
-                    -DLOCALE -MMD
+                    -DLOCALE -MMD -MP
 
 CFLAGS += -I "." -I "${SRCDIR}"
 
@@ -311,7 +311,7 @@ ifeq ($(MAKECMDGOALS),gconfig)
 	fi
 endif
 
-zconf.tab.o: zconf.lex.c zconf.hash.c
+zconf.tab.o: zconf.lex.c zconf.hash.c zconf.tab.c
 
 qconf.o: qconf.moc
 
@@ -349,4 +349,3 @@ clean:
 	rm -f $(clean-files)
 
 -include $(all-deps)
-

@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
+#include <unistd.h>
 #include "esp_log.h"
 #include "esp_console.h"
 #include "esp_system.h"
@@ -20,7 +21,6 @@
 #include "argtable3/argtable3.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "esp32/rom/uart.h"
 #include "cmd_system.h"
 #include "sdkconfig.h"
 
@@ -30,27 +30,37 @@
 
 static const char *TAG = "cmd_system";
 
-static void register_free();
-static void register_heap();
-static void register_version();
-static void register_restart();
-static void register_deep_sleep();
-static void register_light_sleep();
+static void register_free(void);
+static void register_heap(void);
+static void register_version(void);
+static void register_restart(void);
+static void register_deep_sleep(void);
+static void register_light_sleep(void);
 #if WITH_TASKS_INFO
-static void register_tasks();
+static void register_tasks(void);
 #endif
 
-void register_system()
+void register_system_common(void)
 {
     register_free();
     register_heap();
     register_version();
     register_restart();
-    register_deep_sleep();
-    register_light_sleep();
 #if WITH_TASKS_INFO
     register_tasks();
 #endif
+}
+
+void register_system_sleep(void)
+{
+    register_deep_sleep();
+    register_light_sleep();
+}
+
+void register_system(void)
+{
+    register_system_common();
+    register_system_sleep();
 }
 
 /* 'version' command */
@@ -72,7 +82,7 @@ static int get_version(int argc, char **argv)
     return 0;
 }
 
-static void register_version()
+static void register_version(void)
 {
     const esp_console_cmd_t cmd = {
         .command = "version",
@@ -91,7 +101,7 @@ static int restart(int argc, char **argv)
     esp_restart();
 }
 
-static void register_restart()
+static void register_restart(void)
 {
     const esp_console_cmd_t cmd = {
         .command = "restart",
@@ -110,7 +120,7 @@ static int free_mem(int argc, char **argv)
     return 0;
 }
 
-static void register_free()
+static void register_free(void)
 {
     const esp_console_cmd_t cmd = {
         .command = "free",
@@ -125,11 +135,11 @@ static void register_free()
 static int heap_size(int argc, char **argv)
 {
     uint32_t heap_size = heap_caps_get_minimum_free_size(MALLOC_CAP_DEFAULT);
-    ESP_LOGI(TAG, "min heap size: %u", heap_size);
+    printf("min heap size: %u\n", heap_size);
     return 0;
 }
 
-static void register_heap()
+static void register_heap(void)
 {
     const esp_console_cmd_t heap_cmd = {
         .command = "heap",
@@ -163,7 +173,7 @@ static int tasks_info(int argc, char **argv)
     return 0;
 }
 
-static void register_tasks()
+static void register_tasks(void)
 {
     const esp_console_cmd_t cmd = {
         .command = "tasks",
@@ -180,8 +190,10 @@ static void register_tasks()
 
 static struct {
     struct arg_int *wakeup_time;
+#if SOC_PM_SUPPORT_EXT_WAKEUP
     struct arg_int *wakeup_gpio_num;
     struct arg_int *wakeup_gpio_level;
+#endif
     struct arg_end *end;
 } deep_sleep_args;
 
@@ -198,9 +210,11 @@ static int deep_sleep(int argc, char **argv)
         ESP_LOGI(TAG, "Enabling timer wakeup, timeout=%lluus", timeout);
         ESP_ERROR_CHECK( esp_sleep_enable_timer_wakeup(timeout) );
     }
+
+#if SOC_PM_SUPPORT_EXT_WAKEUP
     if (deep_sleep_args.wakeup_gpio_num->count) {
         int io_num = deep_sleep_args.wakeup_gpio_num->ival[0];
-        if (!rtc_gpio_is_valid_gpio(io_num)) {
+        if (!esp_sleep_is_valid_wakeup_gpio(io_num)) {
             ESP_LOGE(TAG, "GPIO %d is not an RTC IO", io_num);
             return 1;
         }
@@ -216,26 +230,40 @@ static int deep_sleep(int argc, char **argv)
                  io_num, level ? "HIGH" : "LOW");
 
         ESP_ERROR_CHECK( esp_sleep_enable_ext1_wakeup(1ULL << io_num, level) );
+        ESP_LOGE(TAG, "GPIO wakeup from deep sleep currently unsupported on ESP32-C3");
     }
+#endif // SOC_PM_SUPPORT_EXT_WAKEUP
+
+#if CONFIG_IDF_TARGET_ESP32
     rtc_gpio_isolate(GPIO_NUM_12);
+#endif //CONFIG_IDF_TARGET_ESP32
+
     esp_deep_sleep_start();
 }
 
-static void register_deep_sleep()
+static void register_deep_sleep(void)
 {
+    int num_args = 1;
     deep_sleep_args.wakeup_time =
         arg_int0("t", "time", "<t>", "Wake up time, ms");
+#if SOC_PM_SUPPORT_EXT_WAKEUP
     deep_sleep_args.wakeup_gpio_num =
         arg_int0(NULL, "io", "<n>",
                  "If specified, wakeup using GPIO with given number");
     deep_sleep_args.wakeup_gpio_level =
         arg_int0(NULL, "io_level", "<0|1>", "GPIO level to trigger wakeup");
-    deep_sleep_args.end = arg_end(3);
+    num_args += 2;
+#endif
+    deep_sleep_args.end = arg_end(num_args);
 
     const esp_console_cmd_t cmd = {
         .command = "deep_sleep",
         .help = "Enter deep sleep mode. "
+#if SOC_PM_SUPPORT_EXT_WAKEUP
         "Two wakeup modes are supported: timer and GPIO. "
+#else
+        "Timer wakeup mode is supported. "
+#endif
         "If no wakeup option is specified, will sleep indefinitely.",
         .hint = NULL,
         .func = &deep_sleep,
@@ -286,13 +314,13 @@ static int light_sleep(int argc, char **argv)
     if (io_count > 0) {
         ESP_ERROR_CHECK( esp_sleep_enable_gpio_wakeup() );
     }
-    if (CONFIG_ESP_CONSOLE_UART_NUM <= UART_NUM_1) {
+    if (CONFIG_ESP_CONSOLE_UART_NUM >= 0 && CONFIG_ESP_CONSOLE_UART_NUM <= UART_NUM_1) {
         ESP_LOGI(TAG, "Enabling UART wakeup (press ENTER to exit light sleep)");
         ESP_ERROR_CHECK( uart_set_wakeup_threshold(CONFIG_ESP_CONSOLE_UART_NUM, 3) );
         ESP_ERROR_CHECK( esp_sleep_enable_uart_wakeup(CONFIG_ESP_CONSOLE_UART_NUM) );
     }
     fflush(stdout);
-    uart_tx_wait_idle(CONFIG_ESP_CONSOLE_UART_NUM);
+    fsync(fileno(stdout));
     esp_light_sleep_start();
     esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
     const char *cause_str;
@@ -314,7 +342,7 @@ static int light_sleep(int argc, char **argv)
     return 0;
 }
 
-static void register_light_sleep()
+static void register_light_sleep(void)
 {
     light_sleep_args.wakeup_time =
         arg_int0("t", "time", "<t>", "Wake up time, ms");
@@ -338,4 +366,3 @@ static void register_light_sleep()
     };
     ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
 }
-

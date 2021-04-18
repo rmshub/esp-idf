@@ -17,16 +17,23 @@
 
 #include "sdkconfig.h"
 
-#if CONFIG_WPA_EAP_TLS
-#define EAP_TLS 1
+#if CONFIG_WPA_MBEDTLS_CRYPTO
+#define USE_MBEDTLS_CRYPTO 1
+#else
+#define CONFIG_TLS_INTERNAL_CLIENT
+#define CONFIG_TLSV12
 #endif
 
-#if CONFIG_WPA_EAP_TTLS
-#define EAP_TTLS 1
+#if CONFIG_WPA_DEBUG_PRINT
+#define DEBUG_PRINT
 #endif
 
-#if CONFIG_WPA_EAP_PEAP
-#define EAP_PEAP 1
+#if CONFIG_WPA_11KV_SUPPORT
+#define ROAMING_SUPPORT 1
+#endif
+
+#if CONFIG_WPA_SCAN_CACHE
+#define SCAN_CACHE_SUPPORTED
 #endif
 
 #endif /* _SUPPLICANT_OPT_H */

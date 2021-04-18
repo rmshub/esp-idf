@@ -2,7 +2,7 @@
 # Component Makefile
 #
 
-COMPONENT_OBJS := heap_caps_init.o heap_caps.o multi_heap.o
+COMPONENT_OBJS := heap_caps_init.o heap_caps.o multi_heap.o heap_tlsf.o
 
 ifndef CONFIG_HEAP_POISONING_DISABLED
 COMPONENT_OBJS += multi_heap_poisoning.o
@@ -28,3 +28,5 @@ COMPONENT_ADD_LDFLAGS = -l$(COMPONENT_NAME) $(addprefix $(WRAP_ARGUMENT),$(WRAP_
 endif
 
 COMPONENT_ADD_LDFRAGMENTS += linker.lf
+
+CFLAGS += -DMULTI_HEAP_FREERTOS

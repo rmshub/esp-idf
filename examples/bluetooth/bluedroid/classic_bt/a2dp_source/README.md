@@ -1,3 +1,6 @@
+| Supported Targets | ESP32 |
+| ----------------- | ----- |
+
 ESP-IDF A2DP-SOURCE demo
 ========================
 
@@ -14,10 +17,8 @@ This example is able to run on any commonly available ESP32 development board. A
 ### Configure the project
 
 ```
-make menuconfig
+idf.py menuconfig
 ```
-
-* Set serial port under Serial Flasher Options.
 
 * Enable Classic Bluetooth and A2DP under Component config --> Bluetooth --> Bluedroid Enable
 
@@ -26,7 +27,7 @@ make menuconfig
 Build the project and flash it to the board, then run monitor tool to view serial output.
 
 ```
-make -j4 flash monitor
+idf.py -p PORT flash monitor
 ```
 
 (To exit the serial monitor, type ``Ctrl-]``.)

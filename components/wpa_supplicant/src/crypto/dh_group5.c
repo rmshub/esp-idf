@@ -15,11 +15,11 @@
 #include "utils/includes.h"
 
 #include "utils/common.h"
-#include "crypto/dh_groups.h"
-#include "crypto/dh_group5.h"
+#include "dh_groups.h"
+#include "dh_group5.h"
 
 
-void * 
+void *
 dh5_init(struct wpabuf **priv, struct wpabuf **publ)
 {
 	*publ = dh_init(dh_groups_get(5), priv);
@@ -29,7 +29,7 @@ dh5_init(struct wpabuf **priv, struct wpabuf **publ)
 }
 
 
-struct wpabuf * 
+struct wpabuf *
 dh5_derive_shared(void *ctx, const struct wpabuf *peer_public,
 				  const struct wpabuf *own_private)
 {
@@ -37,7 +37,7 @@ dh5_derive_shared(void *ctx, const struct wpabuf *peer_public,
 }
 
 
-void 
+void
 dh5_free(void *ctx)
 {
 }

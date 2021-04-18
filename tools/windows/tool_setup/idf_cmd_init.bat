@@ -18,8 +18,8 @@ if "%~2"=="" (
     goto :end
 )
 
-set IDF_PYTHON_DIR=%1
-set IDF_GIT_DIR=%2
+set "IDF_PYTHON_DIR=%1"
+set "IDF_GIT_DIR=%2"
 
 :: Strip quoutes
 set "IDF_PYTHON_DIR=%IDF_PYTHON_DIR:"=%"
@@ -29,6 +29,18 @@ set "IDF_GIT_DIR=%IDF_GIT_DIR:"=%"
 if not "%PYTHONPATH%"=="" (
     echo Clearing PYTHONPATH, was set to %PYTHONPATH%
     set PYTHONPATH=
+)
+
+:: Clear PYTHONHOME as it may contain path to other Python versions which can cause crash of Python using virtualenv
+if not "%PYTHONHOME%"=="" (
+    echo Clearing PYTHONHOME, was set to %PYTHONHOME%
+    set PYTHONHOME=
+)
+
+:: Set PYTHONNOUSERSITE to avoid loading of Python packages from AppData\Roaming profile
+if "%PYTHONNOUSERSITE%"=="" (
+    echo Setting PYTHONNOUSERSITE, was not set
+    set PYTHONNOUSERSITE=True
 )
 
 :: Add Python and Git paths to PATH
@@ -69,7 +81,7 @@ echo Adding ESP-IDF tools to PATH...
 :: It is possible to do this without a temporary file (running idf_tools.py from for /r command),
 :: but that way it is impossible to get the exit code of idf_tools.py.
 set "IDF_TOOLS_EXPORTS_FILE=%TEMP%\idf_export_vars.tmp"
-python.exe %IDF_TOOLS_PY_PATH% --tools-json %IDF_TOOLS_JSON_PATH% export --format key-value >"%IDF_TOOLS_EXPORTS_FILE%"
+python.exe "%IDF_TOOLS_PY_PATH%" --tools-json "%IDF_TOOLS_JSON_PATH%" export --format key-value >"%IDF_TOOLS_EXPORTS_FILE%"
 if %errorlevel% neq 0 goto :end
 
 for /f "usebackq tokens=1,2 eol=# delims==" %%a in ("%IDF_TOOLS_EXPORTS_FILE%") do (

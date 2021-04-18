@@ -22,10 +22,12 @@
 #include "esp_vfs.h"
 #include "esp_vfs_dev.h"
 #include "esp_attr.h"
+#include "soc/uart_periph.h"
 #include "driver/uart.h"
 #include "sdkconfig.h"
 #include "driver/uart_select.h"
-#include "esp32/rom/uart.h"
+#include "esp_rom_uart.h"
+#include "soc/soc_caps.h"
 
 // TODO: make the number of UARTs chip dependent
 #define UART_NUM SOC_UART_NUM
@@ -111,20 +113,25 @@ static vfs_uart_context_t* s_ctx[UART_NUM] = {
 #endif
 };
 
-/* Lock ensuring that uart_select is used from only one task at the time */
-static _lock_t s_one_select_lock;
+#ifdef CONFIG_VFS_SUPPORT_SELECT
 
-static esp_vfs_select_sem_t _select_sem = {.sem = NULL};
-static fd_set *_readfds = NULL;
-static fd_set *_writefds = NULL;
-static fd_set *_errorfds = NULL;
-static fd_set *_readfds_orig = NULL;
-static fd_set *_writefds_orig = NULL;
-static fd_set *_errorfds_orig = NULL;
+typedef struct {
+    esp_vfs_select_sem_t select_sem;
+    fd_set *readfds;
+    fd_set *writefds;
+    fd_set *errorfds;
+    fd_set readfds_orig;
+    fd_set writefds_orig;
+    fd_set errorfds_orig;
+} uart_select_args_t;
 
+static uart_select_args_t **s_registered_selects = NULL;
+static int s_registered_select_num = 0;
+static portMUX_TYPE s_registered_select_lock = portMUX_INITIALIZER_UNLOCKED;
 
-static void uart_end_select();
+static esp_err_t uart_end_select(void *end_select_args);
 
+#endif // CONFIG_VFS_SUPPORT_SELECT
 
 static int uart_open(const char * path, int flags, int mode)
 {
@@ -154,7 +161,11 @@ static void uart_tx_char(int fd, int c)
     while (uart->status.txfifo_cnt >= 127) {
         ;
     }
+#if CONFIG_IDF_TARGET_ESP32
     uart->fifo.rw_byte = c;
+#else // CONFIG_IDF_TARGET_ESP32
+    uart->ahb_fifo.rw_byte = c;
+#endif
 }
 
 static void uart_tx_char_via_driver(int fd, int c)
@@ -169,7 +180,11 @@ static int uart_rx_char(int fd)
     if (uart->status.rxfifo_cnt == 0) {
         return NONE;
     }
+#if CONFIG_IDF_TARGET_ESP32
     return uart->fifo.rw_byte;
+#else // CONFIG_IDF_TARGET_ESP32
+    return READ_PERI_REG(UART_FIFO_AHB_REG(fd));
+#endif
 }
 
 static int uart_rx_char_via_driver(int fd)
@@ -277,6 +292,7 @@ static ssize_t uart_read(int fd, void* data, size_t size)
 static int uart_fstat(int fd, struct stat * st)
 {
     assert(fd >=0 && fd < 3);
+    memset(st, 0, sizeof(*st));
     st->st_mode = S_IFCHR;
     return 0;
 }
@@ -305,6 +321,8 @@ static int uart_fcntl(int fd, int cmd, int arg)
     return result;
 }
 
+#ifdef CONFIG_VFS_SUPPORT_DIR
+
 static int uart_access(const char *path, int amode)
 {
     int ret = -1;
@@ -326,142 +344,180 @@ static int uart_access(const char *path, int amode)
     return ret;
 }
 
+#endif // CONFIG_VFS_SUPPORT_DIR
+
 static int uart_fsync(int fd)
 {
     assert(fd >= 0 && fd < 3);
     _lock_acquire_recursive(&s_ctx[fd]->write_lock);
-    uart_tx_wait_idle((uint8_t) fd);
+    esp_rom_uart_tx_wait_idle((uint8_t) fd);
     _lock_release_recursive(&s_ctx[fd]->write_lock);
     return 0;
 }
 
-static void select_notif_callback(uart_port_t uart_num, uart_select_notif_t uart_select_notif, BaseType_t *task_woken)
+#ifdef CONFIG_VFS_SUPPORT_SELECT
+
+static esp_err_t register_select(uart_select_args_t *args)
 {
-    switch (uart_select_notif) {
-        case UART_SELECT_READ_NOTIF:
-            if (FD_ISSET(uart_num, _readfds_orig)) {
-                FD_SET(uart_num, _readfds);
-                esp_vfs_select_triggered_isr(_select_sem, task_woken);
-            }
-            break;
-        case UART_SELECT_WRITE_NOTIF:
-            if (FD_ISSET(uart_num, _writefds_orig)) {
-                FD_SET(uart_num, _writefds);
-                esp_vfs_select_triggered_isr(_select_sem, task_woken);
-            }
-            break;
-        case UART_SELECT_ERROR_NOTIF:
-            if (FD_ISSET(uart_num, _errorfds_orig)) {
-                FD_SET(uart_num, _errorfds);
-                esp_vfs_select_triggered_isr(_select_sem, task_woken);
-            }
-            break;
+    esp_err_t ret = ESP_ERR_INVALID_ARG;
+
+    if (args) {
+        portENTER_CRITICAL(&s_registered_select_lock);
+        const int new_size = s_registered_select_num + 1;
+        if ((s_registered_selects = realloc(s_registered_selects, new_size * sizeof(uart_select_args_t *))) == NULL) {
+            ret = ESP_ERR_NO_MEM;
+        } else {
+            s_registered_selects[s_registered_select_num] = args;
+            s_registered_select_num = new_size;
+            ret = ESP_OK;
+        }
+        portEXIT_CRITICAL(&s_registered_select_lock);
     }
+
+    return ret;
 }
 
-static esp_err_t uart_start_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, esp_vfs_select_sem_t select_sem)
+static esp_err_t unregister_select(uart_select_args_t *args)
 {
-    if (_lock_try_acquire(&s_one_select_lock)) {
-        return ESP_ERR_INVALID_STATE;
+    esp_err_t ret = ESP_OK;
+    if (args) {
+        ret = ESP_ERR_INVALID_STATE;
+        portENTER_CRITICAL(&s_registered_select_lock);
+        for (int i = 0; i < s_registered_select_num; ++i) {
+            if (s_registered_selects[i] == args) {
+                const int new_size = s_registered_select_num - 1;
+                // The item is removed by overwriting it with the last item. The subsequent rellocation will drop the
+                // last item.
+                s_registered_selects[i] = s_registered_selects[new_size];
+                s_registered_selects = realloc(s_registered_selects, new_size * sizeof(uart_select_args_t *));
+                if (s_registered_selects || new_size == 0) {
+                    s_registered_select_num = new_size;
+                    ret = ESP_OK;
+                } else {
+                    ret = ESP_ERR_NO_MEM;
+                }
+                break;
+            }
+        }
+        portEXIT_CRITICAL(&s_registered_select_lock);
     }
+    return ret;
+}
 
+static void select_notif_callback_isr(uart_port_t uart_num, uart_select_notif_t uart_select_notif, BaseType_t *task_woken)
+{
+    portENTER_CRITICAL_ISR(&s_registered_select_lock);
+    for (int i = 0; i < s_registered_select_num; ++i) {
+        uart_select_args_t *args = s_registered_selects[i];
+        if (args) {
+            switch (uart_select_notif) {
+                case UART_SELECT_READ_NOTIF:
+                    if (FD_ISSET(uart_num, &args->readfds_orig)) {
+                        FD_SET(uart_num, args->readfds);
+                        esp_vfs_select_triggered_isr(args->select_sem, task_woken);
+                    }
+                    break;
+                case UART_SELECT_WRITE_NOTIF:
+                    if (FD_ISSET(uart_num, &args->writefds_orig)) {
+                        FD_SET(uart_num, args->writefds);
+                        esp_vfs_select_triggered_isr(args->select_sem, task_woken);
+                    }
+                    break;
+                case UART_SELECT_ERROR_NOTIF:
+                    if (FD_ISSET(uart_num, &args->errorfds_orig)) {
+                        FD_SET(uart_num, args->errorfds);
+                        esp_vfs_select_triggered_isr(args->select_sem, task_woken);
+                    }
+                    break;
+            }
+        }
+    }
+    portEXIT_CRITICAL_ISR(&s_registered_select_lock);
+}
+
+static esp_err_t uart_start_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
+        esp_vfs_select_sem_t select_sem, void **end_select_args)
+{
     const int max_fds = MIN(nfds, UART_NUM);
+    *end_select_args = NULL;
 
-    portENTER_CRITICAL(uart_get_selectlock());
-
-    if (_readfds || _writefds || _errorfds || _readfds_orig || _writefds_orig || _errorfds_orig || _select_sem.sem) {
-        portEXIT_CRITICAL(uart_get_selectlock());
-        uart_end_select();
-        return ESP_ERR_INVALID_STATE;
-    }
-
-    if ((_readfds_orig = malloc(sizeof(fd_set))) == NULL) {
-        portEXIT_CRITICAL(uart_get_selectlock());
-        uart_end_select();
-        return ESP_ERR_NO_MEM;
-    }
-
-    if ((_writefds_orig = malloc(sizeof(fd_set))) == NULL) {
-        portEXIT_CRITICAL(uart_get_selectlock());
-        uart_end_select();
-        return ESP_ERR_NO_MEM;
-    }
-
-    if ((_errorfds_orig = malloc(sizeof(fd_set))) == NULL) {
-        portEXIT_CRITICAL(uart_get_selectlock());
-        uart_end_select();
-        return ESP_ERR_NO_MEM;
-    }
-
-    //uart_set_select_notif_callback set the callbacks in UART ISR
     for (int i = 0; i < max_fds; ++i) {
         if (FD_ISSET(i, readfds) || FD_ISSET(i, writefds) || FD_ISSET(i, exceptfds)) {
-            uart_set_select_notif_callback(i, select_notif_callback);
+            if (!uart_is_driver_installed(i)) {
+                return ESP_ERR_INVALID_STATE;
+            }
         }
     }
 
-    _select_sem = select_sem;
+    uart_select_args_t *args = malloc(sizeof(uart_select_args_t));
 
-    _readfds = readfds;
-    _writefds = writefds;
-    _errorfds = exceptfds;
+    if (args == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
 
-    *_readfds_orig = *readfds;
-    *_writefds_orig = *writefds;
-    *_errorfds_orig = *exceptfds;
-
+    args->select_sem = select_sem;
+    args->readfds = readfds;
+    args->writefds = writefds;
+    args->errorfds = exceptfds;
+    args->readfds_orig = *readfds; // store the original values because they will be set to zero
+    args->writefds_orig = *writefds;
+    args->errorfds_orig = *exceptfds;
     FD_ZERO(readfds);
     FD_ZERO(writefds);
     FD_ZERO(exceptfds);
 
+    portENTER_CRITICAL(uart_get_selectlock());
+
+    //uart_set_select_notif_callback sets the callbacks in UART ISR
     for (int i = 0; i < max_fds; ++i) {
-        if (FD_ISSET(i, _readfds_orig)) {
+        if (FD_ISSET(i, &args->readfds_orig) || FD_ISSET(i, &args->writefds_orig) || FD_ISSET(i, &args->errorfds_orig)) {
+            uart_set_select_notif_callback(i, select_notif_callback_isr);
+        }
+    }
+
+    for (int i = 0; i < max_fds; ++i) {
+        if (FD_ISSET(i, &args->readfds_orig)) {
             size_t buffered_size;
             if (uart_get_buffered_data_len(i, &buffered_size) == ESP_OK && buffered_size > 0) {
                 // signalize immediately when data is buffered
-                FD_SET(i, _readfds);
-                esp_vfs_select_triggered(_select_sem);
+                FD_SET(i, readfds);
+                esp_vfs_select_triggered(args->select_sem);
             }
         }
     }
 
-    portEXIT_CRITICAL(uart_get_selectlock());
-    // s_one_select_lock is not released on successfull exit - will be
-    // released in uart_end_select()
+    esp_err_t ret = register_select(args);
+    if (ret != ESP_OK) {
+        portEXIT_CRITICAL(uart_get_selectlock());
+        free(args);
+        return ret;
+    }
 
+    portEXIT_CRITICAL(uart_get_selectlock());
+
+    *end_select_args = args;
     return ESP_OK;
 }
 
-static void uart_end_select()
+static esp_err_t uart_end_select(void *end_select_args)
 {
+    uart_select_args_t *args = end_select_args;
+
     portENTER_CRITICAL(uart_get_selectlock());
+    esp_err_t ret = unregister_select(args);
     for (int i = 0; i < UART_NUM; ++i) {
         uart_set_select_notif_callback(i, NULL);
     }
-
-    _select_sem.sem = NULL;
-
-    _readfds = NULL;
-    _writefds = NULL;
-    _errorfds = NULL;
-
-    if (_readfds_orig) {
-        free(_readfds_orig);
-        _readfds_orig = NULL;
-    }
-
-    if (_writefds_orig) {
-        free(_writefds_orig);
-        _writefds_orig = NULL;
-    }
-
-    if (_errorfds_orig) {
-        free(_errorfds_orig);
-        _errorfds_orig = NULL;
-    }
     portEXIT_CRITICAL(uart_get_selectlock());
-    _lock_release(&s_one_select_lock);
+
+    if (args) {
+        free(args);
+    }
+
+    return ret;
 }
+
+#endif // CONFIG_VFS_SUPPORT_SELECT
 
 #ifdef CONFIG_VFS_SUPPORT_TERMIOS
 static int uart_tcsetattr(int fd, int optional_actions, const struct termios *p)
@@ -915,7 +971,7 @@ static int uart_tcflush(int fd, int select)
 }
 #endif // CONFIG_VFS_SUPPORT_TERMIOS
 
-void esp_vfs_dev_uart_register()
+void esp_vfs_dev_uart_register(void)
 {
     esp_vfs_t vfs = {
         .flags = ESP_VFS_FLAG_DEFAULT,
@@ -926,9 +982,13 @@ void esp_vfs_dev_uart_register()
         .read = &uart_read,
         .fcntl = &uart_fcntl,
         .fsync = &uart_fsync,
+#ifdef CONFIG_VFS_SUPPORT_DIR
         .access = &uart_access,
+#endif // CONFIG_VFS_SUPPORT_DIR
+#ifdef CONFIG_VFS_SUPPORT_SELECT
         .start_select = &uart_start_select,
         .end_select = &uart_end_select,
+#endif // CONFIG_VFS_SUPPORT_SELECT
 #ifdef CONFIG_VFS_SUPPORT_TERMIOS
         .tcsetattr = &uart_tcsetattr,
         .tcgetattr = &uart_tcgetattr,
@@ -937,6 +997,26 @@ void esp_vfs_dev_uart_register()
 #endif // CONFIG_VFS_SUPPORT_TERMIOS
     };
     ESP_ERROR_CHECK(esp_vfs_register("/dev/uart", &vfs, NULL));
+}
+
+int esp_vfs_dev_uart_port_set_rx_line_endings(int uart_num, esp_line_endings_t mode)
+{
+    if (uart_num < 0 || uart_num >= UART_NUM) {
+        errno = EBADF;
+        return -1;
+    }
+    s_ctx[uart_num]->rx_mode = mode;
+    return 0;
+}
+
+int esp_vfs_dev_uart_port_set_tx_line_endings(int uart_num, esp_line_endings_t mode)
+{
+    if (uart_num < 0 || uart_num >= UART_NUM) {
+        errno = EBADF;
+        return -1;
+    }
+    s_ctx[uart_num]->tx_mode = mode;
+    return 0;
 }
 
 void esp_vfs_dev_uart_set_rx_line_endings(esp_line_endings_t mode)

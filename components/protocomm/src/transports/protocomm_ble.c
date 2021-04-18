@@ -108,28 +108,39 @@ static void transport_simple_ble_read(esp_gatts_cb_event_t event, esp_gatt_if_t 
 {
     static const uint8_t *read_buf = NULL;
     static uint16_t read_len = 0;
+    static uint16_t max_read_len = 0;
     esp_gatt_status_t status = ESP_OK;
 
     ESP_LOGD(TAG, "Inside read w/ session - %d on param %d %d",
              param->read.conn_id, param->read.handle, read_len);
-    if (!read_len) {
+    if (!read_len && !param->read.offset) {
         ESP_LOGD(TAG, "Reading attr value first time");
-        status = esp_ble_gatts_get_attr_value(param->read.handle, &read_len,  &read_buf);
+        status = esp_ble_gatts_get_attr_value(param->read.handle, &read_len, &read_buf);
+        max_read_len = read_len;
+    } else if ((read_len + param->read.offset) > max_read_len) {
+        status = ESP_GATT_INVALID_OFFSET;
     } else {
         ESP_LOGD(TAG, "Subsequent read request for attr value");
     }
 
     esp_gatt_rsp_t gatt_rsp = {0};
-    gatt_rsp.attr_value.len = MIN(read_len, (protoble_internal->gatt_mtu - 1));
     gatt_rsp.attr_value.handle = param->read.handle;
     gatt_rsp.attr_value.offset = param->read.offset;
-    gatt_rsp.attr_value.auth_req = ESP_GATT_AUTH_REQ_NONE;
-    if (gatt_rsp.attr_value.len && read_buf) {
-        memcpy(gatt_rsp.attr_value.value,
-                read_buf + param->read.offset,
-                gatt_rsp.attr_value.len);
+
+    if (status == ESP_GATT_OK) {
+        gatt_rsp.attr_value.len = MIN(read_len, (protoble_internal->gatt_mtu - 1));
+        gatt_rsp.attr_value.auth_req = ESP_GATT_AUTH_REQ_NONE;
+        if (gatt_rsp.attr_value.len && read_buf) {
+            memcpy(gatt_rsp.attr_value.value,
+                    read_buf + param->read.offset,
+                    gatt_rsp.attr_value.len);
+        }
+        read_len -= gatt_rsp.attr_value.len;
+    } else {
+        read_len = 0;
+        max_read_len = 0;
+        read_buf = NULL;
     }
-    read_len -= gatt_rsp.attr_value.len;
     esp_err_t err = esp_ble_gatts_send_response(gatts_if, param->read.conn_id,
                                                 param->read.trans_id, status, &gatt_rsp);
     if (err != ESP_OK) {
@@ -382,7 +393,8 @@ static ssize_t populate_gatt_db(esp_gatts_attr_db_t **gatt_db_generated)
             (*gatt_db_generated)[i].att_desc.value        = (uint8_t *) &character_prop_read_write;
         } else if (i % 3 == 2) {
             /* Characteristic Value */
-            (*gatt_db_generated)[i].att_desc.perm         = ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE;
+            (*gatt_db_generated)[i].att_desc.perm         = ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE | \
+							    ESP_GATT_PERM_READ_ENCRYPTED | ESP_GATT_PERM_WRITE_ENCRYPTED;
             (*gatt_db_generated)[i].att_desc.uuid_length  = ESP_UUID_LEN_128;
             (*gatt_db_generated)[i].att_desc.uuid_p       = protoble_internal->g_nu_lookup[i / 3].uuid128;
             (*gatt_db_generated)[i].att_desc.max_length   = CHAR_VAL_LEN_MAX;

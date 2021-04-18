@@ -25,13 +25,18 @@
 #include "os.h"
 #include <stdlib.h>
 #include <time.h>
+#include <unistd.h>
 #include <sys/time.h>
 #include "esp_system.h"
 #include "utils/common.h"
 
 int os_get_time(struct os_time *t)
 {
-    return gettimeofday((struct timeval*) t, NULL);
+    struct timeval tv;
+    int ret = gettimeofday(&tv, NULL);
+    t->sec = (os_time_t) tv.tv_sec;
+    t->usec = tv.tv_usec;
+    return ret;
 }
 
 unsigned long os_random(void)
@@ -45,3 +50,12 @@ int os_get_random(unsigned char *buf, size_t len)
     return 0;
 }
 
+void os_sleep(os_time_t sec, os_time_t usec)
+{
+    if (sec) {
+        sleep(sec);
+    }
+    if (usec) {
+        usleep(usec);
+    }
+}

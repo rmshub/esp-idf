@@ -18,7 +18,6 @@
 #include <stdarg.h>
 
 #define LINESIZE 1024
-#define VERSION "1.0"
 
 static void fail(LPCSTR message, ...) __attribute__((noreturn));
 
@@ -33,6 +32,17 @@ static void fail(LPCSTR message, ...)
     ExitProcess(1);
 }
 
+BOOL WINAPI CtrlHandler(DWORD fdwCtrlType)
+{
+    switch (fdwCtrlType) {
+    // Handle the CTRL-C signal.
+    case CTRL_C_EVENT:
+        return TRUE;
+    default:
+        return FALSE;
+    }
+}
+
 int main(int argc, LPTSTR argv[])
 {
     /* Print the version of this wrapper tool, but only if invoked as "idf.exe".
@@ -43,12 +53,13 @@ int main(int argc, LPTSTR argv[])
     int cmdname_length = strlen(cmdname);
 
     if (argc == 2 &&
-        cmdname_length > 4 &&
-        StrCmp(cmdname + cmdname_length - 4, TEXT(".exe")) == 0 &&
+            cmdname_length > 4 &&
+            StrCmp(cmdname + cmdname_length - 4, TEXT(".exe")) == 0 &&
             (StrCmp(argv[1], TEXT("--version")) == 0 ||
              StrCmp(argv[1], TEXT("-v")) == 0)) {
         LPCSTR msg = VERSION "\n";
-        WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), msg, lstrlen(msg), NULL, NULL);
+        DWORD written;
+        WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), msg, lstrlen(msg), &written, NULL);
         return 0;
     }
 
@@ -78,6 +89,9 @@ int main(int argc, LPTSTR argv[])
     }
 
     SetEnvironmentVariable(TEXT("IDF_PY_PROGRAM_NAME"), idfpy_script_name);
+
+    // Add processing for Ctrl+C
+    SetConsoleCtrlHandler(CtrlHandler, TRUE);
 
     /* Reuse the standard streams of this process */
     STARTUPINFO start_info = {

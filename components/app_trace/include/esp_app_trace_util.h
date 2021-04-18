@@ -14,13 +14,17 @@
 #ifndef ESP_APP_TRACE_UTIL_H_
 #define ESP_APP_TRACE_UTIL_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "freertos/FreeRTOS.h"
 #include "esp_err.h"
 
 /** Infinite waiting timeout */
 #define ESP_APPTRACE_TMO_INFINITE               ((uint32_t)-1)
 
-/** Structure which holds data necessary for measuring time intervals. 
+/** Structure which holds data necessary for measuring time intervals.
  *
  *  After initialization via esp_apptrace_tmo_init() user needs to call esp_apptrace_tmo_check()
  *  periodically to check timeout for expiration.
@@ -96,7 +100,7 @@ esp_err_t esp_apptrace_lock_give(esp_apptrace_lock_t *lock);
 
 /** Ring buffer control structure.
  *
- * @note For purposes of application tracing module if there is no enough space for user data and write pointer can be wrapped 
+ * @note For purposes of application tracing module if there is no enough space for user data and write pointer can be wrapped
  *       current ring buffer size can be temporarily shrinked in order to provide buffer with requested size.
  */
 typedef struct {
@@ -163,5 +167,9 @@ uint32_t esp_apptrace_rb_read_size_get(esp_apptrace_rb_t *rb);
  * @note Due to write pointer wrapping returned size can be less then the total size of available data.
  */
 uint32_t esp_apptrace_rb_write_size_get(esp_apptrace_rb_t *rb);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif //ESP_APP_TRACE_UTIL_H_

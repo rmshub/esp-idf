@@ -15,34 +15,21 @@
 # limitations under the License.
 
 from __future__ import print_function
+
 import os
-import sys
 import re
-from threading import Thread
 import subprocess
+import threading
+import traceback
 
 try:
-    # This environment variable is expected on the host machine
-    test_fw_path = os.getenv("TEST_FW_PATH")
-    if test_fw_path and test_fw_path not in sys.path:
-        sys.path.insert(0, test_fw_path)
-    import IDF
-except ImportError as e:
-    print(e)
-    print("Try `export TEST_FW_PATH=$IDF_PATH/tools/tiny-test-fw` for resolving the issue")
-    print("Try `pip install -r $IDF_PATH/tools/tiny-test-fw/requirements.txt` for resolving the issue")
-    import IDF
-
-try:
-    import lib_ble_client
+    import Queue
 except ImportError:
-    lib_ble_client_path = os.getenv("IDF_PATH") + "/tools/ble"
-    if lib_ble_client_path and lib_ble_client_path not in sys.path:
-        sys.path.insert(0, lib_ble_client_path)
-    import lib_ble_client
+    import queue as Queue
 
-
-import Utility
+import ttfw_idf
+from ble import lib_ble_client
+from tiny_test_fw import Utility
 
 # When running on local machine execute the following before running this script
 # > make app bootloader
@@ -50,7 +37,7 @@ import Utility
 # > export TEST_FW_PATH=~/esp/esp-idf/tools/tiny-test-fw
 
 
-def bleprph_client_task(dut_addr, dut):
+def bleprph_client_task(prph_obj, dut, dut_addr):
     interface = 'hci0'
     ble_devname = 'nimble-bleprph'
     srv_uuid = '2f12'
@@ -58,72 +45,82 @@ def bleprph_client_task(dut_addr, dut):
     # Get BLE client module
     ble_client_obj = lib_ble_client.BLE_Bluez_Client(interface, devname=ble_devname, devaddr=dut_addr)
     if not ble_client_obj:
-        raise RuntimeError("Failed to get DBus-Bluez object")
+        raise RuntimeError('Failed to get DBus-Bluez object')
 
     # Discover Bluetooth Adapter and power on
     is_adapter_set = ble_client_obj.set_adapter()
     if not is_adapter_set:
-        raise RuntimeError("Adapter Power On failed !!")
+        raise RuntimeError('Adapter Power On failed !!')
 
     # Connect BLE Device
     is_connected = ble_client_obj.connect()
     if not is_connected:
-        Utility.console_log("Connection to device ", ble_devname, "failed !!")
         # Call disconnect to perform cleanup operations before exiting application
         ble_client_obj.disconnect()
-        return
+        raise RuntimeError('Connection to device ' + ble_devname + ' failed !!')
 
     # Check dut responses
-    dut.expect("GAP procedure initiated: advertise;", timeout=30)
+    dut.expect('GAP procedure initiated: advertise;', timeout=30)
 
     # Read Services
     services_ret = ble_client_obj.get_services(srv_uuid)
     if services_ret:
-        print("\nServices\n")
-        print(services_ret)
+        Utility.console_log('\nServices\n')
+        Utility.console_log(str(services_ret))
     else:
-        print("Failure: Read Services failed")
         ble_client_obj.disconnect()
-        return
+        raise RuntimeError('Failure: Read Services failed')
 
     # Read Characteristics
     chars_ret = {}
     chars_ret = ble_client_obj.read_chars()
     if chars_ret:
-        Utility.console_log("\nCharacteristics retrieved")
+        Utility.console_log('\nCharacteristics retrieved')
         for path, props in chars_ret.items():
-            print("\n\tCharacteristic: ", path)
-            print("\tCharacteristic UUID: ", props[2])
-            print("\tValue: ", props[0])
-            print("\tProperties: : ", props[1])
+            Utility.console_log('\n\tCharacteristic: ' + str(path))
+            Utility.console_log('\tCharacteristic UUID: ' + str(props[2]))
+            Utility.console_log('\tValue: ' + str(props[0]))
+            Utility.console_log('\tProperties: : ' + str(props[1]))
     else:
-        print("Failure: Read Characteristics failed")
         ble_client_obj.disconnect()
-        return
+        raise RuntimeError('Failure: Read Characteristics failed')
 
     '''
     Write Characteristics
     - write 'A' to characteristic with write permission
     '''
     chars_ret_on_write = {}
-    chars_ret_on_write = ble_client_obj.write_chars('A')
+    chars_ret_on_write = ble_client_obj.write_chars(b'A')
     if chars_ret_on_write:
-        Utility.console_log("\nCharacteristics after write operation")
+        Utility.console_log('\nCharacteristics after write operation')
         for path, props in chars_ret_on_write.items():
-            print("\n\tCharacteristic:", path)
-            print("\tCharacteristic UUID: ", props[2])
-            print("\tValue:", props[0])
-            print("\tProperties: : ", props[1])
+            Utility.console_log('\n\tCharacteristic:' + str(path))
+            Utility.console_log('\tCharacteristic UUID: ' + str(props[2]))
+            Utility.console_log('\tValue:' + str(props[0]))
+            Utility.console_log('\tProperties: : ' + str(props[1]))
     else:
-        print("Failure: Write Characteristics failed")
         ble_client_obj.disconnect()
-        return
+        raise RuntimeError('Failure: Write Characteristics failed')
 
     # Call disconnect to perform cleanup operations before exiting application
     ble_client_obj.disconnect()
 
 
-@IDF.idf_example_test(env_tag="Example_WIFI_BT")
+class BlePrphThread(threading.Thread):
+    def __init__(self, dut, dut_addr, exceptions_queue):
+        threading.Thread.__init__(self)
+        self.dut = dut
+        self.dut_addr = dut_addr
+        self.exceptions_queue = exceptions_queue
+
+    def run(self):
+        try:
+            bleprph_client_task(self, self.dut, self.dut_addr)
+        except Exception:
+            self.exceptions_queue.put(traceback.format_exc(), block=False)
+
+
+@ttfw_idf.idf_example_test(env_tag='Example_WIFI_BT')
 def test_example_app_ble_peripheral(env, extra_data):
     """
         Steps:
@@ -133,36 +130,46 @@ def test_example_app_ble_peripheral(env, extra_data):
             4. Read Characteristics
             5. Write Characteristics
     """
-    try:
+    subprocess.check_output(['rm','-rf','/var/lib/bluetooth/*'])
+    subprocess.check_output(['hciconfig','hci0','reset'])
 
-        # Acquire DUT
-        dut = env.get_dut("bleprph", "examples/bluetooth/nimble/bleprph")
+    # Acquire DUT
+    dut = env.get_dut('bleprph', 'examples/bluetooth/nimble/bleprph', dut_class=ttfw_idf.ESP32DUT)
 
-        # Get binary file
-        binary_file = os.path.join(dut.app.binary_path, "bleprph.bin")
-        bin_size = os.path.getsize(binary_file)
-        IDF.log_performance("bleprph_bin_size", "{}KB".format(bin_size // 1024))
-        IDF.check_performance("bleprph_bin_size", bin_size // 1024)
+    # Get binary file
+    binary_file = os.path.join(dut.app.binary_path, 'bleprph.bin')
+    bin_size = os.path.getsize(binary_file)
+    ttfw_idf.log_performance('bleprph_bin_size', '{}KB'.format(bin_size // 1024))
 
-        # Upload binary and start testing
-        Utility.console_log("Starting bleprph simple example test app")
-        dut.start_app()
+    # Upload binary and start testing
+    Utility.console_log('Starting bleprph simple example test app')
+    dut.start_app()
+    dut.reset()
 
-        subprocess.check_output(['rm','-rf','/var/lib/bluetooth/*'])
+    # Get device address from dut
+    dut_addr = dut.expect(re.compile(r'Device Address: ([a-fA-F0-9:]+)'), timeout=30)[0]
 
-        # Get device address from dut
-        dut_addr = dut.expect(re.compile(r"Device Address: ([a-fA-F0-9:]+)"), timeout=30)[0]
+    exceptions_queue = Queue.Queue()
+    # Starting a py-client in a separate thread
+    bleprph_thread_obj = BlePrphThread(dut, dut_addr, exceptions_queue)
+    bleprph_thread_obj.start()
+    bleprph_thread_obj.join()
 
-        # Starting a py-client in a separate thread
-        thread1 = Thread(target=bleprph_client_task, args=(dut_addr,dut,))
-        thread1.start()
-        thread1.join()
+    exception_msg = None
+    while True:
+        try:
+            exception_msg = exceptions_queue.get(block=False)
+        except Queue.Empty:
+            break
+        else:
+            Utility.console_log('\n' + exception_msg)
 
-        # Check dut responses
-        dut.expect("connection established; status=0", timeout=30)
-        dut.expect("disconnect;", timeout=30)
-    except Exception as e:
-        sys.exit(e)
+    if exception_msg:
+        raise Exception('Thread did not run successfully')
+
+    # Check dut responses
+    dut.expect('connection established; status=0', timeout=30)
+    dut.expect('disconnect;', timeout=30)
 
 
 if __name__ == '__main__':

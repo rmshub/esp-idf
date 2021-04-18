@@ -1,12 +1,12 @@
 /*
  * MD4 hash implementation
- * 
+ *
  * This software may be distributed under the terms of BSD license.
  */
 
 #include "utils/includes.h"
 #include "utils/common.h"
-#include "crypto/crypto.h"
+#include "crypto.h"
 
 #define MD4_BLOCK_LENGTH	64
 #define MD4_DIGEST_LENGTH	16

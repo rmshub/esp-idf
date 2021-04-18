@@ -16,9 +16,10 @@
 #include <string.h>
 #include <assert.h>
 #include <sys/param.h>
+
 #include "esp32/rom/sha.h"
+#include "soc/dport_reg.h"
 #include "soc/hwcrypto_periph.h"
-#include "esp32/rom/ets_sys.h" // TO REMOVE
 
 static uint32_t words_hashed;
 
@@ -27,7 +28,7 @@ static const size_t BLOCK_WORDS = (64 / sizeof(uint32_t));
 // Words in final SHA256 digest
 static const size_t DIGEST_WORDS = (32 / sizeof(uint32_t));
 
-bootloader_sha256_handle_t bootloader_sha256_start()
+bootloader_sha256_handle_t bootloader_sha256_start(void)
 {
     // Enable SHA hardware
     ets_sha_enable();
@@ -44,7 +45,6 @@ void bootloader_sha256_data(bootloader_sha256_handle_t handle, const void *data,
     size_t word_len = data_len / 4;
     uint32_t *sha_text_reg = (uint32_t *)(SHA_TEXT_BASE);
 
-    //ets_printf("word_len %d so far %d\n", word_len, words_hashed);
     while (word_len > 0) {
         size_t block_count = words_hashed % BLOCK_WORDS;
         size_t copy_words = (BLOCK_WORDS - block_count);
@@ -55,8 +55,7 @@ void bootloader_sha256_data(bootloader_sha256_handle_t handle, const void *data,
         while (REG_READ(SHA_256_BUSY_REG) != 0) { }
 
         // Copy to memory block
-        //ets_printf("block_count %d copy_words %d\n", block_count, copy_words);
-        for (int i = 0; i < copy_words; i++) {
+        for (size_t i = 0; i < copy_words; i++) {
             sha_text_reg[block_count + i] = __builtin_bswap32(w[i]);
         }
         asm volatile ("memw");
@@ -69,7 +68,6 @@ void bootloader_sha256_data(bootloader_sha256_handle_t handle, const void *data,
 
         // If we loaded a full block, run the SHA engine
         if (block_count == BLOCK_WORDS) {
-            //ets_printf("running engine @ count %d\n", words_hashed);
             if (words_hashed == BLOCK_WORDS) {
                 REG_WRITE(SHA_256_START_REG, 1);
             } else {
@@ -119,7 +117,7 @@ void bootloader_sha256_finish(bootloader_sha256_handle_t handle, uint8_t *digest
 
     uint32_t *digest_words = (uint32_t *)digest;
     uint32_t *sha_text_reg = (uint32_t *)(SHA_TEXT_BASE);
-    for (int i = 0; i < DIGEST_WORDS; i++) {
+    for (size_t i = 0; i < DIGEST_WORDS; i++) {
         digest_words[i] = __builtin_bswap32(sha_text_reg[i]);
     }
     asm volatile ("memw");

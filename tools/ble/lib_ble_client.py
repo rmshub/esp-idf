@@ -18,48 +18,57 @@
 # DBus-Bluez BLE library
 
 from __future__ import print_function
+
 import sys
 import time
+import traceback
 
 try:
-    from future.moves.itertools import zip_longest
     import dbus
     import dbus.mainloop.glib
+    from future.moves.itertools import zip_longest
     from gi.repository import GLib
 except ImportError as e:
     if 'linux' not in sys.platform:
-        sys.exit("Error: Only supported on Linux platform")
+        raise e
     print(e)
-    print("Install packages `libgirepository1.0-dev gir1.2-gtk-3.0 libcairo2-dev libdbus-1-dev libdbus-glib-1-dev` for resolving the issue")
-    print("Run `pip install -r $IDF_PATH/tools/ble/requirements.txt` for resolving the issue")
+    print('Install packages `libgirepository1.0-dev gir1.2-gtk-3.0 libcairo2-dev libdbus-1-dev libdbus-glib-1-dev` for resolving the issue')
+    print('Run `pip install -r $IDF_PATH/tools/ble/requirements.txt` for resolving the issue')
     raise
 
-import lib_gatt
-import lib_gap
+from . import lib_gap, lib_gatt
 
 srv_added_old_cnt = 0
 srv_added_new_cnt = 0
+verify_signal_check = 0
 blecent_retry_check_cnt = 0
+gatt_app_retry_check_cnt = 0
 verify_service_cnt = 0
 verify_readchars_cnt = 0
+adv_retry_check_cnt = 0
 blecent_adv_uuid = '1811'
-iface_added = False
 gatt_app_obj_check = False
 gatt_app_reg_check = False
+adv_checks_done = False
+gatt_checks_done = False
 adv_data_check = False
 adv_reg_check = False
 read_req_check = False
 write_req_check = False
 subscribe_req_check = False
 ble_hr_chrc = False
-
-DISCOVERY_START = False
-
-TEST_CHECKS_PASS = False
-ADV_STOP = False
-
-SERVICES_RESOLVED = False
-SERVICE_UUID_FOUND = False
+discovery_start = False
+signal_caught = False
+test_checks_pass = False
+adv_stop = False
+services_resolved = False
+service_uuid_found = False
+adapter_on = False
+device_connected = False
+gatt_app_registered = False
+adv_registered = False
+adv_active_instance = False
+chrc_value_cnt = False
 
 BLUEZ_SERVICE_NAME = 'org.bluez'
 DBUS_OM_IFACE = 'org.freedesktop.DBus.ObjectManager'
@@ -74,13 +83,6 @@ LE_ADVERTISING_MANAGER_IFACE = 'org.bluez.LEAdvertisingManager1'
 GATT_SERVICE_IFACE = 'org.bluez.GattService1'
 GATT_CHRC_IFACE = 'org.bluez.GattCharacteristic1'
 
-ADAPTER_ON = False
-DEVICE_CONNECTED = False
-GATT_APP_REGISTERED = False
-ADV_REGISTERED = False
-ADV_ACTIVE_INSTANCE = False
-
-CHRC_VALUE_CNT = False
 
 # Set up the main loop.
 dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
@@ -89,26 +91,42 @@ dbus.mainloop.glib.threads_init()
 event_loop = GLib.MainLoop()
 
 
+def verify_signal_is_caught():
+    global verify_signal_check
+    verify_signal_check += 1
+
+    if (not signal_caught and verify_signal_check == 15) or (signal_caught):
+        if event_loop.is_running():
+            event_loop.quit()
+            return False  # polling for checks will stop
+
+    return True  # polling will continue
+
+
 def set_props_status(props):
     """
         Set Adapter status if it is powered on or off
     """
-    global ADAPTER_ON, SERVICES_RESOLVED, GATT_OBJ_REMOVED, GATT_APP_REGISTERED, \
-        ADV_REGISTERED, ADV_ACTIVE_INSTANCE, DEVICE_CONNECTED, CHRC_VALUE, CHRC_VALUE_CNT
+    global adapter_on, services_resolved, GATT_OBJ_REMOVED, gatt_app_registered, \
+        adv_registered, adv_active_instance, device_connected, CHRC_VALUE, chrc_value_cnt, \
+        signal_caught
     is_service_uuid = False
     # Signal caught for change in Adapter Powered property
     if 'Powered' in props:
         if props['Powered'] == 1:
-            ADAPTER_ON = True
+            signal_caught = True
+            adapter_on = True
         else:
-            ADAPTER_ON = False
-        event_loop.quit()
-    elif 'ServicesResolved' in props:
+            signal_caught = True
+            adapter_on = False
+    if 'ServicesResolved' in props:
         if props['ServicesResolved'] == 1:
-            SERVICES_RESOLVED = True
+            signal_caught = True
+            services_resolved = True
         else:
-            SERVICES_RESOLVED = False
-    elif 'UUIDs' in props:
+            signal_caught = True
+            services_resolved = False
+    if 'UUIDs' in props:
         # Signal caught for add/remove GATT data having service uuid
         for uuid in props['UUIDs']:
             if blecent_adv_uuid in uuid:
@@ -116,30 +134,34 @@ def set_props_status(props):
         if not is_service_uuid:
             # Signal caught for removing GATT data having service uuid
             # and for unregistering GATT application
-            GATT_APP_REGISTERED = False
+            gatt_app_registered = False
             lib_gatt.GATT_APP_OBJ = False
-    elif 'ActiveInstances' in props:
+    if 'ActiveInstances' in props:
         # Signal caught for Advertising - add/remove Instances property
         if props['ActiveInstances'] == 1:
-            ADV_ACTIVE_INSTANCE = True
+            adv_active_instance = True
         elif props['ActiveInstances'] == 0:
-            ADV_ACTIVE_INSTANCE = False
-            ADV_REGISTERED = False
+            adv_active_instance = False
+            adv_registered = False
             lib_gap.ADV_OBJ = False
-    elif 'Connected' in props:
+    if 'Connected' in props:
         # Signal caught for device connect/disconnect
-        if props['Connected'] is True:
-            DEVICE_CONNECTED = True
-            event_loop.quit()
+        if props['Connected'] == 1:
+            signal_caught = True
+            device_connected = True
         else:
-            DEVICE_CONNECTED = False
-    elif 'Value' in props:
+            signal_caught = True
+            device_connected = False
+    if 'Value' in props:
         # Signal caught for change in chars value
         if ble_hr_chrc:
-            CHRC_VALUE_CNT += 1
+            chrc_value_cnt += 1
             print(props['Value'])
-            if CHRC_VALUE_CNT == 10:
-                event_loop.quit()
+            if chrc_value_cnt == 10:
+                signal_caught = True
+                return False
+
+    return False
 
 
 def props_change_handler(iface, changed_props, invalidated):
@@ -176,7 +198,7 @@ class BLE_Bluez_Client:
 
         try:
             self.bus = dbus.SystemBus()
-            om_iface_obj = dbus.Interface(self.bus.get_object(BLUEZ_SERVICE_NAME, "/"), DBUS_OM_IFACE)
+            om_iface_obj = dbus.Interface(self.bus.get_object(BLUEZ_SERVICE_NAME, '/'), DBUS_OM_IFACE)
             self.ble_objs = om_iface_obj.GetManagedObjects()
 
         except Exception as e:
@@ -184,7 +206,7 @@ class BLE_Bluez_Client:
 
     def __del__(self):
         try:
-            print("Test Exit")
+            print('Test Exit')
         except Exception as e:
             print(e)
             sys.exit(1)
@@ -194,8 +216,11 @@ class BLE_Bluez_Client:
             Discover Bluetooth Adapter
             Power On Bluetooth Adapter
         '''
+        global verify_signal_check, signal_caught, adapter_on
+        verify_signal_check = 0
+        adapter_on = False
         try:
-            print("discovering adapter...")
+            print('discovering adapter...')
             for path, interfaces in self.ble_objs.items():
                 adapter = interfaces.get(ADAPTER_IFACE)
                 if adapter is not None:
@@ -209,73 +234,80 @@ class BLE_Bluez_Client:
                         break
 
             if self.adapter is None:
-                raise RuntimeError("\nError: bluetooth adapter not found")
+                raise Exception('Bluetooth adapter not found')
 
             if self.props_iface_obj is None:
-                raise RuntimeError("\nError: properties interface not found")
+                raise Exception('Properties interface not found')
 
-            print("bluetooth adapter discovered")
-
-            self.props_iface_obj.connect_to_signal('PropertiesChanged', props_change_handler)
+            print('bluetooth adapter discovered')
 
             # Check if adapter is already powered on
-            if ADAPTER_ON:
-                print("bluetooth adapter is already on")
+            if adapter_on:
+                print('Adapter already powered on')
                 return True
 
             # Power On Adapter
-            print("powering on adapter...")
-            self.props_iface_obj.Set(ADAPTER_IFACE, "Powered", dbus.Boolean(1))
+            print('powering on adapter...')
+            self.props_iface_obj.connect_to_signal('PropertiesChanged', props_change_handler)
+            self.props_iface_obj.Set(ADAPTER_IFACE, 'Powered', dbus.Boolean(1))
 
+            signal_caught = False
+            GLib.timeout_add_seconds(5, verify_signal_is_caught)
             event_loop.run()
 
-            if ADAPTER_ON:
-                print("bluetooth adapter powered on")
+            if adapter_on:
+                print('bluetooth adapter powered on')
                 return True
             else:
-                print("Failure: bluetooth adapter not powered on")
-                return False
+                raise Exception('Failure: bluetooth adapter not powered on')
 
-        except Exception as e:
-            print(e)
-            sys.exit(1)
+        except Exception:
+            print(traceback.format_exc())
+            return False
 
     def connect(self):
         '''
             Connect to the device discovered
             Retry 10 times to discover and connect to device
         '''
-        global DISCOVERY_START
-
+        global discovery_start, signal_caught, device_connected, verify_signal_check
         device_found = False
+        device_connected = False
         try:
             self.adapter.StartDiscovery()
-            print("\nStarted Discovery")
+            print('\nStarted Discovery')
 
-            DISCOVERY_START = True
+            discovery_start = True
 
             for retry_cnt in range(10,0,-1):
+                verify_signal_check = 0
                 try:
                     if self.device is None:
-                        print("\nConnecting to device...")
+                        print('\nConnecting to device...')
                         # Wait for device to be discovered
                         time.sleep(5)
                         device_found = self.get_device()
                     if device_found:
                         self.device.Connect(dbus_interface=DEVICE_IFACE)
-                        event_loop.quit()
-                        print("\nConnected to device")
-                        return True
+                        time.sleep(15)
+                        signal_caught = False
+                        GLib.timeout_add_seconds(5, verify_signal_is_caught)
+                        event_loop.run()
+                        if device_connected:
+                            print('\nConnected to device')
+                            return True
+                        else:
+                            raise Exception
                 except Exception as e:
                     print(e)
-                    print("\nRetries left", retry_cnt - 1)
+                    print('\nRetries left', retry_cnt - 1)
                     continue
 
             # Device not found
             return False
 
-        except Exception as e:
-            print(e)
+        except Exception:
+            print(traceback.format_exc())
             self.device = None
             return False
 
@@ -286,7 +318,7 @@ class BLE_Bluez_Client:
         '''
         dev_path = None
 
-        om_iface_obj = dbus.Interface(self.bus.get_object(BLUEZ_SERVICE_NAME, "/"), DBUS_OM_IFACE)
+        om_iface_obj = dbus.Interface(self.bus.get_object(BLUEZ_SERVICE_NAME, '/'), DBUS_OM_IFACE)
         self.ble_objs = om_iface_obj.GetManagedObjects()
         for path, interfaces in self.ble_objs.items():
             if DEVICE_IFACE not in interfaces.keys():
@@ -294,13 +326,12 @@ class BLE_Bluez_Client:
             device_addr_iface = (path.replace('_', ':')).lower()
             dev_addr = self.devaddr.lower()
             if dev_addr in device_addr_iface and \
-                    interfaces[DEVICE_IFACE].get("Name") == self.devname:
+                    interfaces[DEVICE_IFACE].get('Name') == self.devname:
                 dev_path = path
                 break
 
         if dev_path is None:
-            print("\nBLE device not found")
-            return False
+            raise Exception('\nBLE device not found')
 
         device_props_iface_obj = dbus.Interface(self.bus.get_object(BLUEZ_SERVICE_NAME, dev_path), DBUS_PROP_IFACE)
         device_props_iface_obj.connect_to_signal('PropertiesChanged', props_change_handler)
@@ -321,59 +352,55 @@ class BLE_Bluez_Client:
                 if path not in self.services:
                     self.services.append(path)
 
-    def verify_get_services(self):
-        global SERVICE_SCAN_FAIL, verify_service_cnt
-        verify_service_cnt += 1
-        if iface_added and self.services and SERVICES_RESOLVED:
-            event_loop.quit()
-
-        if verify_service_cnt == 10:
-            event_loop.quit()
-
-    def verify_service_uuid_found(self):
+    def verify_service_uuid_found(self, service_uuid):
         '''
         Verify service uuid found
         '''
-        global SERVICE_UUID_FOUND
+        global service_uuid_found
 
         srv_uuid_found = [uuid for uuid in self.srv_uuid if service_uuid in uuid]
         if srv_uuid_found:
-            SERVICE_UUID_FOUND = True
+            service_uuid_found = True
 
-    def get_services(self, srv_uuid=None):
+    def get_services(self, service_uuid=None):
         '''
         Retrieve Services found in the device connected
         '''
-        global service_uuid, iface_added, SERVICE_UUID_FOUND
-        service_uuid = srv_uuid
-        iface_added = False
-        SERVICE_UUID_FOUND = False
-        try:
-            om_iface_obj = dbus.Interface(self.bus.get_object(BLUEZ_SERVICE_NAME, "/"), DBUS_OM_IFACE)
-            self.ble_objs = om_iface_obj.GetManagedObjects()
+        global signal_caught, service_uuid_found, services_resolved, verify_signal_check
+        verify_signal_check = 0
+        service_uuid_found = False
+        services_resolved = False
+        signal_caught = False
 
+        try:
+            om_iface_obj = dbus.Interface(self.bus.get_object(BLUEZ_SERVICE_NAME, '/'), DBUS_OM_IFACE)
+            self.ble_objs = om_iface_obj.GetManagedObjects()
             for path, interfaces in self.ble_objs.items():
                 self.srvc_iface_added_handler(path, interfaces)
             # If services not found, then they may not have been added yet on dbus
             if not self.services:
-                iface_added = True
-                GLib.timeout_add_seconds(2, self.verify_get_services)
+                GLib.timeout_add_seconds(5, verify_signal_is_caught)
                 om_iface_obj.connect_to_signal('InterfacesAdded', self.srvc_iface_added_handler)
                 event_loop.run()
+                if not services_resolved:
+                    raise Exception('Services not found...')
+
             if service_uuid:
-                self.verify_service_uuid_found()
-                if not SERVICE_UUID_FOUND:
-                    raise Exception("Service with uuid: %s not found !!!" % service_uuid)
+                self.verify_service_uuid_found(service_uuid)
+                if not service_uuid_found:
+                    raise Exception('Service with uuid: %s not found...' % service_uuid)
+
+            # Services found
             return self.srv_uuid
-        except Exception as e:
-            print("Error: ", e)
+        except Exception:
+            print(traceback.format_exc())
             return False
 
     def chrc_iface_added_handler(self, path, interfaces):
         '''
         Add services found as lib_ble_client obj
         '''
-        global chrc, chrc_discovered
+        global chrc, chrc_discovered, signal_caught
         chrc_val = None
 
         if self.device and path.startswith(self.device.object_path):
@@ -386,38 +413,34 @@ class BLE_Bluez_Client:
                     chrc_val = chrc.ReadValue({}, dbus_interface=GATT_CHRC_IFACE)
                 uuid = chrc_props['UUID']
                 self.chars[path] = chrc_val, chrc_flags, uuid
-
-    def verify_get_chars(self):
-        global verify_readchars_cnt
-        verify_readchars_cnt += 1
-        if iface_added and self.chars:
-                event_loop.quit()
-        if verify_readchars_cnt == 10:
-            event_loop.quit()
+                signal_caught = True
 
     def read_chars(self):
         '''
             Read characteristics found in the device connected
         '''
-        global iface_added, chrc_discovered
+        global iface_added, chrc_discovered, signal_caught, verify_signal_check
+        verify_signal_check = 0
         chrc_discovered = False
         iface_added = False
+        signal_caught = False
 
         try:
-            om_iface_obj = dbus.Interface(self.bus.get_object(BLUEZ_SERVICE_NAME, "/"), DBUS_OM_IFACE)
+            om_iface_obj = dbus.Interface(self.bus.get_object(BLUEZ_SERVICE_NAME, '/'), DBUS_OM_IFACE)
             self.ble_objs = om_iface_obj.GetManagedObjects()
             for path, interfaces in self.ble_objs.items():
                 self.chrc_iface_added_handler(path, interfaces)
 
             # If chars not found, then they have not been added yet to interface
+            time.sleep(15)
             if not self.chars:
                 iface_added = True
-                GLib.timeout_add_seconds(2, self.verify_get_chars)
+                GLib.timeout_add_seconds(5, verify_signal_is_caught)
                 om_iface_obj.connect_to_signal('InterfacesAdded', self.chars_iface_added_handler)
                 event_loop.run()
             return self.chars
-        except Exception as e:
-            print("Error: ", e)
+        except Exception:
+            print(traceback.format_exc())
             return False
 
     def write_chars(self, write_val):
@@ -437,18 +460,17 @@ class BLE_Bluez_Client:
                     if 'read' in props[1]:
                         chrc_val = chrc.ReadValue({}, dbus_interface=GATT_CHRC_IFACE)
                     else:
-                        print("Warning: Cannot read value. Characteristic does not have read permission.")
+                        print('Warning: Cannot read value. Characteristic does not have read permission.')
                     if not (ord(write_val) == int(chrc_val[0])):
-                        print("\nWrite Failed")
+                        print('\nWrite Failed')
                         return False
                     self.chars[path] = chrc_val, props[1], props[2]  # update value
             if not char_write_props:
-                print("Failure: Cannot perform write operation. Characteristic does not have write permission.")
-                return False
+                raise Exception('Failure: Cannot perform write operation. Characteristic does not have write permission.')
 
             return self.chars
-        except Exception as e:
-            print(e)
+        except Exception:
+            print(traceback.format_exc())
             return False
 
     def hr_update_simulation(self, hr_srv_uuid, hr_char_uuid):
@@ -457,7 +479,7 @@ class BLE_Bluez_Client:
             Retrieve updated value
             Stop Notifications
         '''
-        global ble_hr_chrc
+        global ble_hr_chrc, verify_signal_check, signal_caught, chrc_value_cnt
 
         srv_path = None
         chrc = None
@@ -465,6 +487,7 @@ class BLE_Bluez_Client:
         chrc_path = None
         chars_ret = None
         ble_hr_chrc = True
+        chrc_value_cnt = 0
 
         try:
             # Get HR Measurement characteristic
@@ -475,8 +498,7 @@ class BLE_Bluez_Client:
                     break
 
             if srv_path is None:
-                print("Failure: HR UUID:", hr_srv_uuid, "not found")
-                return False
+                raise Exception('Failure: HR UUID:', hr_srv_uuid, 'not found')
 
             chars_ret = self.read_chars()
 
@@ -487,36 +509,41 @@ class BLE_Bluez_Client:
                     if hr_char_uuid in props[2]:  # uuid
                         break
             if chrc is None:
-                print("Failure: Characteristics for service: ", srv_path, "not found")
-                return False
+                raise Exception('Failure: Characteristics for service: ', srv_path, 'not found')
+
             # Subscribe to notifications
-            print("\nSubscribe to notifications: On")
+            print('\nSubscribe to notifications: On')
             chrc.StartNotify(dbus_interface=GATT_CHRC_IFACE)
 
             chrc_props_iface_obj = dbus.Interface(self.bus.get_object(BLUEZ_SERVICE_NAME, chrc_path), DBUS_PROP_IFACE)
             chrc_props_iface_obj.connect_to_signal('PropertiesChanged', props_change_handler)
 
+            signal_caught = False
+            verify_signal_check = 0
+            GLib.timeout_add_seconds(5, verify_signal_is_caught)
             event_loop.run()
             chrc.StopNotify(dbus_interface=GATT_CHRC_IFACE)
             time.sleep(2)
-            print("\nSubscribe to notifications: Off")
+            print('\nSubscribe to notifications: Off')
 
             ble_hr_chrc = False
             return True
 
-        except Exception as e:
-            print(e)
+        except Exception:
+            print(traceback.format_exc())
             return False
 
-    def create_gatt_app(self):
+    def create_and_reg_gatt_app(self):
         '''
             Create GATT data
             Register GATT Application
         '''
-        global gatt_app_obj, gatt_manager_iface_obj
+        global gatt_app_obj, gatt_manager_iface_obj, gatt_app_registered
 
         gatt_app_obj = None
         gatt_manager_iface_obj = None
+        gatt_app_registered = False
+        lib_gatt.GATT_APP_OBJ = False
 
         try:
             gatt_app_obj = lib_gatt.Application(self.bus, self.adapter_path[0])
@@ -526,23 +553,23 @@ class BLE_Bluez_Client:
                                                        reply_handler=self.gatt_app_handler,
                                                        error_handler=self.gatt_app_error_handler)
             return True
-        except Exception as e:
-            print(e)
+        except Exception:
+            print(traceback.format_exc())
             return False
 
     def gatt_app_handler(self):
         '''
             GATT Application Register success handler
         '''
-        global GATT_APP_REGISTERED
-        GATT_APP_REGISTERED = True
+        global gatt_app_registered
+        gatt_app_registered = True
 
     def gatt_app_error_handler(self, error):
         '''
             GATT Application Register error handler
         '''
-        global GATT_APP_REGISTERED
-        GATT_APP_REGISTERED = False
+        global gatt_app_registered
+        gatt_app_registered = False
 
     def start_advertising(self, adv_host_name, adv_iface_index, adv_type, adv_uuid):
         '''
@@ -550,25 +577,47 @@ class BLE_Bluez_Client:
             Register Advertisement
             Start Advertising
         '''
-        global le_adv_obj, le_adv_manager_iface_obj
+        global le_adv_obj, le_adv_manager_iface_obj, adv_active_instance, adv_registered
+
         le_adv_obj = None
         le_adv_manager_iface_obj = None
         le_adv_iface_path = None
+        adv_active_instance = False
+        adv_registered = False
+        lib_gap.ADV_OBJ = False
 
         try:
-            print("Advertising started")
-            gatt_app_ret = self.create_gatt_app()
+            print('Advertising started')
+            gatt_app_ret = self.create_and_reg_gatt_app()
 
-            if not gatt_app_ret:
-                return False
+            # Check if gatt app create and register command
+            # is sent successfully
+            assert gatt_app_ret
+
+            GLib.timeout_add_seconds(2, self.verify_gatt_app_reg)
+            event_loop.run()
+
+            # Check if Gatt Application is registered
+            assert gatt_app_registered
 
             for path,interface in self.ble_objs.items():
                 if LE_ADVERTISING_MANAGER_IFACE in interface:
                     le_adv_iface_path = path
 
-            if le_adv_iface_path is None:
-                print('\n Cannot start advertising. LEAdvertisingManager1 Interface not found')
-                return False
+            # Check LEAdvertisingManager1 interface is found
+            assert le_adv_iface_path, '\n Cannot start advertising. LEAdvertisingManager1 Interface not found'
+
+            # Get device when connected
+            if not self.device:
+                om_iface_obj = dbus.Interface(self.bus.get_object(BLUEZ_SERVICE_NAME, '/'), DBUS_OM_IFACE)
+                self.ble_objs = om_iface_obj.GetManagedObjects()
+
+                for path, interfaces in self.ble_objs.items():
+                    if DEVICE_IFACE not in interfaces.keys():
+                        continue
+                    device_props_iface_obj = dbus.Interface(self.bus.get_object(BLUEZ_SERVICE_NAME, path), DBUS_PROP_IFACE)
+                    device_props_iface_obj.connect_to_signal('PropertiesChanged', props_change_handler)
+                    self.device = self.bus.get_object(BLUEZ_SERVICE_NAME, path)
 
             le_adv_obj = lib_gap.Advertisement(self.bus, adv_iface_index, adv_type, adv_uuid, adv_host_name)
             le_adv_manager_iface_obj = dbus.Interface(self.bus.get_object(BLUEZ_SERVICE_NAME, le_adv_iface_path), LE_ADVERTISING_MANAGER_IFACE)
@@ -577,107 +626,149 @@ class BLE_Bluez_Client:
                                                            reply_handler=self.adv_handler,
                                                            error_handler=self.adv_error_handler)
 
+            GLib.timeout_add_seconds(2, self.verify_adv_reg)
+            event_loop.run()
+
+            # Check if advertising is registered
+            assert adv_registered
+
+            ret_val = self.verify_blecent_app()
+
+            # Check if blecent has passed
+            assert ret_val
+
+        except Exception:
+            print(traceback.format_exc())
+            return False
+
+    def verify_blecent_app(self):
+        '''
+        Verify read/write/subscribe operations
+        '''
+        try:
             GLib.timeout_add_seconds(2, self.verify_blecent)
             event_loop.run()
 
-            if TEST_CHECKS_PASS:
-                return True
-            else:
-                return False
+            return test_checks_pass
 
-        except Exception as e:
-            print("in Exception")
-            print(e)
+        except Exception:
+            print(traceback.format_exc())
             return False
 
     def adv_handler(self):
         '''
             Advertisement Register success handler
         '''
-        global ADV_REGISTERED
-        ADV_REGISTERED = True
+        global adv_registered
+        adv_registered = True
 
     def adv_error_handler(self, error):
         '''
             Advertisement Register error handler
         '''
-        global ADV_REGISTERED
-        ADV_REGISTERED = False
+        global adv_registered
+        adv_registered = False
+
+    def verify_gatt_app_reg(self):
+        """
+        Verify GATT Application is registered
+        """
+        global gatt_app_retry_check_cnt, gatt_checks_done
+        gatt_app_retry_check_cnt = 0
+        gatt_checks_done = False
+
+        # Check for success
+        if lib_gatt.GATT_APP_OBJ:
+            print('GATT Data created')
+        if gatt_app_registered:
+            print('GATT Application registered')
+            gatt_checks_done = True
+        if gatt_app_retry_check_cnt == 20:
+            if not gatt_app_registered:
+                print('Failure: GATT Application could not be registered')
+            gatt_checks_done = True
+
+        # End polling if app is registered or cnt has reached 10
+        if gatt_checks_done:
+            if event_loop.is_running():
+                event_loop.quit()
+            return False  # polling for checks will stop
+
+        gatt_app_retry_check_cnt += 1
+        # Default return True - polling for checks will continue
+        return True
+
+    def verify_adv_reg(self):
+        """
+        Verify Advertisement is registered
+        """
+        global adv_retry_check_cnt, adv_checks_done
+        adv_retry_check_cnt = 0
+        adv_checks_done = False
+
+        if lib_gap.ADV_OBJ:
+            print('Advertising data created')
+        if adv_registered or adv_active_instance:
+            print('Advertisement registered')
+            adv_checks_done = True
+        if adv_retry_check_cnt == 10:
+            if not adv_registered and not adv_active_instance:
+                print('Failure: Advertisement could not be registered')
+            adv_checks_done = True
+
+        # End polling if success or cnt has reached 10
+        if adv_checks_done:
+            if event_loop.is_running():
+                event_loop.quit()
+            return False  # polling for checks will stop
+
+        adv_retry_check_cnt += 1
+        # Default return True - polling for checks will continue
+        return True
 
     def verify_blecent(self):
         """
             Verify blecent test commands are successful
         """
-        global blecent_retry_check_cnt, gatt_app_obj_check, gatt_app_reg_check,\
-            adv_data_check, adv_reg_check, read_req_check, write_req_check,\
-            subscribe_req_check, TEST_CHECKS_PASS
-
-        # Get device when connected
-        if not self.device:
-            om_iface_obj = dbus.Interface(self.bus.get_object(BLUEZ_SERVICE_NAME, "/"), DBUS_OM_IFACE)
-            self.ble_objs = om_iface_obj.GetManagedObjects()
-
-            for path, interfaces in self.ble_objs.items():
-                if DEVICE_IFACE not in interfaces.keys():
-                    continue
-                device_props_iface_obj = dbus.Interface(self.bus.get_object(BLUEZ_SERVICE_NAME, path), DBUS_PROP_IFACE)
-                device_props_iface_obj.connect_to_signal('PropertiesChanged', props_change_handler)
-                self.device = self.bus.get_object(BLUEZ_SERVICE_NAME, path)
+        global blecent_retry_check_cnt, read_req_check, write_req_check,\
+            subscribe_req_check, test_checks_pass
 
         # Check for failures after 10 retries
         if blecent_retry_check_cnt == 10:
             # check for failures
-            if not gatt_app_obj_check:
-                print("Failure: GATT Data could not be created")
-            if not gatt_app_reg_check:
-                print("Failure: GATT Application could not be registered")
-            if not adv_data_check:
-                print("Failure: Advertising data could not be created")
-            if not adv_reg_check:
-                print("Failure: Advertisement could not be registered")
             if not read_req_check:
-                print("Failure: Read Request not received")
+                print('Failure: Read Request not received')
             if not write_req_check:
-                print("Failure: Write Request not received")
+                print('Failure: Write Request not received')
             if not subscribe_req_check:
-                print("Failure: Subscribe Request not received")
+                print('Failure: Subscribe Request not received')
 
             # Blecent Test failed
-            TEST_CHECKS_PASS = False
+            test_checks_pass = False
             if subscribe_req_check:
                 lib_gatt.alert_status_char_obj.StopNotify()
-            event_loop.quit()
-            return False  # polling for checks will stop
+        else:
+            # Check for success
+            if not read_req_check and lib_gatt.CHAR_READ:
+                read_req_check = True
+            if not write_req_check and lib_gatt.CHAR_WRITE:
+                write_req_check = True
+            if not subscribe_req_check and lib_gatt.CHAR_SUBSCRIBE:
+                subscribe_req_check = True
 
-        # Check for success
-        if not gatt_app_obj_check and lib_gatt.GATT_APP_OBJ:
-            print("GATT Data created")
-            gatt_app_obj_check = True
-        if not gatt_app_reg_check and GATT_APP_REGISTERED:
-            print("GATT Application registered")
-            gatt_app_reg_check = True
-        if not adv_data_check and lib_gap.ADV_OBJ:
-            print("Advertising data created")
-            adv_data_check = True
-        if not adv_reg_check and ADV_REGISTERED and ADV_ACTIVE_INSTANCE:
-            print("Advertisement registered")
-            adv_reg_check = True
-        if not read_req_check and lib_gatt.CHAR_READ:
-            read_req_check = True
-        if not write_req_check and lib_gatt.CHAR_WRITE:
-            write_req_check = True
-        if not subscribe_req_check and lib_gatt.CHAR_SUBSCRIBE:
-            subscribe_req_check = True
-
-        # Increment retry count
-        blecent_retry_check_cnt += 1
         if read_req_check and write_req_check and subscribe_req_check:
             # all checks passed
             # Blecent Test passed
-            TEST_CHECKS_PASS = True
+            test_checks_pass = True
             lib_gatt.alert_status_char_obj.StopNotify()
-            event_loop.quit()
+
+        if (blecent_retry_check_cnt == 10 or test_checks_pass):
+            if event_loop.is_running():
+                event_loop.quit()
             return False  # polling for checks will stop
+
+        # Increment retry count
+        blecent_retry_check_cnt += 1
 
         # Default return True - polling for checks will continue
         return True
@@ -687,7 +778,7 @@ class BLE_Bluez_Client:
             Verify cleanup is successful
         """
         global blecent_retry_check_cnt, gatt_app_obj_check, gatt_app_reg_check,\
-            adv_data_check, adv_reg_check, ADV_STOP
+            adv_data_check, adv_reg_check, adv_stop
 
         if blecent_retry_check_cnt == 0:
             gatt_app_obj_check = False
@@ -699,39 +790,39 @@ class BLE_Bluez_Client:
         if blecent_retry_check_cnt == 10:
             # check for failures
             if not gatt_app_obj_check:
-                print("Warning: GATT Data could not be removed")
+                print('Warning: GATT Data could not be removed')
             if not gatt_app_reg_check:
-                print("Warning: GATT Application could not be unregistered")
+                print('Warning: GATT Application could not be unregistered')
             if not adv_data_check:
-                print("Warning: Advertising data could not be removed")
+                print('Warning: Advertising data could not be removed')
             if not adv_reg_check:
-                print("Warning: Advertisement could not be unregistered")
+                print('Warning: Advertisement could not be unregistered')
 
             # Blecent Test failed
-            ADV_STOP = False
-            event_loop.quit()
-            return False  # polling for checks will stop
+            adv_stop = False
+        else:
+            # Check for success
+            if not gatt_app_obj_check and not lib_gatt.GATT_APP_OBJ:
+                print('GATT Data removed')
+                gatt_app_obj_check = True
+            if not gatt_app_reg_check and not gatt_app_registered:
+                print('GATT Application unregistered')
+                gatt_app_reg_check = True
+            if not adv_data_check and not adv_reg_check and not (adv_registered or adv_active_instance or lib_gap.ADV_OBJ):
+                print('Advertising data removed')
+                print('Advertisement unregistered')
+                adv_data_check = True
+                adv_reg_check = True
+                # all checks passed
+                adv_stop = True
 
-        # Check for success
-        if not gatt_app_obj_check and not lib_gatt.GATT_APP_OBJ:
-            print("GATT Data removed")
-            gatt_app_obj_check = True
-        if not gatt_app_reg_check and not GATT_APP_REGISTERED:
-            print("GATT Application unregistered")
-            gatt_app_reg_check = True
-        if not adv_data_check and not adv_reg_check and not (ADV_REGISTERED or ADV_ACTIVE_INSTANCE or lib_gap.ADV_OBJ):
-            print("Advertising data removed")
-            print("Advertisement unregistered")
-            adv_data_check = True
-            adv_reg_check = True
+        if (blecent_retry_check_cnt == 10 or adv_stop):
+            if event_loop.is_running():
+                event_loop.quit()
+            return False  # polling for checks will stop
 
         # Increment retry count
         blecent_retry_check_cnt += 1
-        if adv_reg_check:
-            # all checks passed
-            ADV_STOP = True
-            event_loop.quit()
-            return False  # polling for checks will stop
 
         # Default return True - polling for checks will continue
         return True
@@ -747,59 +838,57 @@ class BLE_Bluez_Client:
             Adapter is powered off
         '''
         try:
-            global blecent_retry_check_cnt, DISCOVERY_START
+            global blecent_retry_check_cnt, discovery_start, verify_signal_check, signal_caught
             blecent_retry_check_cnt = 0
+            verify_signal_check = 0
 
-            print("\nexiting from test...")
+            print('\nexiting from test...')
 
-            if ADV_REGISTERED:
+            self.props_iface_obj.connect_to_signal('PropertiesChanged', props_change_handler)
+
+            if adv_registered:
                 # Unregister Advertisement
                 le_adv_manager_iface_obj.UnregisterAdvertisement(le_adv_obj.get_path())
 
                 # Remove Advertising data
                 dbus.service.Object.remove_from_connection(le_adv_obj)
 
-            if GATT_APP_REGISTERED:
+            if gatt_app_registered:
                 # Unregister GATT Application
                 gatt_manager_iface_obj.UnregisterApplication(gatt_app_obj.get_path())
 
                 # Remove GATT data
                 dbus.service.Object.remove_from_connection(gatt_app_obj)
 
-                GLib.timeout_add_seconds(2, self.verify_blecent_disconnect)
+                GLib.timeout_add_seconds(5, self.verify_blecent_disconnect)
                 event_loop.run()
 
-                if ADV_STOP:
-                    print("Stop Advertising status: ", ADV_STOP)
+                if adv_stop:
+                    print('Stop Advertising status: ', adv_stop)
                 else:
-                    print("Warning: Stop Advertising status: ", ADV_STOP)
+                    print('Warning: Stop Advertising status: ', adv_stop)
 
             # Disconnect device
             if self.device:
-                print("disconnecting device...")
+                print('disconnecting device...')
                 self.device.Disconnect(dbus_interface=DEVICE_IFACE)
                 if self.adapter:
                     self.adapter.RemoveDevice(self.device)
                 self.device = None
-                if DISCOVERY_START:
+                if discovery_start:
                     self.adapter.StopDiscovery()
-                    DISCOVERY_START = False
+                    discovery_start = False
+            time.sleep(15)
 
-            # Power off Adapter
-            self.props_iface_obj.Set(ADAPTER_IFACE, "Powered", dbus.Boolean(0))
+            signal_caught = False
+            GLib.timeout_add_seconds(5, verify_signal_is_caught)
             event_loop.run()
 
-            if not DEVICE_CONNECTED:
-                print("device disconnected")
+            if not device_connected:
+                print('device disconnected')
             else:
-                print("Warning: device could not be disconnected")
+                print('Warning: device could not be disconnected')
 
-            print("powering off adapter...")
-            if not ADAPTER_ON:
-                print("bluetooth adapter powered off")
-            else:
-                print("\nWarning: Bluetooth adapter not powered off")
-
-        except Exception as e:
-            print(e)
+        except Exception:
+            print(traceback.format_exc())
             return False

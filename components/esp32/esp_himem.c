@@ -110,20 +110,20 @@ static inline int rangeblock_idx_valid(int rangeblock_idx)
 
 static void set_bank(int virt_bank, int phys_bank, int ct)
 {
-    int r;
+    int r __attribute__((unused));
     r = cache_sram_mmu_set( 0, 0, SOC_EXTRAM_DATA_LOW + CACHE_BLOCKSIZE * virt_bank, phys_bank * CACHE_BLOCKSIZE, 32, ct );
     assert(r == 0);
     r = cache_sram_mmu_set( 1, 0, SOC_EXTRAM_DATA_LOW + CACHE_BLOCKSIZE * virt_bank, phys_bank * CACHE_BLOCKSIZE, 32, ct );
     assert(r == 0);
 }
 
-size_t esp_himem_get_phys_size()
+size_t esp_himem_get_phys_size(void)
 {
     int paddr_start = (4096 * 1024) - (CACHE_BLOCKSIZE * SPIRAM_BANKSWITCH_RESERVE);
     return esp_spiram_get_size()-paddr_start;
 }
 
-size_t esp_himem_get_free_size()
+size_t esp_himem_get_free_size(void)
 {
     size_t ret=0;
     for (int i = 0; i < s_ramblockcnt; i++) {
@@ -132,12 +132,12 @@ size_t esp_himem_get_free_size()
     return ret;
 }
 
-size_t esp_himem_reserved_area_size() {
+size_t esp_himem_reserved_area_size(void) {
     return CACHE_BLOCKSIZE * SPIRAM_BANKSWITCH_RESERVE;
 }
 
 
-void __attribute__((constructor)) esp_himem_init()
+void __attribute__((constructor)) esp_himem_init(void)
 {
     if (SPIRAM_BANKSWITCH_RESERVE == 0) return;
     int maxram=esp_spiram_get_size();
@@ -362,5 +362,3 @@ esp_err_t esp_himem_unmap(esp_himem_rangehandle_t range, void *ptr, size_t len)
     portEXIT_CRITICAL(&spinlock);
     return ESP_OK;
 }
-
-

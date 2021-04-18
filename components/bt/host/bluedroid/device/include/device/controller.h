@@ -79,6 +79,11 @@ typedef struct controller_t {
 
     uint8_t (*get_ble_resolving_list_max_size)(void);
     void (*set_ble_resolving_list_max_size)(int resolving_list_max_size);
+
+#if (BLE_50_FEATURE_SUPPORT == TRUE)
+    uint16_t (*ble_get_ext_adv_data_max_len)(void);
+#endif // BLE_50_FEATURE_SUPPORT
+
 #if (BTM_SCO_HCI_INCLUDED == TRUE)
     // Get the number of sco packets the controller can buffer
     uint8_t (*get_sco_data_size)(void);
@@ -86,6 +91,6 @@ typedef struct controller_t {
 #endif /* #if (BTM_SCO_HCI_INCLUDED == TRUE) */
 } controller_t;
 
-const controller_t *controller_get_interface();
+const controller_t *controller_get_interface(void);
 
 #endif /*_CONTROLLER_H_*/

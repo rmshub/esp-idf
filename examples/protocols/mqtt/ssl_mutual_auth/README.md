@@ -3,6 +3,7 @@
 (See the README.md file in the upper level 'examples' directory for more information about examples.)
 
 This example connects to the broker test.mosquitto.org using ssl transport with client certificate and as a demonstration subscribes/unsubscribes and send a message on certain topic.
+(Please note that the public broker is maintained by the community so may not be always available, for details please visit http://test.mosquitto.org)
 
 It uses ESP-MQTT library which implements mqtt client to connect to mqtt broker.
 
@@ -14,7 +15,7 @@ This example can be executed on any ESP32 board, the only required interface is 
 
 ### Configure the project
 
-* Run `make menuconfig` (or `idf.py menuconfig` if using CMake build system)
+* Open the project configuration menu (`idf.py menuconfig`)
 * Configure Wi-Fi or Ethernet under "Example Connection Configuration" menu. See "Establishing Wi-Fi or Ethernet Connection" section in [examples/protocols/README.md](../../README.md) for more details.
 * When using Make build system, set `Default serial port` under `Serial flasher config`.
 
@@ -37,12 +38,14 @@ Paste the generated CSR in the [Mosquitto test certificate signer](https://test.
 
 Please note, that the supplied files `client.crt` and `client.key` in the `main` directory are only placeholders for your client certificate and key (i.e. the example "as is" would compile but would not connect to the broker)
 
+The server certificate `mosquitto.org.crt` can be downloaded in pem format from [mosquitto.org.crt](https://test.mosquitto.org/ssl/mosquitto.org.crt).
+
 ### Build and Flash
 
 Build the project and flash it to the board, then run monitor tool to view serial output:
 
 ```
-make -j4 flash monitor
+idf.py -p PORT flash monitor
 ```
 
 (To exit the serial monitor, type ``Ctrl-]``.)

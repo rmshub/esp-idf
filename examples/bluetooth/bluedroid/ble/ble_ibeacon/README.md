@@ -1,3 +1,6 @@
+| Supported Targets | ESP32 | ESP32-C3 |
+| ----------------- | ----- | -------- |
+
 # ESP-IDF iBeacon demo
 
 From welcoming people as they arrive at a sporting event to providing information about a nearby museum exhibit, iBeacon opens a new world of possibilities for location awareness, and countless opportunities for interactivity between iOS devices and iBeacon hardware.
@@ -21,10 +24,10 @@ Which demo will be run depends on the menuconfig, developers can set it in `iBea
 The default mode is iBeacon Sender.
 
 ### Menuconfig
-Before compiling the demo，developers also need to configure the menuconfig:
+Before compiling the demo，developers also need to configure the project:
 
 ```c
-make menuconfig
+idf.py menuconfig
 ```
 And then enter `Component config->Bluetooth->Bluedroid Enable`
 
@@ -49,7 +52,7 @@ switch (scan_result->scan_rst.search_evt) {
 Build each project and flash it to the board, then run monitor tool to view serial output:
 
 ```
-make -j4 flash monitor
+idp.py -p PORT flash monitor
 ```
 
 (To exit the serial monitor, type ``Ctrl-]``.)

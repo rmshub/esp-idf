@@ -39,7 +39,7 @@ To run this example, you need an ESP32 dev board (e.g. ESP32-WROVER Kit) or ESP3
 
 ### Configure the project
 
-Enter `make menuconfig` if you are using GNU Make based build system or enter `idf.py menuconfig` if you are using CMake based build system. Then go into `Example Configuration` menu.
+Open the project configuration menu (`idf.py menuconfig`). Then go into `Example Configuration` menu.
 
 - Set the size of ring buffer used by uart driver in `NMEA Parser Ring Buffer Size` option.
 - Set the stack size of the NMEA Parser task in `NMEA Parser Task Stack Size` option.
@@ -48,7 +48,7 @@ Enter `make menuconfig` if you are using GNU Make based build system or enter `i
 
 ### Build and Flash
 
-Enter `make -j4 flash monitor` if you are using GNU Make based build system or enter `idf.py build flash monitor` if you are using CMake based build system.
+Run `idf.py -p PORT flash monitor` to build and flash the project..
 
 (To exit the serial monitor, type ``Ctrl-]``.)
 
@@ -62,31 +62,31 @@ I (317) uart: queue free spaces: 16
 I (317) nmea_parser: NMEA Parser init OK
 I (1067) gps_demo: 2018/12/4 13:59:34 => 
 						latitude   = 31.20177°N
-						longtitude = 121.57933°E
+						longitude = 121.57933°E
 						altitude   = 17.30m
 						speed      = 0.370400m/s
 W (1177) gps_demo: Unknown statement:$GPTXT,01,01,01,ANTENNA OK*35
 I (2067) gps_demo: 2018/12/4 13:59:35 => 
 						latitude   = 31.20177°N
-						longtitude = 121.57933°E
+						longitude  = 121.57933°E
 						altitude   = 17.30m
 						speed      = 0.000000m/s
 W (2177) gps_demo: Unknown statement:$GPTXT,01,01,01,ANTENNA OK*35
 I (3067) gps_demo: 2018/12/4 13:59:36 => 
 						latitude   = 31.20178°N
-						longtitude = 121.57933°E
+						longitude  = 121.57933°E
 						altitude   = 17.30m
 						speed      = 0.000000m/s
 W (3177) gps_demo: Unknown statement:$GPTXT,01,01,01,ANTENNA OK*35
 I (4067) gps_demo: 2018/12/4 13:59:37 => 
 						latitude   = 31.20178°N
-						longtitude = 121.57933°E
+						longitude  = 121.57933°E
 						altitude   = 17.30m
 						speed      = 0.000000m/s
 W (4177) gps_demo: Unknown statement:$GPTXT,01,01,01,ANTENNA OK*35
 I (5067) gps_demo: 2018/12/4 13:59:38 => 
 						latitude   = 31.20178°N
-						longtitude = 121.57933°E
+						longitude  = 121.57933°E
 						altitude   = 17.30m
 						speed      = 0.685240m/s
 W (5177) gps_demo: Unknown statement:$GPTXT,01,01,01,ANTENNA OK*35

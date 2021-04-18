@@ -22,8 +22,12 @@
 #  define ASIO_NO_EXCEPTIONS
 # endif   // CONFIG_COMPILER_CXX_EXCEPTIONS
 
+# ifndef CONFIG_COMPILER_RTTI
+#  define ASIO_NO_TYPEID
+# endif   // CONFIG_COMPILER_RTTI
+
 //
-// LWIP compatifility inet and address macros/functions
+// LWIP compatibility inet and address macros/functions
 //
 # define LWIP_COMPAT_SOCKET_INET 1
 # define LWIP_COMPAT_SOCKET_ADDR 1
@@ -34,12 +38,13 @@
 # define ASIO_DISABLE_SERIAL_PORT
 # define ASIO_SEPARATE_COMPILATION
 # define ASIO_STANDALONE
-# define ASIO_NO_TYPEID
-# define ASIO_DISABLE_SIGNAL
 # define ASIO_HAS_PTHREADS
-# define ASIO_DISABLE_EPOLL
-# define ASIO_DISABLE_EVENTFD
-# define ASIO_DISABLE_SIGNAL
-# define ASIO_DISABLE_SIGACTION
+
+# ifdef CONFIG_ASIO_USE_ESP_OPENSSL
+#  define ASIO_USE_ESP_OPENSSL
+#  define OPENSSL_NO_ENGINE
+# elif CONFIG_ASIO_USE_ESP_WOLFSSL
+#  define ASIO_USE_WOLFSSL
+# endif   // CONFIG_ASIO_USE_ESP_OPENSSL
 
 #endif // _ESP_ASIO_CONFIG_H_

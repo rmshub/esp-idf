@@ -27,6 +27,7 @@
 
 #define UNITY_EXCLUDE_TIME_H
 
+
 void unity_flush(void);
 void unity_putc(int c);
 void unity_gets(char* dst, size_t len);
@@ -45,6 +46,10 @@ uint32_t unity_exec_time_get_ms(void);
 #include "unity_test_runner.h"
 
 #endif //CONFIG_UNITY_ENABLE_IDF_TEST_RUNNER
+
+#ifdef CONFIG_UNITY_ENABLE_FIXTURE
+#include "unity_fixture_extras.h"
+#endif // CONFIG_UNITY_ENABLE_FIXTURE
 
 // shorthand to check esp_err_t return code
 #define TEST_ESP_OK(rc) TEST_ASSERT_EQUAL_HEX32(ESP_OK, rc)

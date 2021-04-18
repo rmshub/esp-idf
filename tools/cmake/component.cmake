@@ -56,13 +56,8 @@ function(__component_get_target var name_or_alias)
         foreach(component_target ${component_targets})
             __component_get_property(_component_name ${component_target} COMPONENT_NAME)
             if(name_or_alias STREQUAL _component_name)
-                # There should only be one component of the same name
-                if(NOT target)
-                    set(target ${component_target})
-                else()
-                    message(FATAL_ERROR "Multiple components with name '${name_or_alias}' found.")
-                    return()
-                endif()
+                set(target ${component_target})
+                break()
             endif()
         endforeach()
         set(${var} ${target} PARENT_SCOPE)
@@ -173,9 +168,12 @@ function(__component_add component_dir prefix)
     # 'override' components added earlier.
     if(NOT component_target IN_LIST component_targets)
         if(NOT TARGET ${component_target})
-            add_custom_target(${component_target} EXCLUDE_FROM_ALL)
+            add_library(${component_target} STATIC IMPORTED)
         endif()
         idf_build_set_property(__COMPONENT_TARGETS ${component_target} APPEND)
+    else()
+        __component_get_property(dir ${component_target} COMPONENT_DIR)
+        __component_set_property(${component_target} COMPONENT_OVERRIDEN_DIR ${dir})
     endif()
 
     set(component_lib __${prefix}_${component_name})
@@ -191,6 +189,7 @@ function(__component_add component_dir prefix)
     __component_set_property(${component_target} COMPONENT_NAME ${component_name})
     __component_set_property(${component_target} COMPONENT_DIR ${component_dir})
     __component_set_property(${component_target} COMPONENT_ALIAS ${component_alias})
+
     __component_set_property(${component_target} __PREFIX ${prefix})
 
     # Set Kconfig related properties on the component
@@ -213,16 +212,36 @@ function(__component_get_requirements)
     __component_write_properties(${component_properties_file})
 
     execute_process(COMMAND "${CMAKE_COMMAND}"
+        -D "ESP_PLATFORM=1"
         -D "BUILD_PROPERTIES_FILE=${build_properties_file}"
         -D "COMPONENT_PROPERTIES_FILE=${component_properties_file}"
         -D "COMPONENT_REQUIRES_FILE=${component_requires_file}"
         -P "${idf_path}/tools/cmake/scripts/component_get_requirements.cmake"
         RESULT_VARIABLE result
-        ERROR_VARIABLE error
-        )
+        ERROR_VARIABLE error)
 
     if(NOT result EQUAL 0)
         message(FATAL_ERROR "${error}")
+    endif()
+
+    idf_build_get_property(idf_component_manager IDF_COMPONENT_MANAGER)
+    if(idf_component_manager AND idf_component_manager EQUAL "1")
+        # Call for component manager once again to inject dependencies
+        idf_build_get_property(python PYTHON)
+        execute_process(COMMAND ${python}
+            "-m"
+            "idf_component_manager.prepare_components"
+            "--project_dir=${project_dir}"
+            "inject_requirements"
+            "--idf_path=${idf_path}"
+            "--build_dir=${build_dir}"
+            "--component_requires_file=${component_requires_file}"
+            RESULT_VARIABLE result
+            ERROR_VARIABLE error)
+
+        if(NOT result EQUAL 0)
+            message(FATAL_ERROR "${error}")
+        endif()
     endif()
 
     include(${component_requires_file})
@@ -232,10 +251,10 @@ function(__component_get_requirements)
     file(REMOVE ${component_requires_file})
 endfunction()
 
-# __component_add_sources, __component_check_target
+# __component_add_sources, __component_check_target, __component_add_include_dirs
 #
-# Utility macros for component registration. Adds source files and checks target requirements
-# respectively.
+# Utility macros for component registration. Adds source files and checks target requirements,
+# and adds include directories respectively.
 macro(__component_add_sources sources)
     set(sources "")
     if(__SRCS)
@@ -271,12 +290,22 @@ macro(__component_add_sources sources)
         if(__EXCLUDE_SRCS)
             foreach(src ${__EXCLUDE_SRCS})
                 get_filename_component(src "${src}" ABSOLUTE)
-                list(REMOVE_ITEM source "${src}")
+                list(REMOVE_ITEM sources "${src}")
             endforeach()
         endif()
     endif()
 
     list(REMOVE_DUPLICATES sources)
+endmacro()
+
+macro(__component_add_include_dirs lib dirs type)
+    foreach(dir ${dirs})
+        get_filename_component(_dir ${dir} ABSOLUTE BASE_DIR ${CMAKE_CURRENT_LIST_DIR})
+        if(NOT IS_DIRECTORY ${_dir})
+            message(FATAL_ERROR "Include directory '${_dir}' is not a directory.")
+        endif()
+        target_include_directories(${lib} ${type} ${_dir})
+    endforeach()
 endmacro()
 
 macro(__component_check_target)
@@ -295,7 +324,15 @@ macro(__component_set_dependencies reqs type)
     foreach(req ${reqs})
         if(req IN_LIST build_component_targets)
             __component_get_property(req_lib ${req} COMPONENT_LIB)
-            target_link_libraries(${component_lib} ${type} ${req_lib})
+            if("${type}" STREQUAL "PRIVATE")
+                set_property(TARGET ${component_lib} APPEND PROPERTY LINK_LIBRARIES ${req_lib})
+                set_property(TARGET ${component_lib} APPEND PROPERTY INTERFACE_LINK_LIBRARIES $<LINK_ONLY:${req_lib}>)
+            elseif("${type}" STREQUAL "PUBLIC")
+                set_property(TARGET ${component_lib} APPEND PROPERTY LINK_LIBRARIES ${req_lib})
+                set_property(TARGET ${component_lib} APPEND PROPERTY INTERFACE_LINK_LIBRARIES ${req_lib})
+            else() # INTERFACE
+                set_property(TARGET ${component_lib} APPEND PROPERTY INTERFACE_LINK_LIBRARIES ${req_lib})
+            endif()
         endif()
     endforeach()
 endmacro()
@@ -312,14 +349,10 @@ macro(__component_set_all_dependencies)
         __component_set_dependencies("${priv_reqs}" PRIVATE)
     else()
         __component_get_property(reqs ${component_target} __REQUIRES)
-        foreach(req ${reqs})
-            if(req IN_LIST build_component_targets)
-                __component_get_property(req_lib ${req} COMPONENT_LIB)
-                target_link_libraries(${component_lib} INTERFACE ${req_lib})
-            endif()
-        endforeach()
+        __component_set_dependencies("${reqs}" INTERFACE)
     endif()
 endmacro()
+
 
 # idf_component_get_property
 #
@@ -383,9 +416,11 @@ endfunction()
 # @param[in, optional] REQUIRED_IDF_TARGETS (multivalue) the list of IDF build targets that the component only supports
 # @param[in, optional] EMBED_FILES (multivalue) list of binary files to embed with the component
 # @param[in, optional] EMBED_TXTFILES (multivalue) list of text files to embed with the component
+# @param[in, optional] KCONFIG (single value) override the default Kconfig
+# @param[in, optional] KCONFIG_PROJBUILD (single value) override the default Kconfig
 function(idf_component_register)
     set(options)
-    set(single_value)
+    set(single_value KCONFIG KCONFIG_PROJBUILD)
     set(multi_value SRCS SRC_DIRS EXCLUDE_SRCS
                     INCLUDE_DIRS PRIV_INCLUDE_DIRS LDFRAGMENTS REQUIRES
                     PRIV_REQUIRES REQUIRED_IDF_TARGETS EMBED_FILES EMBED_TXTFILES)
@@ -397,6 +432,10 @@ function(idf_component_register)
 
     __component_check_target()
     __component_add_sources(sources)
+
+    # Add component manifest and lock files to list of dependencies
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${COMPONENT_DIR}/idf_component.yml")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${COMPONENT_DIR}/dependencies.lock")
 
     # Create the final target for the component. This target is the target that is
     # visible outside the build system.
@@ -424,7 +463,9 @@ function(idf_component_register)
     idf_build_get_property(compile_definitions COMPILE_DEFINITIONS GENERATOR_EXPRESSION)
     add_compile_options("${compile_definitions}")
 
-    list(REMOVE_ITEM common_reqs ${component_lib})
+    if(common_reqs) # check whether common_reqs exists, this may be the case in minimalistic host unit test builds
+        list(REMOVE_ITEM common_reqs ${component_lib})
+    endif()
     link_libraries(${common_reqs})
 
     idf_build_get_property(config_dir CONFIG_DIR)
@@ -433,16 +474,16 @@ function(idf_component_register)
     if(sources OR __EMBED_FILES OR __EMBED_TXTFILES)
         add_library(${component_lib} STATIC ${sources})
         __component_set_property(${component_target} COMPONENT_TYPE LIBRARY)
-        target_include_directories(${component_lib} PUBLIC ${__INCLUDE_DIRS})
-        target_include_directories(${component_lib} PRIVATE ${__PRIV_INCLUDE_DIRS})
-        target_include_directories(${component_lib} PUBLIC ${config_dir})
-        set_target_properties(${component_lib} PROPERTIES OUTPUT_NAME ${COMPONENT_NAME})
+        __component_add_include_dirs(${component_lib} "${__INCLUDE_DIRS}" PUBLIC)
+        __component_add_include_dirs(${component_lib} "${__PRIV_INCLUDE_DIRS}" PRIVATE)
+        __component_add_include_dirs(${component_lib} "${config_dir}" PUBLIC)
+        set_target_properties(${component_lib} PROPERTIES OUTPUT_NAME ${COMPONENT_NAME} LINKER_LANGUAGE C)
         __ldgen_add_component(${component_lib})
     else()
         add_library(${component_lib} INTERFACE)
         __component_set_property(${component_target} COMPONENT_TYPE CONFIG_ONLY)
-        target_include_directories(${component_lib} INTERFACE ${__INCLUDE_DIRS})
-        target_include_directories(${component_lib} INTERFACE ${config_dir})
+        __component_add_include_dirs(${component_lib} "${__INCLUDE_DIRS}" INTERFACE)
+        __component_add_include_dirs(${component_lib} "${config_dir}" INTERFACE)
     endif()
 
     # Alias the static/interface library created for linking to external targets.
@@ -467,15 +508,13 @@ function(idf_component_register)
     # Set dependencies
     __component_set_all_dependencies()
 
-    # Add the component to built components
-    idf_build_set_property(__BUILD_COMPONENTS ${component_lib} APPEND)
-    idf_build_set_property(BUILD_COMPONENTS ${component_alias} APPEND)
-
     # Make the COMPONENT_LIB variable available in the component CMakeLists.txt
     set(COMPONENT_LIB ${component_lib} PARENT_SCOPE)
     # COMPONENT_TARGET is deprecated but is made available with same function
     # as COMPONENT_LIB for compatibility.
     set(COMPONENT_TARGET ${component_lib} PARENT_SCOPE)
+
+    __component_set_properties()
 endfunction()
 
 #

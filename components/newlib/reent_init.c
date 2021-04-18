@@ -19,12 +19,6 @@
 #include <sys/reent.h>
 #include "esp_attr.h"
 
-/* This function is not part on newlib API, it is defined in libc/stdio/local.h
- * There is no nice way to get __cleanup member populated while avoiding __sinit,
- * so extern declaration is used here.
- */
-extern void _cleanup_r(struct _reent* r);
-
 /**
  * This is the replacement for newlib's _REENT_INIT_PTR and __sinit.
  * The problem with __sinit is that it allocates three FILE structures
@@ -47,16 +41,16 @@ void IRAM_ATTR esp_reent_init(struct _reent* r)
 }
 
 /* only declared in private stdio header file, local.h */
-extern void __sfp_lock_acquire();
-extern void __sfp_lock_release();
+extern void __sfp_lock_acquire(void);
+extern void __sfp_lock_release(void);
 
-void esp_reent_cleanup()
+void esp_reent_cleanup(void)
 {
     struct _reent* r = __getreent();
     /* Clean up storage used by mprec functions */
     if (r->_mp) {
         if (_REENT_MP_FREELIST(r)) {
-            for (int i = 0; i < _Kmax; ++i) {
+            for (unsigned int i = 0; i < _Kmax; ++i) {
                 struct _Bigint *cur, *next;
                 next = _REENT_MP_FREELIST(r)[i];
                 while (next) {

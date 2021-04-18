@@ -1,8 +1,8 @@
 # Espressif IoT Development Framework
 
-[![Documentation Status](https://readthedocs.com/projects/espressif-esp-idf/badge/?version=latest)](https://docs.espressif.com/projects/esp-idf/en/latest/?badge=latest)
+* [中文版](./README_CN.md)
 
-ESP-IDF is the official development framework for the [ESP32](https://espressif.com/en/products/hardware/esp32/overview) chip.
+ESP-IDF is the official development framework for the **ESP32** and **ESP32-S** Series SoCs provided for Windows, Linux and macOS.
 
 # Developing With ESP-IDF
 
@@ -10,8 +10,13 @@ ESP-IDF is the official development framework for the [ESP32](https://espressif.
 
 See setup guides for detailed instructions to set up the ESP-IDF:
 
-* [Getting Started Guide for the stable ESP-IDF version](https://docs.espressif.com/projects/esp-idf/en/stable/get-started/)
-* [Getting Started Guide for the latest (master branch) ESP-IDF version](https://docs.espressif.com/projects/esp-idf/en/latest/get-started/)
+| Chip | Getting Started Guides for ESP-IDF |
+|:----:|:----|
+| <img src="docs/_static/chip-esp32.svg" height="90" alt="ESP32"> |  <ul><li>[stable](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/) version</li><li>[latest (master branch)](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/) version</li></ul> |
+| <img src="docs/_static/chip-esp32-s2.svg" height="105" alt="ESP32-S2"> | <ul><li>[stable](https://docs.espressif.com/projects/esp-idf/en/stable/esp32s2/get-started/) version</li><li>[latest (master branch)](https://docs.espressif.com/projects/esp-idf/en/latest/esp32s2/get-started/) version</li></ul> |
+| <img src="docs/_static/chip-esp32-c3.svg" height="75" alt="ESP32-C3"> | <ul><li>[latest (master branch)](https://docs.espressif.com/projects/esp-idf/en/latest/esp32c3/get-started/) version</li></ul> |
+
+**Note:** Each ESP-IDF release has its own documentation. Please see Section [Versions](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/versions.html) how to find documentation and how to checkout specific release of ESP-IDF.
 
 ### Non-GitHub forks
 
@@ -33,92 +38,63 @@ To start your own project based on an example, copy the example project director
 
 See the Getting Started guide links above for a detailed setup guide. This is a quick reference for common commands when working with ESP-IDF projects:
 
+## Setup Build Environment
+
+(See the Getting Started guide listed above for a full list of required steps with more details.)
+
+* Install host build dependencies mentioned in the Getting Started guide.
+* Run the install script to set up the build environment. The options include `install.bat` or `install.ps1` for Windows, and `install.sh` or `install.fish` for Unix shells.
+* Run the export script on Windows (`export.bat`) or source it on Unix (`source export.sh`) in every shell environment before using ESP-IDF.
+
 ## Configuring the Project
 
-`make menuconfig`
-
-* Opens a text-based configuration menu for the project.
-* Use up & down arrow keys to navigate the menu.
-* Use Enter key to go into a submenu, Escape key to go out or to exit.
-* Type `?` to see a help screen. Enter key exits the help screen.
-* Use Space key, or `Y` and `N` keys to enable (Yes) and disable (No) configuration items with checkboxes "`[*]`"
-* Pressing `?` while highlighting a configuration item displays help about that item.
-* Type `/` to search the configuration items.
-
-Once done configuring, press Escape multiple times to exit and say "Yes" to save the new configuration when prompted.
+* `idf.py set-target <chip_name>` sets the target of the project to `<chip_name>`. Run `idf.py set-target` without any arguments to see a list of supported targets.
+* `idf.py menuconfig` opens a text-based configuration menu where you can configure the project.
 
 ## Compiling the Project
 
-`make -j4 all`
+`idf.py build`
 
 ... will compile app, bootloader and generate a partition table based on the config.
-
-NOTE: The `-j4` option causes `make` to run 4 parallel jobs. This is much faster than the default single job. The recommended number to pass to this option is `-j(number of CPUs + 1)`.
 
 ## Flashing the Project
 
 When the build finishes, it will print a command line to use esptool.py to flash the chip. However you can also do this automatically by running:
 
-`make -j4 flash`
+`idf.py -p PORT flash`
 
-This will flash the entire project (app, bootloader and partition table) to a new chip. The settings for serial port flashing can be configured with `make menuconfig`.
+Replace PORT with the name of your serial port (like `COM3` on Windows, `/dev/ttyUSB0` on Linux, or `/dev/cu.usbserial-X` on MacOS. If the `-p` option is left out, `idf.py flash` will try to flash the first available serial port.
 
-You don't need to run `make all` before running `make flash`, `make flash` will automatically rebuild anything which needs it.
+This will flash the entire project (app, bootloader and partition table) to a new chip. The settings for serial port flashing can be configured with `idf.py menuconfig`.
+
+You don't need to run `idf.py build` before running `idf.py flash`, `idf.py flash` will automatically rebuild anything which needs it.
 
 ## Viewing Serial Output
 
-The `make monitor` target uses the [idf_monitor tool](https://docs.espressif.com/projects/esp-idf/en/latest/get-started/idf-monitor.html) to display serial output from the ESP32. idf_monitor also has a range of features to decode crash output and interact with the device. [Check the documentation page for details](https://docs.espressif.com/projects/esp-idf/en/latest/get-started/idf-monitor.html).
+The `idf.py monitor` target uses the [idf_monitor tool](https://docs.espressif.com/projects/esp-idf/en/latest/get-started/idf-monitor.html) to display serial output from ESP32 or ESP32-S Series SoCs. idf_monitor also has a range of features to decode crash output and interact with the device. [Check the documentation page for details](https://docs.espressif.com/projects/esp-idf/en/latest/get-started/idf-monitor.html).
 
 Exit the monitor by typing Ctrl-].
 
 To build, flash and monitor output in one pass, you can run:
 
-`make -j4 flash monitor`
+`idf.py flash monitor`
 
 ## Compiling & Flashing Only the App
 
 After the initial flash, you may just want to build and flash just your app, not the bootloader and partition table:
 
-* `make app` - build just the app.
-* `make app-flash` - flash just the app.
+* `idf.py app` - build just the app.
+* `idf.py app-flash` - flash just the app.
 
-`make app-flash` will automatically rebuild the app if any source files have changed.
+`idf.py app-flash` will automatically rebuild the app if any source files have changed.
 
 (In normal development there's no downside to reflashing the bootloader and partition table each time, if they haven't changed.)
 
-## Parallel Builds
-
-ESP-IDF supports compiling multiple files in parallel, so all of the above commands can be run as `make -jN` where `N` is the number of parallel make processes to run (generally N should be equal to the number of CPU cores in your system, plus one.)
-
-Multiple make functions can be combined into one. For example: to build the app & bootloader using 5 jobs in parallel, then flash everything, and then display serial output from the ESP32 run:
-
-```
-make -j5 flash monitor
-```
-
-
-## The Partition Table
-
-Once you've compiled your project, the "build" directory will contain a binary file with a name like "my_app.bin". This is an ESP32 image binary that can be loaded by the bootloader.
-
-A single ESP32's flash can contain multiple apps, as well as many different kinds of data (calibration data, filesystems, parameter storage, etc). For this reason a partition table is flashed to offset 0x8000 in the flash.
-
-Each entry in the partition table has a name (label), type (app, data, or something else), subtype and the offset in flash where the partition is loaded.
-
-The simplest way to use the partition table is to `make menuconfig` and choose one of the simple predefined partition tables:
-
-* "Single factory app, no OTA"
-* "Factory app, two OTA definitions"
-
-In both cases the factory app is flashed at offset 0x10000. If you `make partition_table` then it will print a summary of the partition table.
-
-For more details about partition tables and how to create custom variations, view the [`docs/en/api-guides/partition-tables.rst`](docs/en/api-guides/partition-tables.rst) file.
-
 ## Erasing Flash
 
-The `make flash` target does not erase the entire flash contents. However it is sometimes useful to set the device back to a totally erased state, particularly when making partition table changes or OTA app updates. To erase the entire flash, run `make erase_flash`.
+The `idf.py flash` target does not erase the entire flash contents. However it is sometimes useful to set the device back to a totally erased state, particularly when making partition table changes or OTA app updates. To erase the entire flash, run `idf.py erase_flash`.
 
-This can be combined with other targets, ie `make erase_flash flash` will erase everything and then re-flash the new app, bootloader and partition table.
+This can be combined with other targets, ie `idf.py -p PORT erase_flash flash` will erase everything and then re-flash the new app, bootloader and partition table.
 
 # Resources
 

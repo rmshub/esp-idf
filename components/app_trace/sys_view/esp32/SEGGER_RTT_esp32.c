@@ -18,10 +18,9 @@
 #include "SEGGER_SYSVIEW.h"
 #include "SEGGER_SYSVIEW_Conf.h"
 
-#include "esp32/rom/ets_sys.h"
 #include "esp_app_trace.h"
-
 #include "esp_log.h"
+
 const static char *TAG = "segger_rtt";
 
 #define SYSVIEW_EVENTS_BUF_SZ         255U

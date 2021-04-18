@@ -32,7 +32,7 @@
 
 static bool s_tracing;
 
-esp_err_t heap_trace_init_tohost()
+esp_err_t heap_trace_init_tohost(void)
 {
     if (s_tracing) {
         return ESP_ERR_INVALID_STATE;
@@ -111,4 +111,3 @@ static IRAM_ATTR void record_free(void *p, void **callers)
 #include "heap_trace.inc"
 
 #endif /*CONFIG_HEAP_TRACING_TOHOST*/
-

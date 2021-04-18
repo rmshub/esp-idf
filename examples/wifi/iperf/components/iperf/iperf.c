@@ -56,24 +56,13 @@ inline static bool iperf_is_tcp_server(void)
 
 static int iperf_get_socket_error_code(int sockfd)
 {
-    uint32_t optlen = sizeof(int);
-    int result;
-    int err;
 
-    /* get the error state, and clear it */
-    err = getsockopt(sockfd, SOL_SOCKET, SO_ERROR, &result, &optlen);
-    if (err == -1) {
-        ESP_LOGE(TAG, "getsockopt failed: ret=%d", err);
-        return -1;
-    }
-
-    return result;
+    return errno;
 }
 
 static int iperf_show_socket_error_reason(const char *str, int sockfd)
 {
-    int err = iperf_get_socket_error_code(sockfd);
-
+    int err = errno;
     if (err != 0) {
         ESP_LOGW(TAG, "%s error, error code: %d, reason: %s", str, err, strerror(err));
     }
@@ -135,7 +124,7 @@ static esp_err_t IRAM_ATTR iperf_run_tcp_server(void)
     int listen_socket;
     struct timeval t;
     int sockfd;
-    int opt;
+    int opt = 1;
 
     listen_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (listen_socket < 0) {
@@ -160,6 +149,7 @@ static esp_err_t IRAM_ATTR iperf_run_tcp_server(void)
         return ESP_FAIL;
     }
 
+    printf("iperf tcp server create successfully\n");
     buffer = s_iperf_ctrl.buffer;
     want_recv = s_iperf_ctrl.buffer_len;
     while (!s_iperf_ctrl.finish) {
@@ -206,7 +196,7 @@ static esp_err_t IRAM_ATTR iperf_run_udp_server(void)
     int want_recv = 0;
     uint8_t *buffer;
     int sockfd;
-    int opt;
+    int opt = 1;
     bool udp_recv_start = true ;
 
     sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -264,7 +254,7 @@ static esp_err_t iperf_run_udp_client(void)
     int want_send = 0;
     uint8_t *buffer;
     int sockfd;
-    int opt;
+    int opt = 1;
     int err;
     int id;
 

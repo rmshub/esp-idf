@@ -44,7 +44,7 @@ int register_chipv7_phy(const esp_phy_init_data_t* init_data, esp_phy_calibratio
  * @brief Get the format version of calibration data used by PHY library.
  * @return Format version number, OR'ed with BIT(16) if PHY is in WIFI only mode.
  */
-uint32_t phy_get_rf_cal_version();
+uint32_t phy_get_rf_cal_version(void);
 
 /**
  * @brief Set RF/BB for only WIFI mode or coexist(WIFI & BT) mode
@@ -60,11 +60,39 @@ void phy_set_wifi_mode_only(bool wifi_only);
 void coex_bt_high_prio(void);
 
 /**
+ * @brief Open PHY and RF.
+ */
+void phy_wakeup_init(void);
+
+/**
  * @brief Shutdown PHY and RF.
  */
 void phy_close_rf(void);
 
+#if CONFIG_IDF_TARGET_ESP32C3 || CONFIG_IDF_TARGET_ESP32S2
+/**
+ * @brief Disable PHY temperature sensor.
+ */
+void phy_xpd_tsens(void);
+#endif
+
+/**
+ * @brief Store and load PHY digital registers.
+ *
+ * @param     backup_en  if backup_en is true, store PHY digital registers to memory. Otherwise load PHY digital registers from memory
+ * @param     mem_addr   Memory address to store and load PHY digital registers
+ *
+ * @return    memory size
+ */
+uint8_t phy_dig_reg_backup(bool backup_en, uint32_t *mem_addr);
+
+#if CONFIG_MAC_BB_PD
+/**
+ * @brief Store and load baseband registers.
+ */
+void phy_freq_mem_backup(bool backup_en, uint32_t *mem);
+#endif
+
 #ifdef __cplusplus
 }
 #endif
-

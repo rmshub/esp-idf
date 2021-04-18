@@ -5,11 +5,12 @@
 #include <stdarg.h>
 #include "unity.h"
 #include "driver/timer.h"
+#include "esp_rom_sys.h"
 #include "soc/cpu.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
-#if CONFIG_ESP32_APPTRACE_ENABLE == 1
+#if CONFIG_APPTRACE_ENABLE == 1
 #include "esp_app_trace.h"
 #include "esp_app_trace_util.h"
 
@@ -31,7 +32,7 @@ const static char *TAG = "esp_apptrace_test";
         else \
             ret = xSemaphoreTake(s_print_lock, portMAX_DELAY); \
         if (ret == pdTRUE) { \
-            ets_printf(format, ##__VA_ARGS__); \
+            esp_rom_printf(format, ##__VA_ARGS__); \
             if (xPortInIsrContext()) \
                 xSemaphoreGiveFromISR(s_print_lock, NULL); \
             else \
@@ -41,7 +42,7 @@ const static char *TAG = "esp_apptrace_test";
 #else
 #define ESP_APPTRACE_TEST_LOG( format, ... )   \
     do { \
-        ets_printf(format, ##__VA_ARGS__); \
+        esp_rom_printf(format, ##__VA_ARGS__); \
     } while(0)
 #endif
 
@@ -125,7 +126,7 @@ typedef struct {
 static SemaphoreHandle_t s_print_lock;
 #endif
 
-static uint64_t esp_apptrace_test_ts_get();
+static uint64_t esp_apptrace_test_ts_get(void);
 
 static void esp_apptrace_test_timer_isr(void *arg)
 {
@@ -138,72 +139,32 @@ static void esp_apptrace_test_timer_isr(void *arg)
     if (res != ESP_OK) {
     } else {
         if (0) {
-            ets_printf("tim-%d-%d: Written chunk%d %d bytes, %x\n",
+            esp_rom_printf("tim-%d-%d: Written chunk%d %d bytes, %x\n",
                        tim_arg->group, tim_arg->id, tim_arg->data.wr_cnt, tim_arg->data.buf_sz, tim_arg->data.wr_cnt & tim_arg->data.mask);
         }
         tim_arg->data.wr_err = 0;
     }
 
     tim_arg->data.wr_cnt++;
-    if (tim_arg->group == 0) {
-        if (tim_arg->id == 0) {
-            TIMERG0.int_clr_timers.t0 = 1;
-            TIMERG0.hw_timer[0].update = 1;
-            TIMERG0.hw_timer[0].config.alarm_en = 1;
-        } else {
-            TIMERG0.int_clr_timers.t1 = 1;
-            TIMERG0.hw_timer[1].update = 1;
-            TIMERG0.hw_timer[1].config.alarm_en = 1;
-        }
-    }
-    if (tim_arg->group == 1) {
-        if (tim_arg->id == 0) {
-            TIMERG1.int_clr_timers.t0 = 1;
-            TIMERG1.hw_timer[0].update = 1;
-            TIMERG1.hw_timer[0].config.alarm_en = 1;
-        } else {
-            TIMERG1.int_clr_timers.t1 = 1;
-            TIMERG1.hw_timer[1].update = 1;
-            TIMERG1.hw_timer[1].config.alarm_en = 1;
-        }
-    }
+    timer_group_clr_intr_status_in_isr(tim_arg->group, tim_arg->id);
+    timer_group_enable_alarm_in_isr(tim_arg->group, tim_arg->id);
 }
 
 static void esp_apptrace_test_timer_isr_crash(void *arg)
 {
     esp_apptrace_test_timer_arg_t *tim_arg = (esp_apptrace_test_timer_arg_t *)arg;
 
-    if (tim_arg->group == 0) {
-        if (tim_arg->id == 0) {
-            TIMERG0.int_clr_timers.t0 = 1;
-            TIMERG0.hw_timer[0].update = 1;
-            TIMERG0.hw_timer[0].config.alarm_en = 1;
-        } else {
-            TIMERG0.int_clr_timers.t1 = 1;
-            TIMERG0.hw_timer[1].update = 1;
-            TIMERG0.hw_timer[1].config.alarm_en = 1;
-        }
-    }
-    if (tim_arg->group == 1) {
-        if (tim_arg->id == 0) {
-            TIMERG1.int_clr_timers.t0 = 1;
-            TIMERG1.hw_timer[0].update = 1;
-            TIMERG1.hw_timer[0].config.alarm_en = 1;
-        } else {
-            TIMERG1.int_clr_timers.t1 = 1;
-            TIMERG1.hw_timer[1].update = 1;
-            TIMERG1.hw_timer[1].config.alarm_en = 1;
-        }
-    }
+    timer_group_clr_intr_status_in_isr(tim_arg->group, tim_arg->id);
+    timer_group_enable_alarm_in_isr(tim_arg->group, tim_arg->id);
     if (tim_arg->data.wr_cnt < ESP_APPTRACE_TEST_BLOCKS_BEFORE_CRASH) {
         uint32_t *ts = (uint32_t *)(tim_arg->data.buf + sizeof(uint32_t));
         *ts = (uint32_t)esp_apptrace_test_ts_get();//xthal_get_ccount();//xTaskGetTickCount();
         memset(tim_arg->data.buf + 2 * sizeof(uint32_t), tim_arg->data.wr_cnt & tim_arg->data.mask, tim_arg->data.buf_sz - 2 * sizeof(uint32_t));
         int res = ESP_APPTRACE_TEST_WRITE_FROM_ISR(tim_arg->data.buf, tim_arg->data.buf_sz);
         if (res != ESP_OK) {
-            ets_printf("tim-%d-%d: Failed to write trace %d %x!\n", tim_arg->group, tim_arg->id, res, tim_arg->data.wr_cnt & tim_arg->data.mask);
+            esp_rom_printf("tim-%d-%d: Failed to write trace %d %x!\n", tim_arg->group, tim_arg->id, res, tim_arg->data.wr_cnt & tim_arg->data.mask);
         } else {
-            ets_printf("tim-%d-%d: Written chunk%d %d bytes, %x\n",
+            esp_rom_printf("tim-%d-%d: Written chunk%d %d bytes, %x\n",
                        tim_arg->group, tim_arg->id, tim_arg->data.wr_cnt, tim_arg->data.buf_sz, tim_arg->data.wr_cnt & tim_arg->data.mask);
             tim_arg->data.wr_cnt++;
         }
@@ -383,7 +344,7 @@ static void esp_apptrace_test_task_crash(void *p)
 
 static int s_ts_timer_group, s_ts_timer_idx;
 
-static uint64_t esp_apptrace_test_ts_get()
+static uint64_t esp_apptrace_test_ts_get(void)
 {
     uint64_t ts = 0;
     timer_get_counter_value(s_ts_timer_group, s_ts_timer_idx, &ts);
@@ -413,7 +374,7 @@ static void esp_apptrace_test_ts_init(int timer_group, int timer_idx)
     timer_start(timer_group, timer_idx);
 }
 
-static void esp_apptrace_test_ts_cleanup()
+static void esp_apptrace_test_ts_cleanup(void)
 {
     timer_config_t config;
 
@@ -444,7 +405,7 @@ static void esp_apptrace_test(esp_apptrace_test_cfg_t *test_cfg)
 #if ESP_APPTRACE_TEST_USE_PRINT_LOCK == 1
     s_print_lock = xSemaphoreCreateBinary();
     if (!s_print_lock) {
-        ets_printf("%s: Failed to create print lock!", TAG);
+        esp_rom_printf("%s: Failed to create print lock!", TAG);
         return;
     }
     xSemaphoreGive(s_print_lock);
@@ -850,28 +811,8 @@ static void esp_sysview_test_timer_isr(void *arg)
 
     //ESP_APPTRACE_TEST_LOGI("tim-%d: IRQ %d/%d\n", tim_arg->id, tim_arg->group, tim_arg->timer);
 
-    if (tim_arg->group == 0) {
-        if (tim_arg->timer == 0) {
-            TIMERG0.int_clr_timers.t0 = 1;
-            TIMERG0.hw_timer[0].update = 1;
-            TIMERG0.hw_timer[0].config.alarm_en = 1;
-        } else {
-            TIMERG0.int_clr_timers.t1 = 1;
-            TIMERG0.hw_timer[1].update = 1;
-            TIMERG0.hw_timer[1].config.alarm_en = 1;
-        }
-    }
-    if (tim_arg->group == 1) {
-        if (tim_arg->timer == 0) {
-            TIMERG1.int_clr_timers.t0 = 1;
-            TIMERG1.hw_timer[0].update = 1;
-            TIMERG1.hw_timer[0].config.alarm_en = 1;
-        } else {
-            TIMERG1.int_clr_timers.t1 = 1;
-            TIMERG1.hw_timer[1].update = 1;
-            TIMERG1.hw_timer[1].config.alarm_en = 1;
-        }
-    }
+    timer_group_clr_intr_status_in_isr(tim_arg->group, tim_arg->id);
+    timer_group_enable_alarm_in_isr(tim_arg->group, tim_arg->id);
 }
 
 static void esp_sysviewtrace_test_task(void *p)

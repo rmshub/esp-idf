@@ -24,10 +24,8 @@
 #include "esp_wifi.h"
 #include "esp_system.h"
 #include "esp_event.h"
-#include "esp_event_loop.h"
 #include "nvs_flash.h"
 #include "soc/rtc_periph.h"
-#include "esp32/rom/cache.h"
 #include "driver/spi_slave.h"
 #include "esp_log.h"
 #include "esp_spi_flash.h"
@@ -51,11 +49,37 @@ sending a transaction. As soon as the transaction is done, the line gets set low
 /*
 Pins in use. The SPI Master can use the GPIO mux, so feel free to change these if needed.
 */
+#if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S2
 #define GPIO_HANDSHAKE 2
 #define GPIO_MOSI 12
 #define GPIO_MISO 13
 #define GPIO_SCLK 15
 #define GPIO_CS 14
+
+#elif CONFIG_IDF_TARGET_ESP32C3
+#define GPIO_HANDSHAKE 3
+#define GPIO_MOSI 7
+#define GPIO_MISO 2
+#define GPIO_SCLK 6
+#define GPIO_CS 10
+
+#endif //CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S2
+
+
+#ifdef CONFIG_IDF_TARGET_ESP32
+#define RCV_HOST    HSPI_HOST
+#define DMA_CHAN    2
+
+#elif defined CONFIG_IDF_TARGET_ESP32S2
+#define RCV_HOST    SPI2_HOST
+#define DMA_CHAN    RCV_HOST
+
+#elif defined CONFIG_IDF_TARGET_ESP32C3
+#define RCV_HOST    SPI2_HOST
+#define DMA_CHAN    RCV_HOST
+
+#endif
+
 
 
 //Called after a transaction is queued and ready for pickup by master. We use this to set the handshake line high.
@@ -69,7 +93,7 @@ void my_post_trans_cb(spi_slave_transaction_t *trans) {
 }
 
 //Main application
-void app_main()
+void app_main(void)
 {
     int n=0;
     esp_err_t ret;
@@ -78,7 +102,9 @@ void app_main()
     spi_bus_config_t buscfg={
         .mosi_io_num=GPIO_MOSI,
         .miso_io_num=GPIO_MISO,
-        .sclk_io_num=GPIO_SCLK
+        .sclk_io_num=GPIO_SCLK,
+        .quadwp_io_num = -1,
+        .quadhd_io_num = -1,
     };
 
     //Configuration for the SPI slave interface
@@ -106,7 +132,7 @@ void app_main()
     gpio_set_pull_mode(GPIO_CS, GPIO_PULLUP_ONLY);
 
     //Initialize SPI slave interface
-    ret=spi_slave_initialize(HSPI_HOST, &buscfg, &slvcfg, 1);
+    ret=spi_slave_initialize(RCV_HOST, &buscfg, &slvcfg, DMA_CHAN);
     assert(ret==ESP_OK);
 
     WORD_ALIGNED_ATTR char sendbuf[129]="";
@@ -130,7 +156,7 @@ void app_main()
         .post_setup_cb callback that is called as soon as a transaction is ready, to let the master know it is free to transfer
         data.
         */
-        ret=spi_slave_transmit(HSPI_HOST, &t, portMAX_DELAY);
+        ret=spi_slave_transmit(RCV_HOST, &t, portMAX_DELAY);
 
         //spi_slave_transmit does not return until the master has done a transmission, so by here we have sent our data and
         //received data from the master. Print it.
@@ -139,5 +165,3 @@ void app_main()
     }
 
 }
-
-

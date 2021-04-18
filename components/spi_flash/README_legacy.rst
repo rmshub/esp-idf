@@ -29,7 +29,7 @@ SPI Flash Size
 
 The SPI flash size is configured by writing a field in the software bootloader image header, flashed at offset 0x1000.
 
-By default, the SPI flash size is detected by esptool.py when this bootloader is written to flash, and the header is updated with the correct size. Alternatively, it is possible to generate a fixed flash size by setting :envvar:`CONFIG_ESPTOOLPY_FLASHSIZE` in ``make menuconfig``.
+By default, the SPI flash size is detected by esptool.py when this bootloader is written to flash, and the header is updated with the correct size. Alternatively, it is possible to generate a fixed flash size by setting :envvar:`CONFIG_ESPTOOLPY_FLASHSIZE` in project configuration.
 
 If it is necessary to override the configured flash size at runtime, it is possible to set the ``chip_size`` member of the ``g_rom_flashchip`` structure. This size is used by ``spi_flash_*`` functions (in both software & ROM) to check the bounds.
 
@@ -53,26 +53,7 @@ IRAM-Safe Interrupt Handlers
 
 If you have an interrupt handler that you want to execute while a flash operation is in progress (for example, for low latency operations), set the ``ESP_INTR_FLAG_IRAM`` flag when the :doc:`interrupt handler is registered </api-reference/system/intr_alloc>`.
 
-You must ensure that all data and functions accessed by these interrupt handlers, including the ones that handlers call, are located in IRAM or DRAM.
-
-Use the ``IRAM_ATTR`` attribute for functions::
-
-    #include "esp_attr.h"
-
-    void IRAM_ATTR gpio_isr_handler(void* arg)
-    {
-        // ...
-    }
-
-Use the ``DRAM_ATTR`` and ``DRAM_STR`` attributes for constant data::
-
-    void IRAM_ATTR gpio_isr_handler(void* arg)
-    {
-       const static DRAM_ATTR uint8_t INDEX_DATA[] = { 45, 33, 12, 0 };
-       const static char *MSG = DRAM_STR("I am a string stored in RAM");
-    }
-
-Note that knowing which data should be marked with ``DRAM_ATTR`` can be hard, the compiler will sometimes recognize that a variable or expression is constant (even if it is not marked ``const``) and optimize it into flash, unless it is marked with ``DRAM_ATTR``.
+You must ensure that all data and functions accessed by these interrupt handlers, including the ones that handlers call, are located in IRAM or DRAM. See :ref:`how-to-place-code-in-iram`.
 
 If a function or symbol is not correctly put into IRAM/DRAM, and the interrupt handler reads from the flash cache during a flash operation, it will cause a crash due to Illegal Instruction exception (for code which should be in IRAM) or garbage data to be read (for constant data which should be in DRAM).
 

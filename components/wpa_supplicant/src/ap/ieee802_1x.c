@@ -10,7 +10,6 @@
 
 #include "utils/common.h"
 #include "crypto/crypto.h"
-#include "crypto/random.h"
 #include "common/ieee802_11_defs.h"
 #include "hostapd.h"
 #include "ap/sta_info.h"
@@ -75,4 +74,3 @@ void ieee802_1x_receive(struct hostapd_data *hapd, const u8 *sa, const u8 *buf,
 		return;
 	}
 }
-

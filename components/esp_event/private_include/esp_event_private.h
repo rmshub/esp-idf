@@ -31,8 +31,8 @@ extern "C" {
  *
  * @return true handler registered
  * @return false handler not registered
- * 
- * @return 
+ *
+ * @return
  *  - true: Handler registered
  *  - false:  Handler not registered
  */
@@ -41,11 +41,11 @@ bool esp_event_is_handler_registered(esp_event_loop_handle_t event_loop, esp_eve
 /**
  * @brief Deinitializes the event loop library
  *
- * @return 
+ * @return
  *  - ESP_OK: Success
  *  - Others: Fail
  */
-esp_err_t esp_event_loop_deinit();
+esp_err_t esp_event_loop_deinit(void);
 
 #ifdef __cplusplus
 } // extern "C"

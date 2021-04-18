@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 #include "bootloader_sha.h"
+#include "bootloader_flash_priv.h"
 #include <stdbool.h>
 #include <string.h>
 #include <assert.h>
 #include <sys/param.h>
 #include <mbedtls/sha256.h>
 
-bootloader_sha256_handle_t bootloader_sha256_start()
+bootloader_sha256_handle_t bootloader_sha256_start(void)
 {
     mbedtls_sha256_context *ctx = (mbedtls_sha256_context *)malloc(sizeof(mbedtls_sha256_context));
     if (!ctx) {
@@ -38,6 +39,7 @@ void bootloader_sha256_data(bootloader_sha256_handle_t handle, const void *data,
     mbedtls_sha256_context *ctx = (mbedtls_sha256_context *)handle;
     int ret = mbedtls_sha256_update_ret(ctx, data, data_len);
     assert(ret == 0);
+    (void)ret;
 }
 
 void bootloader_sha256_finish(bootloader_sha256_handle_t handle, uint8_t *digest)
@@ -47,7 +49,9 @@ void bootloader_sha256_finish(bootloader_sha256_handle_t handle, uint8_t *digest
     if (digest != NULL) {
         int ret = mbedtls_sha256_finish_ret(ctx, digest);
         assert(ret == 0);
+        (void)ret;
     }
     mbedtls_sha256_free(ctx);
     free(handle);
+    handle = NULL;
 }

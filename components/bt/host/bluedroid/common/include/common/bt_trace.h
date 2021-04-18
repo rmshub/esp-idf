@@ -25,7 +25,7 @@
 #include "stack/bt_types.h"
 #include "bt_common.h"
 
-inline void trc_dump_buffer(const char *prefix, uint8_t *data, uint16_t len)
+static inline void trc_dump_buffer(const char *prefix, uint8_t *data, uint16_t len)
 {
     uint16_t i;
 
@@ -198,7 +198,7 @@ inline void trc_dump_buffer(const char *prefix, uint8_t *data, uint16_t len)
 #define AVCT_INITIAL_TRACE_LEVEL            UC_BT_LOG_AVCT_TRACE_LEVEL
 #define AVRC_INITIAL_TRACE_LEVEL            UC_BT_LOG_AVRC_TRACE_LEVEL
 #define MCA_INITIAL_TRACE_LEVEL             UC_BT_LOG_MCA_TRACE_LEVEL
-#define HID_INITIAL_TRACE_LEVEL             UC_BT_LOG_HID_TRACE_LEVEL
+#define HIDH_INITIAL_TRACE_LEVEL            UC_BT_LOG_HIDH_TRACE_LEVEL
 #define APPL_INITIAL_TRACE_LEVEL            UC_BT_LOG_APPL_TRACE_LEVEL
 #define GATT_INITIAL_TRACE_LEVEL            UC_BT_LOG_GATT_TRACE_LEVEL
 #define SMP_INITIAL_TRACE_LEVEL             UC_BT_LOG_SMP_TRACE_LEVEL

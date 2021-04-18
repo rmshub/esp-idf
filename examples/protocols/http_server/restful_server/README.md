@@ -57,7 +57,7 @@ Only if you deploy the website to SD card, then the following pin connection is 
 
 ### Configure the project
 
-Enter `make menuconfig` if you are using GNU Make based build system or enter `idf.py menuconfig` if you are using CMake based build system. 
+Open the project configuration menu (`idf.py menuconfig`). 
 
 In the `Example Connection Configuration` menu:
 
@@ -88,7 +88,7 @@ npm run build
 
 After a while, you will see a `dist` directory which contains all the website files (e.g. html, js, css, images).
 
-Enter `make -j4 flash monitor` if you are using GNU Make based build system or enter `idf.py build flash monitor` if you are using CMake based build system.
+Run `idf.py -p PORT flash monitor` to build and flash the project..
 
 (To exit the serial monitor, type ``Ctrl-]``.)
 
@@ -99,7 +99,7 @@ See the [Getting Started Guide](https://docs.espressif.com/projects/esp-idf/en/l
 We need to run the latest version of OpenOCD which should support semihost feature when we test this deploy mode:
 
 ```bash
-openocd-esp32/bin/openocd -s openocd-esp32/share/openocd/scripts -f interface/ftdi/esp32_devkitj_v1.cfg -f board/esp-wroom-32.cfg
+openocd-esp32/bin/openocd -s openocd-esp32/share/openocd/scripts -f board/esp32-wrover-kit-3.3v.cfg
 ```
 
 ## Example Output
@@ -107,6 +107,8 @@ openocd-esp32/bin/openocd -s openocd-esp32/share/openocd/scripts -f interface/ft
 ### Render webpage in browser
 
 In your browser, enter the URL where the website located (e.g. `http://esp-home.local`). You can also enter the IP address that ESP32 obtained if your operating system currently don't have support for mDNS service.
+
+Besides that, this example also enables the NetBIOS feature with the domain name `esp-home`. If your OS supports NetBIOS and has enabled it (e.g. Windows has native support for NetBIOS), then the URL `http://esp-home` should also work.
 
 ![esp_home_local](https://dl.espressif.com/dl/esp-idf/docs/_static/esp_home_local.gif)
 

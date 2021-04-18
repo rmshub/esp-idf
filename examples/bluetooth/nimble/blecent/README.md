@@ -1,3 +1,6 @@
+| Supported Targets | ESP32 |
+| ----------------- | ----- |
+
 # BLE central example
 
 (See the README.md file in the upper level 'examples' directory for more information about examples.)
@@ -32,17 +35,15 @@ Note :
 ### Configure the project
 
 ```
-make menuconfig
+idf.py menuconfig
 ```
-
-* Set serial port under Serial Flasher Options.
 
 ### Build and Flash
 
 Build the project and flash it to the board, then run monitor tool to view serial output:
 
 ```
-make -j4 flash monitor
+idf.py -p PORT flash monitor
 ```
 
 (To exit the serial monitor, type ``Ctrl-]``.)

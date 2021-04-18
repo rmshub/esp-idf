@@ -7,19 +7,22 @@
 #include "string.h"
 #include "sdkconfig.h"
 
+#if CONFIG_IDF_TARGET_ESP32
 #include "esp32/rom/spi_flash.h"
 #include "esp32/rom/rtc.h"
-#include "esp32/rom/ets_sys.h"
+#elif CONFIG_IDF_TARGET_ESP32S2
+#include "esp32s2/rom/spi_flash.h"
+#include "esp32s2/rom/rtc.h"
+#endif
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
 #include "freertos/queue.h"
-#include "freertos/xtensa_api.h"
 #include "unity.h"
 
 #include "bootloader_common.h"
-#include "../include_bootloader/bootloader_flash.h"
+#include "../include_bootloader/bootloader_flash_priv.h"
 
 #include "esp_log.h"
 #include "esp_ota_ops.h"
@@ -44,9 +47,34 @@ static void copy_app_partition(esp_ota_handle_t update_handle, const esp_partiti
 {
     const void *partition_bin = NULL;
     spi_flash_mmap_handle_t  data_map;
+    ESP_LOGI(TAG, "start the copy process");
     TEST_ESP_OK(esp_partition_mmap(curr_app, 0, curr_app->size, SPI_FLASH_MMAP_DATA, &partition_bin, &data_map));
     TEST_ESP_OK(esp_ota_write(update_handle, (const void *)partition_bin, curr_app->size));
     spi_flash_munmap(data_map);
+    ESP_LOGI(TAG, "finish the copy process");
+}
+
+/* @brief Copies a current app to next partition using handle.
+ *
+ * @param[in] update_handle - Handle of API ota.
+ * @param[in] cur_app - Current app.
+ */
+static void copy_app_partition_with_offset(esp_ota_handle_t update_handle, const esp_partition_t *curr_app)
+{
+    const void *partition_bin = NULL;
+    spi_flash_mmap_handle_t  data_map;
+    ESP_LOGI(TAG, "start the copy process");
+    uint32_t offset = 0, bytes_to_write = curr_app->size;
+    uint32_t write_bytes;
+    while (bytes_to_write > 0) {
+        write_bytes = (bytes_to_write > (4 * 1024)) ? (4 * 1024) : bytes_to_write;
+        TEST_ESP_OK(esp_partition_mmap(curr_app, offset, write_bytes, SPI_FLASH_MMAP_DATA, &partition_bin, &data_map));
+        TEST_ESP_OK(esp_ota_write_with_offset(update_handle, (const void *)partition_bin, write_bytes, offset));
+        spi_flash_munmap(data_map);
+        bytes_to_write -= write_bytes;
+        offset += write_bytes;
+    }
+    ESP_LOGI(TAG, "finish the copy process");
 }
 
 #if defined(CONFIG_BOOTLOADER_FACTORY_RESET) || defined(CONFIG_BOOTLOADER_APP_TEST)
@@ -99,6 +127,26 @@ static void copy_current_app_to_next_part(const esp_partition_t *cur_app_partiti
     TEST_ESP_OK(esp_ota_set_boot_partition(next_app_partition));
 }
 
+/* @brief Copies a current app to next partition (OTA0-15) and then configure OTA data for a new boot partition.
+ *
+ * @param[in] cur_app_partition - Current app.
+ * @param[in] next_app_partition - Next app for boot.
+ */
+static void copy_current_app_to_next_part_with_offset(const esp_partition_t *cur_app_partition, const esp_partition_t *next_app_partition)
+{
+    esp_ota_get_next_update_partition(NULL);
+    TEST_ASSERT_NOT_EQUAL(NULL, next_app_partition);
+    ESP_LOGI(TAG, "Writing to partition subtype %d at offset 0x%x", next_app_partition->subtype, next_app_partition->address);
+
+    esp_ota_handle_t update_handle = 0;
+    TEST_ESP_OK(esp_ota_begin(next_app_partition, OTA_SIZE_UNKNOWN, &update_handle));
+
+    copy_app_partition_with_offset(update_handle, cur_app_partition);
+
+    TEST_ESP_OK(esp_ota_end(update_handle));
+    TEST_ESP_OK(esp_ota_set_boot_partition(next_app_partition));
+}
+
 /* @brief Erase otadata partition
  */
 static void erase_ota_data(void)
@@ -112,16 +160,28 @@ static void erase_ota_data(void)
  */
 static void reboot_as_deep_sleep(void)
 {
+    ESP_LOGI(TAG, "reboot as deep sleep");
     esp_sleep_enable_timer_wakeup(2000);
     esp_deep_sleep_start();
 }
 
 /* @brief Copies a current app to next partition (OTA0-15), after that ESP is rebooting and run this (the next) OTAx.
  */
-static void copy_current_app_to_next_part_and_reboot()
+static void copy_current_app_to_next_part_and_reboot(void)
 {
     const esp_partition_t *cur_app = esp_ota_get_running_partition();
+    ESP_LOGI(TAG, "copy current app to next part");
     copy_current_app_to_next_part(cur_app, get_next_update_partition());
+    reboot_as_deep_sleep();
+}
+
+/* @brief Copies a current app to next partition (OTA0-15) using esp_ota_write_with_offest(), after that ESP is rebooting and run this (the next) OTAx.
+ */
+static void copy_current_app_to_next_part_with_offset_and_reboot(void)
+{
+    const esp_partition_t *cur_app = esp_ota_get_running_partition();
+    ESP_LOGI(TAG, "copy current app to next part");
+    copy_current_app_to_next_part_with_offset(cur_app, get_next_update_partition());
     reboot_as_deep_sleep();
 }
 
@@ -218,7 +278,7 @@ static void set_output_pin(uint32_t num_pin)
     TEST_ESP_OK(gpio_hold_dis(num_pin));
 
     gpio_config_t io_conf;
-    io_conf.intr_type = GPIO_PIN_INTR_DISABLE;
+    io_conf.intr_type = GPIO_INTR_DISABLE;
     io_conf.mode = GPIO_MODE_OUTPUT;
     io_conf.pin_bit_mask = (1ULL << num_pin);
     io_conf.pull_down_en = 0;
@@ -252,6 +312,7 @@ static void start_test(void)
     ESP_LOGI(TAG, "boot count 1 - reset");
     boot_count = 1;
     erase_ota_data();
+    ESP_LOGI(TAG, "ota_data erased");
     reboot_as_deep_sleep();
 }
 
@@ -264,19 +325,19 @@ static void test_flow1(void)
         case 2:
             ESP_LOGI(TAG, "Factory");
             TEST_ASSERT_EQUAL(ESP_PARTITION_SUBTYPE_APP_FACTORY, cur_app->subtype);
-            copy_current_app_to_next_part_and_reboot(cur_app);
+            copy_current_app_to_next_part_and_reboot();
             break;
         case 3:
             ESP_LOGI(TAG, "OTA0");
             TEST_ASSERT_EQUAL(ESP_PARTITION_SUBTYPE_APP_OTA_0, cur_app->subtype);
             mark_app_valid();
-            copy_current_app_to_next_part_and_reboot(cur_app);
+            copy_current_app_to_next_part_and_reboot();
             break;
         case 4:
             ESP_LOGI(TAG, "OTA1");
             TEST_ASSERT_EQUAL(ESP_PARTITION_SUBTYPE_APP_OTA_1, cur_app->subtype);
             mark_app_valid();
-            copy_current_app_to_next_part_and_reboot(cur_app);
+            copy_current_app_to_next_part_and_reboot();
             break;
         case 5:
             ESP_LOGI(TAG, "OTA0");
@@ -296,7 +357,7 @@ static void test_flow1(void)
 // 3 Stage: run OTA0    -> check it -> copy OTA0 to OTA1                -> reboot  --//--
 // 4 Stage: run OTA1    -> check it -> copy OTA1 to OTA0                -> reboot  --//--
 // 5 Stage: run OTA0    -> check it -> erase OTA_DATA for next tests    -> PASS
-TEST_CASE_MULTIPLE_STAGES("Switching between factory, OTA0, OTA1, OTA0", "[app_update][reset=DEEPSLEEP_RESET, DEEPSLEEP_RESET, DEEPSLEEP_RESET, DEEPSLEEP_RESET]", start_test, test_flow1, test_flow1, test_flow1, test_flow1);
+TEST_CASE_MULTIPLE_STAGES("Switching between factory, OTA0, OTA1, OTA0", "[app_update][timeout=90][reset=DEEPSLEEP_RESET, DEEPSLEEP_RESET, DEEPSLEEP_RESET, DEEPSLEEP_RESET]", start_test, test_flow1, test_flow1, test_flow1, test_flow1);
 
 static void test_flow2(void)
 {
@@ -307,7 +368,7 @@ static void test_flow2(void)
         case 2:
             ESP_LOGI(TAG, "Factory");
             TEST_ASSERT_EQUAL(ESP_PARTITION_SUBTYPE_APP_FACTORY, cur_app->subtype);
-            copy_current_app_to_next_part_and_reboot(cur_app);
+            copy_current_app_to_next_part_and_reboot();
             break;
         case 3:
             ESP_LOGI(TAG, "OTA0");
@@ -333,7 +394,7 @@ static void test_flow2(void)
 // 2 Stage: run factory -> check it -> copy factory to OTA0             -> reboot  --//--
 // 3 Stage: run OTA0    -> check it -> corrupt ota data                 -> reboot  --//--
 // 4 Stage: run factory -> check it -> erase OTA_DATA for next tests    -> PASS
-TEST_CASE_MULTIPLE_STAGES("Switching between factory, OTA0, corrupt ota_sec1, factory", "[app_update][reset=DEEPSLEEP_RESET, DEEPSLEEP_RESET, DEEPSLEEP_RESET]", start_test, test_flow2, test_flow2, test_flow2);
+TEST_CASE_MULTIPLE_STAGES("Switching between factory, OTA0, corrupt ota_sec1, factory", "[app_update][timeout=90][reset=DEEPSLEEP_RESET, DEEPSLEEP_RESET, DEEPSLEEP_RESET]", start_test, test_flow2, test_flow2, test_flow2);
 
 static void test_flow3(void)
 {
@@ -344,13 +405,13 @@ static void test_flow3(void)
         case 2:
             ESP_LOGI(TAG, "Factory");
             TEST_ASSERT_EQUAL(ESP_PARTITION_SUBTYPE_APP_FACTORY, cur_app->subtype);
-            copy_current_app_to_next_part_and_reboot(cur_app);
+            copy_current_app_to_next_part_and_reboot();
             break;
         case 3:
             ESP_LOGI(TAG, "OTA0");
             TEST_ASSERT_EQUAL(ESP_PARTITION_SUBTYPE_APP_OTA_0, cur_app->subtype);
             mark_app_valid();
-            copy_current_app_to_next_part_and_reboot(cur_app);
+            copy_current_app_to_next_part_and_reboot();
             break;
         case 4:
             ESP_LOGI(TAG, "OTA1");
@@ -377,7 +438,7 @@ static void test_flow3(void)
 // 3 Stage: run OTA0    -> check it -> copy OTA0 to OTA1                -> reboot  --//--
 // 3 Stage: run OTA1    -> check it -> corrupt ota sector2              -> reboot  --//--
 // 4 Stage: run OTA0    -> check it -> erase OTA_DATA for next tests    -> PASS
-TEST_CASE_MULTIPLE_STAGES("Switching between factory, OTA0, OTA1, currupt ota_sec2, OTA0", "[app_update][reset=DEEPSLEEP_RESET, DEEPSLEEP_RESET, DEEPSLEEP_RESET, DEEPSLEEP_RESET]", start_test, test_flow3, test_flow3, test_flow3, test_flow3);
+TEST_CASE_MULTIPLE_STAGES("Switching between factory, OTA0, OTA1, currupt ota_sec2, OTA0", "[app_update][timeout=90][reset=DEEPSLEEP_RESET, DEEPSLEEP_RESET, DEEPSLEEP_RESET, DEEPSLEEP_RESET]", start_test, test_flow3, test_flow3, test_flow3, test_flow3);
 
 #ifdef CONFIG_BOOTLOADER_FACTORY_RESET
 #define STORAGE_NAMESPACE "update_ota"
@@ -388,7 +449,7 @@ static void test_flow4(void)
     ESP_LOGI(TAG, "boot count %d", boot_count);
     const esp_partition_t *cur_app = get_running_firmware();
     nvs_handle_t handle = 0;
-    int boot_count_nvs = 0;
+    int32_t boot_count_nvs = 0;
     switch (boot_count) {
         case 2:
             ESP_LOGI(TAG, "Factory");
@@ -402,7 +463,7 @@ static void test_flow4(void)
             nvs_close(handle);
             nvs_flash_deinit();
 
-            copy_current_app_to_next_part_and_reboot(cur_app);
+            copy_current_app_to_next_part_and_reboot();
             break;
         case 3:
             ESP_LOGI(TAG, "OTA0");
@@ -424,7 +485,7 @@ static void test_flow4(void)
             ESP_LOGI(TAG, "Factory");
             TEST_ASSERT_EQUAL(ESP_PARTITION_SUBTYPE_APP_FACTORY, cur_app->subtype);
 
-            int boot_count_nvs;
+            int32_t boot_count_nvs;
             TEST_ESP_OK(nvs_flash_init());
             TEST_ESP_OK(nvs_open(STORAGE_NAMESPACE, NVS_READWRITE, &handle));
             TEST_ESP_ERR(ESP_ERR_NVS_NOT_FOUND, nvs_get_i32(handle, "boot_count", &boot_count_nvs));
@@ -444,7 +505,7 @@ static void test_flow4(void)
 // 2 Stage: run factory -> check it -> copy factory to OTA0          -> reboot  --//--
 // 3 Stage: run OTA0    -> check it -> set_pin_factory_reset         -> reboot  --//--
 // 4 Stage: run factory -> check it -> erase OTA_DATA for next tests -> PASS
-TEST_CASE_MULTIPLE_STAGES("Switching between factory, OTA0, sets pin_factory_reset, factory", "[app_update][reset=DEEPSLEEP_RESET, DEEPSLEEP_RESET, DEEPSLEEP_RESET]", start_test, test_flow4, test_flow4, test_flow4);
+TEST_CASE_MULTIPLE_STAGES("Switching between factory, OTA0, sets pin_factory_reset, factory", "[app_update][timeout=90][ignore][reset=DEEPSLEEP_RESET, DEEPSLEEP_RESET, DEEPSLEEP_RESET]", start_test, test_flow4, test_flow4, test_flow4);
 #endif
 
 #ifdef CONFIG_BOOTLOADER_APP_TEST
@@ -487,7 +548,7 @@ static void test_flow5(void)
 // 2 Stage: run factory    -> check it -> copy factory to Test and set pin_test_app -> reboot  --//--
 // 3 Stage: run test       -> check it -> reset pin_test_app                        -> reboot  --//--
 // 4 Stage: run factory    -> check it -> erase OTA_DATA for next tests             -> PASS
-TEST_CASE_MULTIPLE_STAGES("Switching between factory, test, factory", "[app_update][reset=DEEPSLEEP_RESET, DEEPSLEEP_RESET, DEEPSLEEP_RESET]", start_test, test_flow5, test_flow5, test_flow5);
+TEST_CASE_MULTIPLE_STAGES("Switching between factory, test, factory", "[app_update][timeout=90][ignore][reset=DEEPSLEEP_RESET, DEEPSLEEP_RESET, DEEPSLEEP_RESET]", start_test, test_flow5, test_flow5, test_flow5);
 #endif
 
 static const esp_partition_t* app_update(void)
@@ -581,7 +642,7 @@ static void test_rollback1_1(void)
 // 3 Stage: run OTA0       -> check it -> esp_ota_mark_app_valid_cancel_rollback()                 -> reboot  --//--
 // 4 Stage: run OTA0       -> check it -> esp_ota_mark_app_invalid_rollback_and_reboot()         -> reboot
 // 5 Stage: run factory    -> check it -> erase OTA_DATA for next tests             -> PASS
-TEST_CASE_MULTIPLE_STAGES("Test rollback. factory, OTA0, OTA0, rollback -> factory", "[app_update][reset=DEEPSLEEP_RESET, DEEPSLEEP_RESET, DEEPSLEEP_RESET, SW_CPU_RESET]", start_test, test_rollback1, test_rollback1, test_rollback1, test_rollback1_1);
+TEST_CASE_MULTIPLE_STAGES("Test rollback. factory, OTA0, OTA0, rollback -> factory", "[app_update][timeout=90][reset=DEEPSLEEP_RESET, DEEPSLEEP_RESET, DEEPSLEEP_RESET, SW_CPU_RESET]", start_test, test_rollback1, test_rollback1, test_rollback1, test_rollback1_1);
 
 static void test_rollback2(void)
 {
@@ -679,7 +740,7 @@ static void test_rollback2_1(void)
 // 3 Stage: run OTA0           -> check it -> esp_ota_mark_app_valid_cancel_rollback(), copy to next app slot -> reboot  --//--
 // 4 Stage: run OTA1           -> check it -> PENDING_VERIFY/esp_ota_mark_app_invalid_rollback_and_reboot() -> reboot
 // 5 Stage: run OTA0(rollback) -> check it -> erase OTA_DATA for next tests                    -> PASS
-TEST_CASE_MULTIPLE_STAGES("Test rollback. factory, OTA0, OTA1, rollback -> OTA0", "[app_update][reset=DEEPSLEEP_RESET, DEEPSLEEP_RESET, DEEPSLEEP_RESET, SW_CPU_RESET]", start_test, test_rollback2, test_rollback2, test_rollback2, test_rollback2_1);
+TEST_CASE_MULTIPLE_STAGES("Test rollback. factory, OTA0, OTA1, rollback -> OTA0", "[app_update][timeout=90][reset=DEEPSLEEP_RESET, DEEPSLEEP_RESET, DEEPSLEEP_RESET, SW_CPU_RESET]", start_test, test_rollback2, test_rollback2, test_rollback2, test_rollback2_1);
 
 static void test_erase_last_app_flow(void)
 {
@@ -730,4 +791,33 @@ static void test_erase_last_app_rollback(void)
 // 3 Stage: run OTA0           -> check it -> copy factory to OTA1                             -> reboot  --//--
 // 4 Stage: run OTA1           -> check it -> erase OTA0 and rollback                          -> reboot
 // 5 Stage: run factory        -> check it -> erase OTA_DATA for next tests                    -> PASS
-TEST_CASE_MULTIPLE_STAGES("Test erase_last_boot_app_partition. factory, OTA1, OTA0, factory", "[app_update][reset=DEEPSLEEP_RESET, DEEPSLEEP_RESET, DEEPSLEEP_RESET, SW_CPU_RESET]", start_test, test_erase_last_app_flow, test_erase_last_app_flow, test_erase_last_app_flow, test_erase_last_app_rollback);
+TEST_CASE_MULTIPLE_STAGES("Test erase_last_boot_app_partition. factory, OTA1, OTA0, factory", "[app_update][timeout=90][reset=DEEPSLEEP_RESET, DEEPSLEEP_RESET, DEEPSLEEP_RESET, SW_CPU_RESET]", start_test, test_erase_last_app_flow, test_erase_last_app_flow, test_erase_last_app_flow, test_erase_last_app_rollback);
+
+static void test_flow6(void)
+{
+    boot_count++;
+    ESP_LOGI(TAG, "boot count %d", boot_count);
+    const esp_partition_t *cur_app = get_running_firmware();
+    switch (boot_count) {
+        case 2:
+            ESP_LOGI(TAG, "Factory");
+            TEST_ASSERT_EQUAL(ESP_PARTITION_SUBTYPE_APP_FACTORY, cur_app->subtype);
+            copy_current_app_to_next_part_with_offset_and_reboot();
+            break;
+        case 3:
+            ESP_LOGI(TAG, "OTA0");
+            TEST_ASSERT_EQUAL(ESP_PARTITION_SUBTYPE_APP_OTA_0, cur_app->subtype);
+            mark_app_valid();
+            erase_ota_data();
+            break;
+        default:
+            erase_ota_data();
+            TEST_FAIL_MESSAGE("Unexpected stage");
+            break;
+    }
+}
+
+// 1 Stage: After POWER_RESET erase OTA_DATA for this test              -> reboot through deep sleep.
+// 2 Stage: run factory -> check it -> copy factory to OTA0             -> reboot  --//--
+// 3 Stage: run OTA0    -> check it -> erase OTA_DATA for next tests    -> PASS
+TEST_CASE_MULTIPLE_STAGES("Switching between factory, OTA0 using esp_ota_write_with_offset", "[app_update][timeout=90][reset=DEEPSLEEP_RESET, DEEPSLEEP_RESET]", start_test, test_flow6, test_flow6);

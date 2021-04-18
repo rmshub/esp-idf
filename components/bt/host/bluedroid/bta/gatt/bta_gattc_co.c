@@ -48,7 +48,7 @@ static void getFilename(char *buffer, BD_ADDR bda)
             , bda[0], bda[1], bda[2], bda[3], bda[4], bda[5]);
 }
 
-static void cacheClose()
+static void cacheClose(void)
 {
     if (sCacheFD != 0) {
         fclose(sCacheFD);
@@ -664,4 +664,3 @@ BOOLEAN bta_gattc_co_cache_clear_assoc_addr(BD_ADDR src_addr)
 // #endif /* #if( defined GATTC_CACHE_NVS ) && (GATTC_CACHE_NVS == TRUE) */
 #endif /* #if( defined BLE_INCLUDED ) && (BLE_INCLUDED == TRUE) */
 #endif /* #if( defined BTA_GATT_INCLUDED ) && (BTA_GATT_INCLUDED == TRUE) */
-

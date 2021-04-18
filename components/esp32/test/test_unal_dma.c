@@ -3,10 +3,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "esp32/rom/ets_sys.h"
 #include "esp32/rom/lldesc.h"
-#include "esp32/rom/gpio.h"
-
+#include "driver/periph_ctrl.h"
+#include "hal/gpio_hal.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
@@ -29,22 +28,21 @@ static volatile lldesc_t dmaDesc[2];
 static void dmaMemcpy(void *in, void *out, int len)
 {
     volatile int i;
-    DPORT_SET_PERI_REG_MASK(DPORT_PERIP_CLK_EN_REG, DPORT_I2S0_CLK_EN);
-    DPORT_CLEAR_PERI_REG_MASK(DPORT_PERIP_RST_EN_REG, DPORT_I2S0_RST);
+    periph_module_enable(PERIPH_I2S0_MODULE);
 
     //Init pins to i2s functions
     SET_PERI_REG_MASK(GPIO_ENABLE_W1TS_REG, (1 << 11) | (1 << 3) | (1 << 0) | (1 << 2) | (1 << 5) | (1 << 16) | (1 << 17) | (1 << 18) | (1 << 19) | (1 << 20)); //ENABLE GPIO oe_enable
 
-    PIN_FUNC_SELECT(PERIPHS_IO_MUX_GPIO0_U, 0);
-    PIN_FUNC_SELECT(PERIPHS_IO_MUX_GPIO2_U, 0);
-    PIN_FUNC_SELECT(PERIPHS_IO_MUX_GPIO5_U, 0);
-    PIN_FUNC_SELECT(PERIPHS_IO_MUX_GPIO16_U, 0);
-    PIN_FUNC_SELECT(PERIPHS_IO_MUX_GPIO17_U, 0);
-    PIN_FUNC_SELECT(PERIPHS_IO_MUX_GPIO18_U, 0);
-    PIN_FUNC_SELECT(PERIPHS_IO_MUX_GPIO19_U, 0);
-    PIN_FUNC_SELECT(PERIPHS_IO_MUX_GPIO20_U, 0);
-    PIN_FUNC_SELECT(PERIPHS_IO_MUX_SD_CMD_U, 2); //11
-    PIN_FUNC_SELECT(PERIPHS_IO_MUX_GPIO26_U, 0); //RS
+    gpio_hal_iomux_func_sel(PERIPHS_IO_MUX_GPIO0_U, 0);
+    gpio_hal_iomux_func_sel(PERIPHS_IO_MUX_GPIO2_U, 0);
+    gpio_hal_iomux_func_sel(PERIPHS_IO_MUX_GPIO5_U, 0);
+    gpio_hal_iomux_func_sel(PERIPHS_IO_MUX_GPIO16_U, 0);
+    gpio_hal_iomux_func_sel(PERIPHS_IO_MUX_GPIO17_U, 0);
+    gpio_hal_iomux_func_sel(PERIPHS_IO_MUX_GPIO18_U, 0);
+    gpio_hal_iomux_func_sel(PERIPHS_IO_MUX_GPIO19_U, 0);
+    gpio_hal_iomux_func_sel(PERIPHS_IO_MUX_GPIO20_U, 0);
+    gpio_hal_iomux_func_sel(PERIPHS_IO_MUX_SD_CMD_U, 2); //11
+    gpio_hal_iomux_func_sel(PERIPHS_IO_MUX_GPIO26_U, 0); //RS
 
     WRITE_PERI_REG(GPIO_FUNC0_OUT_SEL_CFG_REG, (148 << GPIO_FUNC0_OUT_SEL_S));
     WRITE_PERI_REG(GPIO_FUNC2_OUT_SEL_CFG_REG, (149 << GPIO_FUNC0_OUT_SEL_S));
@@ -199,4 +197,3 @@ TEST_CASE("Unaligned DMA test (needs I2S)", "[hw][ignore]")
     dmaMemcpy(src, dest + 1, 2048 + 2);
     TEST_ASSERT(mymemcmp(src, dest + 1, 2048) == 0);
 }
-

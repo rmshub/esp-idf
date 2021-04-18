@@ -19,6 +19,20 @@ struct esp_flash_t;
 typedef struct esp_flash_t esp_flash_t;
 
 typedef struct spi_flash_chip_t spi_flash_chip_t;
+
+/** Timeout configurations for flash operations, all in us */
+typedef struct {
+    uint32_t idle_timeout;          ///< Default timeout for other commands to be sent by host and get done by flash
+    uint32_t chip_erase_timeout;    ///< Timeout for chip erase operation
+    uint32_t block_erase_timeout;   ///< Timeout for block erase operation
+    uint32_t sector_erase_timeout;  ///< Timeout for sector erase operation
+    uint32_t page_program_timeout;  ///< Timeout for page program operation
+} flash_chip_op_timeout_t;
+
+typedef enum {
+    SPI_FLASH_REG_STATUS = 1,
+} spi_flash_register_t;
+
 /** @brief SPI flash chip driver definition structure.
  *
  * The chip driver structure contains chip-specific pointers to functions to perform SPI flash operations, and some
@@ -38,6 +52,7 @@ typedef struct spi_flash_chip_t spi_flash_chip_t;
  */
 struct spi_flash_chip_t {
     const char *name; ///< Name of the chip driver
+    const flash_chip_op_timeout_t *timeout; ///< Timeout configuration for this chip
     /* Probe to detect if a supported SPI flash chip is found.
      *
      * Attempts to configure 'chip' with these operations and probes for a matching SPI flash chip.
@@ -90,10 +105,10 @@ struct spi_flash_chip_t {
     uint32_t block_erase_size; /* Optimal (fastest) block size for multi-sector erases on this chip */
 
     /* Read the write protect status of the entire chip. */
-    esp_err_t (*get_chip_write_protect)(esp_flash_t *chip, bool *write_protected);
+    esp_err_t (*get_chip_write_protect)(esp_flash_t *chip, bool *out_write_protected);
 
     /* Set the write protect status of the entire chip. */
-    esp_err_t (*set_chip_write_protect)(esp_flash_t *chip, bool write_protect_chip);
+    esp_err_t (*set_chip_write_protect)(esp_flash_t *chip, bool chip_write_protect);
 
     /* Number of individually write protectable regions on this chip. Range 0-63. */
     uint8_t num_protectable_regions;
@@ -135,16 +150,13 @@ struct spi_flash_chip_t {
     /* Perform an encrypted write to the chip, using internal flash encryption hardware. */
     esp_err_t (*write_encrypted)(esp_flash_t *chip, const void *buffer, uint32_t address, uint32_t length);
 
-    /* Set the write enable flag. This function is called internally by other functions in this structure, before a destructive
-       operation takes place. */
-    esp_err_t (*set_write_protect)(esp_flash_t *chip, bool write_protect);
 
     /* Wait for the SPI flash chip to be idle (any write operation to be complete.) This function is both called from the higher-level API functions, and from other functions in this structure.
 
        timeout_ms should be a timeout (in milliseconds) before the function returns ESP_ERR_TIMEOUT. This is useful to avoid hanging
        if the chip is otherwise unresponsive (ie returns all 0xFF or similar.)
     */
-    esp_err_t (*wait_idle)(esp_flash_t *chip, unsigned timeout_ms);
+    esp_err_t (*wait_idle)(esp_flash_t *chip, uint32_t timeout_us);
 
     /* Configure both the SPI host and the chip for the read mode specified in chip->read_mode.
      *
@@ -152,7 +164,35 @@ struct spi_flash_chip_t {
      *
      * Can return ESP_ERR_FLASH_UNSUPPORTED_HOST or ESP_ERR_FLASH_UNSUPPORTED_CHIP if the specified mode is unsupported.
      */
-    esp_err_t (*set_read_mode)(esp_flash_t *chip);
+    esp_err_t (*set_io_mode)(esp_flash_t *chip);
+
+    /*
+     * Get whether the Quad Enable (QE) is set. (*out_io_mode)=SPI_FLASH_QOUT if
+     * enabled, otherwise disabled
+     */
+    esp_err_t (*get_io_mode)(esp_flash_t *chip, esp_flash_io_mode_t* out_io_mode);
+
+    /*
+     * Read the chip ID. Called when chip driver is set, but we want to know the exact chip id (to
+     * get the size, etc.).
+     */
+    esp_err_t (*read_id)(esp_flash_t *chip, uint32_t* out_chip_id);
+
+    /*
+     * Read the requested register (status, etc.).
+     */
+    esp_err_t (*read_reg)(esp_flash_t *chip, spi_flash_register_t reg_id, uint32_t* out_reg);
+
+    /** Yield to other tasks. Called during erase operations. */
+    esp_err_t (*yield)(esp_flash_t *chip, uint32_t wip);
+
+    /** Setup flash suspend configuration. */
+    esp_err_t (*sus_setup)(esp_flash_t *chip);
+
+    /**
+     * Read the chip unique ID.
+     */
+    esp_err_t (*read_unique_id)(esp_flash_t *chip, uint64_t* flash_unique_id);
 };
 
 /* Pointer to an array of pointers to all known drivers for flash chips. This array is used

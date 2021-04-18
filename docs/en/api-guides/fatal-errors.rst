@@ -7,8 +7,7 @@ Overview
 
 In certain situations, execution of the program can not be continued in a well defined way. In ESP-IDF, these situations include:
 
-- CPU Exceptions: Illegal Instruction, Load/Store Alignment Error, Load/Store Prohibited error, Double Exception.
-
+- CPU Exceptions: |CPU_EXCEPTIONS_LIST|
 - System level checks and safeguards:
 
   - :doc:`Interrupt watchdog <../api-reference/system/wdts>` timeout
@@ -28,39 +27,47 @@ Panic Handler
 
 Every error cause listed in the `Overview`_ will be handled by *panic handler*.
 
-Panic handler will start by printing the cause of the error to the console. For CPU exceptions, the message will be similar to::
+Panic handler will start by printing the cause of the error to the console. For CPU exceptions, the message will be similar to
 
-    Guru Meditation Error: Core 0 panic'ed (IllegalInstruction). Exception was unhandled.
+.. parsed-literal::
 
-For some of the system level checks (interrupt watchdog, cache access error), the message will be similar to::
+    Guru Meditation Error: Core 0 panic'ed (|ILLEGAL_INSTR_MSG|). Exception was unhandled.
 
-    Guru Meditation Error: Core 0 panic'ed (Cache disabled but cached memory region accessed)
+For some of the system level checks (interrupt watchdog, cache access error), the message will be similar to
 
-In all cases, error cause will be printed in parens. See `Guru Meditation Errors`_ for a list of possible error causes.
+.. parsed-literal::
 
-Subsequent behavior of the panic handler can be set using :ref:`CONFIG_ESP32_PANIC` configuration choice. The available options are:
+    Guru Meditation Error: Core 0 panic'ed (|CACHE_ERR_MSG|). Exception was unhandled.
 
-- Print registers and reboot (``CONFIG_ESP32_PANIC_PRINT_REBOOT``) — default option.
-  
+In all cases, error cause will be printed in parentheses. See `Guru Meditation Errors`_ for a list of possible error causes.
+
+Subsequent behavior of the panic handler can be set using :ref:`CONFIG_ESP_SYSTEM_PANIC` configuration choice. The available options are:
+
+- Print registers and reboot (``CONFIG_ESP_SYSTEM_PANIC_PRINT_REBOOT``) — default option.
+
   This will print register values at the point of the exception, print the backtrace, and restart the chip.
 
-- Print registers and halt (``CONFIG_ESP32_PANIC_PRINT_HALT``)
+- Print registers and halt (``CONFIG_ESP_SYSTEM_PANIC_PRINT_HALT``)
 
   Similar to the above option, but halt instead of rebooting. External reset is required to restart the program.
 
-- Silent reboot (``CONFIG_ESP32_PANIC_SILENT_REBOOT``)
+- Silent reboot (``CONFIG_ESP_SYSTEM_PANIC_SILENT_REBOOT``)
 
   Don't print registers or backtrace, restart the chip immediately.
 
-- Invoke GDB Stub (``CONFIG_ESP32_PANIC_GDBSTUB``)
+- Invoke GDB Stub (``CONFIG_ESP_SYSTEM_PANIC_GDBSTUB``)
 
   Start GDB server which can communicate with GDB over console UART port. See `GDB Stub`_ for more details.
 
 Behavior of panic handler is affected by two other configuration options.
 
-- If :ref:`CONFIG_ESP32_DEBUG_OCDAWARE` is enabled (which is the default), panic handler will detect whether a JTAG debugger is connected. If it is, execution will be halted and control will be passed to the debugger. In this case registers and backtrace are not dumped to the console, and GDBStub / Core Dump functions are not used.
+- If :ref:`CONFIG_{IDF_TARGET_CFG_PREFIX}_DEBUG_OCDAWARE` is enabled (which is the default), panic handler will detect whether a JTAG debugger is connected. If it is, execution will be halted and control will be passed to the debugger. In this case registers and backtrace are not dumped to the console, and GDBStub / Core Dump functions are not used.
 
-- If :doc:`Core Dump <core_dump>` feature is enabled (``CONFIG_ESP32_ENABLE_COREDUMP_TO_FLASH`` or ``CONFIG_ESP32_ENABLE_COREDUMP_TO_UART`` options), then system state (task stacks and registers) will be dumped either to Flash or UART, for later analysis.
+- If :doc:`Core Dump <core_dump>` feature is enabled, then system state (task stacks and registers) will be dumped either to Flash or UART, for later analysis.
+
+- If :ref:`CONFIG_ESP_PANIC_HANDLER_IRAM` is disabled (disabled by default), the panic handler code is placed in flash memory not IRAM. This means that if ESP-IDF crashes while flash cache is disabled, the panic handler will automatically re-enable flash cache before running GDB Stub or Core Dump. This adds some minor risk, if the flash cache status is also corrupted during the crash.
+
+  If this option is enabled, the panic handler code (including required UART functions) is placed in IRAM. This may be necessary to debug some complex issues with crashes while flash cache is disabled (for example, when writing to SPI flash) or when flash cache is corrupted when an exception is triggered.
 
 The following diagram illustrates panic handler behavior:
 
@@ -68,7 +75,7 @@ The following diagram illustrates panic handler behavior:
     :scale: 100%
     :caption: Panic Handler Flowchart (click to enlarge)
     :align: center
-    
+
     blockdiag panic-handler {
         orientation = portrait;
         edge_layout = flowchart;
@@ -110,51 +117,99 @@ The following diagram illustrates panic handler behavior:
 Register Dump and Backtrace
 ---------------------------
 
-Unless ``CONFIG_ESP32_PANIC_SILENT_REBOOT`` option is enabled, panic handler prints some of the CPU registers, and the backtrace, to the console::
+Unless ``CONFIG_ESP_SYSTEM_PANIC_SILENT_REBOOT`` option is enabled, panic handler prints some of the CPU registers, and the backtrace, to the console
 
-    Core 0 register dump:
-    PC      : 0x400e14ed  PS      : 0x00060030  A0      : 0x800d0805  A1      : 0x3ffb5030  
-    A2      : 0x00000000  A3      : 0x00000001  A4      : 0x00000001  A5      : 0x3ffb50dc  
-    A6      : 0x00000000  A7      : 0x00000001  A8      : 0x00000000  A9      : 0x3ffb5000  
-    A10     : 0x00000000  A11     : 0x3ffb2bac  A12     : 0x40082d1c  A13     : 0x06ff1ff8  
-    A14     : 0x3ffb7078  A15     : 0x00000000  SAR     : 0x00000014  EXCCAUSE: 0x0000001d  
-    EXCVADDR: 0x00000000  LBEG    : 0x4000c46c  LEND    : 0x4000c477  LCOUNT  : 0xffffffff  
+.. only:: CONFIG_IDF_TARGET_ARCH_XTENSA
 
-    Backtrace: 0x400e14ed:0x3ffb5030 0x400d0802:0x3ffb5050
+    ::
+
+        Core 0 register dump:
+        PC      : 0x400e14ed  PS      : 0x00060030  A0      : 0x800d0805  A1      : 0x3ffb5030
+        A2      : 0x00000000  A3      : 0x00000001  A4      : 0x00000001  A5      : 0x3ffb50dc
+        A6      : 0x00000000  A7      : 0x00000001  A8      : 0x00000000  A9      : 0x3ffb5000
+        A10     : 0x00000000  A11     : 0x3ffb2bac  A12     : 0x40082d1c  A13     : 0x06ff1ff8
+        A14     : 0x3ffb7078  A15     : 0x00000000  SAR     : 0x00000014  EXCCAUSE: 0x0000001d
+        EXCVADDR: 0x00000000  LBEG    : 0x4000c46c  LEND    : 0x4000c477  LCOUNT  : 0xffffffff
+
+        Backtrace: 0x400e14ed:0x3ffb5030 0x400d0802:0x3ffb5050
+
+.. only:: CONFIG_IDF_TARGET_ARCH_RISCV
+
+    ::
+
+        Core  0 register dump:
+        MEPC    : 0x420048b4  RA      : 0x420048b4  SP      : 0x3fc8f2f0  GP      : 0x3fc8a600
+        TP      : 0x3fc8a2ac  T0      : 0x40057fa6  T1      : 0x0000000f  T2      : 0x00000000
+        S0/FP   : 0x00000000  S1      : 0x00000000  A0      : 0x00000001  A1      : 0x00000001
+        A2      : 0x00000064  A3      : 0x00000004  A4      : 0x00000001  A5      : 0x00000000
+        A6      : 0x42001fd6  A7      : 0x00000000  S2      : 0x00000000  S3      : 0x00000000
+        S4      : 0x00000000  S5      : 0x00000000  S6      : 0x00000000  S7      : 0x00000000
+        S8      : 0x00000000  S9      : 0x00000000  S10     : 0x00000000  S11     : 0x00000000
+        T3      : 0x00000000  T4      : 0x00000000  T5      : 0x00000000  T6      : 0x00000000
+        MSTATUS : 0x00001881  MTVEC   : 0x40380001  MCAUSE  : 0x00000007  MTVAL   : 0x00000000
+        MHARTID : 0x00000000
 
 Register values printed are the register values in the exception frame, i.e. values at the moment when CPU exception or other fatal error has occured.
 
 Register dump is not printed if the panic handler was executed as a result of an ``abort()`` call.
 
-In some cases, such as interrupt watchdog timeout, panic handler may print additional CPU registers (EPC1-EPC4) and the registers/backtrace of the code running on the other CPU.
+.. only:: CONFIG_IDF_TARGET_ARCH_XTENSA
+    
+    In some cases, such as interrupt watchdog timeout, panic handler may print additional CPU registers (EPC1-EPC4) and the registers/backtrace of the code running on the other CPU.
 
-Backtrace line contains PC:SP pairs, where PC is the Program Counter and SP is Stack Pointer, for each stack frame of the current task. If a fatal error happens inside an ISR, the backtrace may include PC:SP pairs both from the task which was interrupted, and from the ISR.
+    Backtrace line contains PC:SP pairs, where PC is the Program Counter and SP is Stack Pointer, for each stack frame of the current task. If a fatal error happens inside an ISR, the backtrace may include PC:SP pairs both from the task which was interrupted, and from the ISR.
 
-If :doc:`IDF Monitor <tools/idf-monitor>` is used, Program Counter values will be converted to code locations (function name, file name, and line number), and the output will be annotated with additional lines::
+If :doc:`IDF Monitor <tools/idf-monitor>` is used, Program Counter values will be converted to code locations (function name, file name, and line number), and the output will be annotated with additional lines
 
-    Core 0 register dump:
-    PC      : 0x400e14ed  PS      : 0x00060030  A0      : 0x800d0805  A1      : 0x3ffb5030  
-    0x400e14ed: app_main at /Users/user/esp/example/main/main.cpp:36
+.. only:: CONFIG_IDF_TARGET_ARCH_XTENSA
 
-    A2      : 0x00000000  A3      : 0x00000001  A4      : 0x00000001  A5      : 0x3ffb50dc  
-    A6      : 0x00000000  A7      : 0x00000001  A8      : 0x00000000  A9      : 0x3ffb5000  
-    A10     : 0x00000000  A11     : 0x3ffb2bac  A12     : 0x40082d1c  A13     : 0x06ff1ff8  
-    0x40082d1c: _calloc_r at /Users/user/esp/esp-idf/components/newlib/syscalls.c:51
+    ::
 
-    A14     : 0x3ffb7078  A15     : 0x00000000  SAR     : 0x00000014  EXCCAUSE: 0x0000001d  
-    EXCVADDR: 0x00000000  LBEG    : 0x4000c46c  LEND    : 0x4000c477  LCOUNT  : 0xffffffff  
+        Core 0 register dump:
+        PC      : 0x400e14ed  PS      : 0x00060030  A0      : 0x800d0805  A1      : 0x3ffb5030
+        0x400e14ed: app_main at /Users/user/esp/example/main/main.cpp:36
 
-    Backtrace: 0x400e14ed:0x3ffb5030 0x400d0802:0x3ffb5050
-    0x400e14ed: app_main at /Users/user/esp/example/main/main.cpp:36
+        A2      : 0x00000000  A3      : 0x00000001  A4      : 0x00000001  A5      : 0x3ffb50dc
+        A6      : 0x00000000  A7      : 0x00000001  A8      : 0x00000000  A9      : 0x3ffb5000
+        A10     : 0x00000000  A11     : 0x3ffb2bac  A12     : 0x40082d1c  A13     : 0x06ff1ff8
+        0x40082d1c: _calloc_r at /Users/user/esp/esp-idf/components/newlib/syscalls.c:51
 
-    0x400d0802: main_task at /Users/user/esp/esp-idf/components/esp32/cpu_start.c:470
+        A14     : 0x3ffb7078  A15     : 0x00000000  SAR     : 0x00000014  EXCCAUSE: 0x0000001d
+        EXCVADDR: 0x00000000  LBEG    : 0x4000c46c  LEND    : 0x4000c477  LCOUNT  : 0xffffffff
+
+        Backtrace: 0x400e14ed:0x3ffb5030 0x400d0802:0x3ffb5050
+        0x400e14ed: app_main at /Users/user/esp/example/main/main.cpp:36
+
+        0x400d0802: main_task at /Users/user/esp/esp-idf/components/{IDF_TARGET_PATH_NAME}/cpu_start.c:470
+
+.. only:: CONFIG_IDF_TARGET_ARCH_RISCV
+
+    ::
+
+        Core  0 register dump:
+        MEPC    : 0x420048b4  RA      : 0x420048b4  SP      : 0x3fc8f2f0  GP      : 0x3fc8a600
+        0x420048b4: app_main at /Users/user/esp/example/main/hello_world_main.c:20
+
+        0x420048b4: app_main at /Users/user/esp/example/main/hello_world_main.c:20
+
+        TP      : 0x3fc8a2ac  T0      : 0x40057fa6  T1      : 0x0000000f  T2      : 0x00000000
+        S0/FP   : 0x00000000  S1      : 0x00000000  A0      : 0x00000001  A1      : 0x00000001
+        A2      : 0x00000064  A3      : 0x00000004  A4      : 0x00000001  A5      : 0x00000000
+        A6      : 0x42001fd6  A7      : 0x00000000  S2      : 0x00000000  S3      : 0x00000000
+        0x42001fd6: uart_write at /Users/user/esp/esp-idf/components/vfs/vfs_uart.c:201
+
+        S4      : 0x00000000  S5      : 0x00000000  S6      : 0x00000000  S7      : 0x00000000
+        S8      : 0x00000000  S9      : 0x00000000  S10     : 0x00000000  S11     : 0x00000000
+        T3      : 0x00000000  T4      : 0x00000000  T5      : 0x00000000  T6      : 0x00000000
+        MSTATUS : 0x00001881  MTVEC   : 0x40380001  MCAUSE  : 0x00000007  MTVAL   : 0x00000000
+        MHARTID : 0x00000000
 
 To find the location where a fatal error has happened, look at the lines which follow the "Backtrace" line. Fatal error location is the top line, and subsequent lines show the call stack.
 
 GDB Stub
 --------
 
-If ``CONFIG_ESP32_PANIC_GDBSTUB`` option is enabled, panic handler will not reset the chip when fatal error happens. Instead, it will start GDB remote protocol server, commonly referred to as GDB Stub. When this happens, GDB instance running on the host computer can be instructed to connect to the ESP32 UART port.
+If ``CONFIG_ESP_SYSTEM_PANIC_GDBSTUB`` option is enabled, panic handler will not reset the chip when fatal error happens. Instead, it will start GDB remote protocol server, commonly referred to as GDB Stub. When this happens, GDB instance running on the host computer can be instructed to connect to the {IDF_TARGET_NAME} UART port.
 
 If :doc:`IDF Monitor <tools/idf-monitor>` is used, GDB is started automatically when GDB Stub prompt is detected on the UART. The output would look like this::
 
@@ -165,7 +220,7 @@ If :doc:`IDF Monitor <tools/idf-monitor>` is used, GDB is started automatically 
     This is free software: you are free to change and redistribute it.
     There is NO WARRANTY, to the extent permitted by law.  Type "show copying"
     and "show warranty" for details.
-    This GDB was configured as "--host=x86_64-build_apple-darwin16.3.0 --target=xtensa-esp32-elf".
+    This GDB was configured as "--host=x86_64-build_apple-darwin16.3.0 --target={IDF_TARGET_TOOLCHAIN_PREFIX}".
     Type "show configuration" for configuration details.
     For bug reporting instructions, please see:
     <http://www.gnu.org/software/gdb/bugs/>.
@@ -178,7 +233,7 @@ If :doc:`IDF Monitor <tools/idf-monitor>` is used, GDB is started automatically 
     0x400e1b41 in app_main ()
         at /Users/user/esp/example/main/main.cpp:36
     36      *((int*) 0) = 0;
-    (gdb) 
+    (gdb)
 
 GDB prompt can be used to inspect CPU registers, local and static variables, and arbitrary locations in memory. It is not possible to set breakpoints, change PC, or continue execution. To reset the program, exit GDB and perform external reset: Ctrl-T Ctrl-R in IDF Monitor, or using external reset button on the development board.
 
@@ -194,8 +249,8 @@ This section explains the meaning of different error causes, printed in parens a
 .. note:: See `Wikipedia article <https://en.wikipedia.org/wiki/Guru_Meditation>`_ for historical origins of "Guru Meditation".
 
 
-IllegalInstruction
-^^^^^^^^^^^^^^^^^^
+|ILLEGAL_INSTR_MSG|
+^^^^^^^^^^^^^^^^^^^
 
 This CPU exception indicates that the instruction which was executed was not a valid instruction.
 Most common reasons for this error include:
@@ -203,55 +258,82 @@ Most common reasons for this error include:
 - FreeRTOS task function has returned. In FreeRTOS, if task function needs to terminate, it should call :cpp:func:`vTaskDelete` function and delete itself, instead of returning.
 
 - Failure to load next instruction from SPI flash. This usually happens if:
-  
+
   - Application has reconfigured SPI flash pins as some other function (GPIO, UART, etc.). Consult Hardware Design Guidelines and the Datasheet for the chip or module for details about SPI flash pins.
-  
-  - Some external device was accidentally connected to SPI flash pins, and has interfered with communication between ESP32 and SPI flash.
 
+  - Some external device was accidentally connected to SPI flash pins, and has interfered with communication between {IDF_TARGET_NAME} and SPI flash.
 
-InstrFetchProhibited
-^^^^^^^^^^^^^^^^^^^^
+.. only:: CONFIG_IDF_TARGET_ARCH_XTENSA
 
-This CPU exception indicates that CPU could not load an instruction because the the address of the instruction did not belong to a valid region in instruction RAM or ROM.
+    InstrFetchProhibited
+    ^^^^^^^^^^^^^^^^^^^^
 
-Usually this means an attempt to call a function pointer, which does not point to valid code. ``PC`` (Program Counter) register can be used as an indicator: it will be zero or will contain garbage value (not ``0x4xxxxxxx``).
+    This CPU exception indicates that CPU could not load an instruction because the the address of the instruction did not belong to a valid region in instruction RAM or ROM.
 
-LoadProhibited, StoreProhibited
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    Usually this means an attempt to call a function pointer, which does not point to valid code. ``PC`` (Program Counter) register can be used as an indicator: it will be zero or will contain garbage value (not ``0x4xxxxxxx``).
 
-This CPU exception happens when application attempts to read from or write to an invalid memory location. The address which was written/read is found in ``EXCVADDR`` register in the register dump. If this address is zero, it usually means that application attempted to dereference a NULL pointer. If this address is close to zero, it usually means that application attempted to access member of a structure, but the pointer to the structure was NULL. If this address is something else (garbage value, not in ``0x3fxxxxxx`` - ``0x6xxxxxxx`` range), it likely means that the pointer used to access the data was either not initialized or was corrupted.
+    LoadProhibited, StoreProhibited
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-IntegerDivideByZero
-^^^^^^^^^^^^^^^^^^^
+    This CPU exception happens when application attempts to read from or write to an invalid memory location. The address which was written/read is found in ``EXCVADDR`` register in the register dump. If this address is zero, it usually means that application attempted to dereference a NULL pointer. If this address is close to zero, it usually means that application attempted to access member of a structure, but the pointer to the structure was NULL. If this address is something else (garbage value, not in ``0x3fxxxxxx`` - ``0x6xxxxxxx`` range), it likely means that the pointer used to access the data was either not initialized or was corrupted.
 
-Application has attempted to do integer division by zero.
+    IntegerDivideByZero
+    ^^^^^^^^^^^^^^^^^^^
 
-LoadStoreAlignment
-^^^^^^^^^^^^^^^^^^
+    Application has attempted to do integer division by zero.
 
-Application has attempted to read or write memory location, and address alignment did not match load/store size. For example, 32-bit load can only be done from 4-byte aligned address, and 16-bit load can only be done from a 2-byte aligned address.
+    LoadStoreAlignment
+    ^^^^^^^^^^^^^^^^^^
 
-LoadStoreError
-^^^^^^^^^^^^^^
+    Application has attempted to read or write memory location, and address alignment did not match load/store size. For example, 32-bit load can only be done from 4-byte aligned address, and 16-bit load can only be done from a 2-byte aligned address.
 
-Application has attempted to do a 8- or 16- bit load/store from a memory region which only supports 32-bit loads/stores. For example, dereferencing a ``char*`` pointer which points into intruction memory will result in such an error.
+    LoadStoreError
+    ^^^^^^^^^^^^^^
 
-Unhandled debug exception
-^^^^^^^^^^^^^^^^^^^^^^^^^
+    This exception may happen in the following cases:
 
-This will usually be followed by a message like::
+    - If the application has attempted to do an 8- or 16- bit load/store from a memory region which only supports 32-bit loads/stores. For example, dereferencing a ``char*`` pointer to intruction memory (IRAM, IROM) will result in such an error.
 
-    Debug exception reason: Stack canary watchpoint triggered (task_name)
+    - If the application has attempted a store to a read-only memory region, such as IROM or DROM.
 
-This error indicates that application has written past the end of the stack of ``task_name`` task. Note that not every stack overflow is guaranteed to trigger this error. It is possible that the task writes to stack beyond the stack canary location, in which case the watchpoint will not be triggered.
+    Unhandled debug exception
+    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+    This will usually be followed by a message like::
+
+        Debug exception reason: Stack canary watchpoint triggered (task_name)
+
+    This error indicates that application has written past the end of the stack of ``task_name`` task. Note that not every stack overflow is guaranteed to trigger this error. It is possible that the task writes to stack beyond the stack canary location, in which case the watchpoint will not be triggered.
+
+.. only:: CONFIG_IDF_TARGET_ARCH_RISCV
+    
+    Instruction address misaligned
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+    This CPU exception indicates that the address of the instruction to execute is not 2-byte aligned.
+
+    Instruction access fault, Load access fault, Store access fault
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+    This CPU exception happens when application attempts to execute, read from or write to an invalid memory location. The address which was written/read is found in ``MTVAL`` register in the register dump. If this address is zero, it usually means that application attempted to dereference a NULL pointer. If this address is close to zero, it usually means that application attempted to access member of a structure, but the pointer to the structure was NULL. If this address is something else (garbage value, not in ``0x3fxxxxxx`` - ``0x6xxxxxxx`` range), it likely means that the pointer used to access the data was either not initialized or was corrupted.
+
+    Breakpoint
+    ^^^^^^^^^^
+
+    This CPU exception happens when the instruction ``EBREAK`` is executed.
+
+    Load address misaligned, Store address misaligned
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+    Application has attempted to read or write memory location, and address alignment did not match load/store size. For example, 32-bit load can only be done from 4-byte aligned address, and 16-bit load can only be done from a 2-byte aligned address.
 
 Interrupt wdt timeout on CPU0 / CPU1
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Indicates that interrupt watchdog timeout has occured. See :doc:`Watchdogs <../api-reference/system/wdts>` for more information.
 
-Cache disabled but cached memory region accessed
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+|CACHE_ERR_MSG|
+^^^^^^^^^^^^^^^
 
 In some situations ESP-IDF will temporarily disable access to external SPI Flash and SPI RAM via caches. For example, this happens with spi_flash APIs are used to read/write/erase/mmap regions of SPI Flash. In these situations, tasks are suspended, and interrupt handlers not registered with ``ESP_INTR_FLAG_IRAM`` are disabled. Make sure that any interrupt handlers registered with this flag have all the code and data in IRAM/DRAM. Refer to the :ref:`SPI flash API documentation <iram-safe-interrupt-handlers>` for more details.
 
@@ -261,7 +343,8 @@ Other Fatal Errors
 Brownout
 ^^^^^^^^
 
-ESP32 has a built-in brownout detector, which is enabled by default. Brownout detector can trigger system reset if supply voltage goes below safe level. Brownout detector can be configured using :ref:`CONFIG_ESP32_BROWNOUT_DET` and :ref:`CONFIG_ESP32_BROWNOUT_DET_LVL_SEL` options.
+{IDF_TARGET_NAME} has a built-in brownout detector, which is enabled by default. Brownout detector can trigger system reset if supply voltage goes below safe level. Brownout detector can be configured using :ref:`CONFIG_{IDF_TARGET_CFG_PREFIX}_BROWNOUT_DET` and :ref:`CONFIG_{IDF_TARGET_CFG_PREFIX}_BROWNOUT_DET_LVL_SEL` options.
+
 When brownout detector triggers, the following message is printed::
 
     Brownout detector was triggered
@@ -295,3 +378,14 @@ Stack smashing protection (based on GCC ``-fstack-protector*`` flags) can be ena
 
 The backtrace should point to the function where stack smashing has occured. Check the function code for unbounded access to local arrays.
 
+.. only:: CONFIG_IDF_TARGET_ARCH_XTENSA
+
+    .. |CPU_EXCEPTIONS_LIST| replace:: Illegal Instruction, Load/Store Alignment Error, Load/Store Prohibited error, Double Exception.
+    .. |ILLEGAL_INSTR_MSG| replace:: IllegalInstruction
+    .. |CACHE_ERR_MSG| replace:: Cache disabled but cached memory region accessed
+
+.. only:: CONFIG_IDF_TARGET_ARCH_RISCV
+
+    .. |CPU_EXCEPTIONS_LIST| replace:: Illegal Instruction, Load/Store Alignment Error, Load/Store Prohibited error.
+    .. |ILLEGAL_INSTR_MSG| replace:: Illegal instruction
+    .. |CACHE_ERR_MSG| replace:: Cache error

@@ -1,3 +1,6 @@
+| Supported Targets | ESP32 | ESP32-C3 |
+| ----------------- | ----- | -------- |
+
 # ESP-IDF SPP GATT CLIENT demo
 
   In Bluetooth classic (BR/EDR) systems, a Serial Port Profile (SPP) is an adopted profile defined by the Bluetooth Special Interest Group (SIG) used to emulate a serial port connection over a Bluetooth wireless connection. For BLE systems, an adopted SPP profile over BLE is not defined, thus emulation of a serial port must be implemented as a vendor-specific custom profile.
@@ -81,7 +84,7 @@
 Build each project and flash it to the board, then run monitor tool to view serial output:
 
 ```
-make -j4 flash monitor
+idf.py -p PORT flash monitor
 ```
 
 (To exit the serial monitor, type ``Ctrl-]``.)
