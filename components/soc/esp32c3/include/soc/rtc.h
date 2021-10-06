@@ -122,6 +122,15 @@ set sleep_init default param
 #define RTC_CNTL_PD_CUR_SLEEP_DEFAULT  1
 #define RTC_CNTL_DG_VDD_DRV_B_SLP_DEFAULT 254
 
+/*
+The follow value is used to get a reasonable rtc voltage dbias value according to digital dbias & some other value
+storing in efuse (based on ATE 5k ECO3 chips)
+*/
+#define K_RTC_MID_MUL10000 215
+#define K_DIG_MID_MUL10000 213
+#define V_RTC_MID_MUL10000  10800
+#define V_DIG_MID_MUL10000  10860
+
 /**
  * @brief Possible main XTAL frequency values.
  *
@@ -197,7 +206,8 @@ typedef enum {
 typedef enum {
     RTC_CAL_RTC_MUX = 0,       //!< Currently selected RTC SLOW_CLK
     RTC_CAL_8MD256 = 1,        //!< Internal 8 MHz RC oscillator, divided by 256
-    RTC_CAL_32K_XTAL = 2       //!< External 32 kHz XTAL
+    RTC_CAL_32K_XTAL = 2,      //!< External 32 kHz XTAL
+    RTC_CAL_INTERNAL_OSC = 3   //!< Internal 150 kHz oscillator
 } rtc_cal_sel_t;
 
 /**

@@ -29,7 +29,7 @@ Here is the summary printed for the "Single factory app, no OTA" configuration::
   phy_init, data, phy,     0xf000,  0x1000,
   factory,  app,  factory, 0x10000, 1M,
 
-* At a 0x10000 (64KB) offset in the flash is the app labelled "factory". The bootloader will run this app by default.
+* At a 0x10000 (64 KB) offset in the flash is the app labelled "factory". The bootloader will run this app by default.
 * There are also two data regions defined in the partition table for storing NVS library partition and PHY init data.
 
 Here is the summary printed for the "Factory app, two OTA definitions" configuration::
@@ -99,7 +99,7 @@ See enum :cpp:type:`esp_partition_subtype_t` for the full list of subtypes defin
 
     - OTA never updates the factory partition.
     - If you want to conserve flash usage in an OTA project, you can remove the factory partition and use ``ota_0`` instead.
-  
+
   - ``ota_0`` (0x10) ... ``ota_15`` (0x1F) are the OTA app slots. When :doc:`OTA <../api-reference/system/ota>` is in use, the OTA data partition configures which app slot the bootloader should boot. When using OTA, an application should have at least two OTA application slots (``ota_0`` & ``ota_1``). Refer to the :doc:`OTA documentation <../api-reference/system/ota>` for more details.
   - ``test`` (0x20) is a reserved subtype for factory test procedures. It will be used as the fallback boot partition if no other valid app partition is found. It is also possible to configure the bootloader to read a GPIO input during each boot, and boot this partition if the GPIO is held low, see :ref:`bootloader_boot_from_test_firmware`.
 
@@ -169,12 +169,37 @@ To display the contents of a binary partition table on stdout (this is how the s
 
   python gen_esp32part.py binary_partitions.bin
 
+Partition Size Checks
+---------------------
+
+The ESP-IDF build system will automatically check if generated binaries fit in the available partition space, and will fail with an error if a binary is too large.
+
+Currently these checks are performed for the following binaries:
+
+* Bootloader binary must fit in space before partition table (see :ref:`bootloader-size`).
+* App binary should fit in at least one partition of type "app". If the app binary doesn't fit in any app partition, the build will fail. If it only fits in some of the app partitions, a warning is printed about this.
+
+.. note::
+
+   Although the build process will fail if the size check returns an error, the binary files are still generated and can be flashed (although they may not work if they are too large for the available space.)
+
+.. note::
+
+   Build system binary size checks are only performed when using the CMake build system. When using the legacy GNU Make build system, file sizes can be checked manually or an error will be logged during boot.
+
 MD5 checksum
 ~~~~~~~~~~~~
 
 The binary format of the partition table contains an MD5 checksum computed based on the partition table. This checksum is used for checking the integrity of the partition table during the boot.
 
-The MD5 checksum generation can be disabled by the ``--disable-md5sum`` option of ``gen_esp32part.py`` or by the :ref:`CONFIG_PARTITION_TABLE_MD5` option. This is useful for example when one uses a legacy bootloader which cannot process MD5 checksums and the boot fails with the error message ``invalid magic number 0xebeb``.
+.. only:: esp32
+
+    The MD5 checksum generation can be disabled by the ``--disable-md5sum`` option of ``gen_esp32part.py`` or by the :ref:`CONFIG_PARTITION_TABLE_MD5` option. This is useful for example when one :ref:`uses a bootloader from ESP-IDF before v3.1 <CONFIG_ESP32_COMPATIBLE_PRE_V3_1_BOOTLOADERS>` which cannot process MD5 checksums and the boot fails with the error message ``invalid magic number 0xebeb``.
+
+.. only:: not esp32
+
+    The MD5 checksum generation can be disabled by the ``--disable-md5sum`` option of ``gen_esp32part.py`` or by the :ref:`CONFIG_PARTITION_TABLE_MD5` option.
+
 
 Flashing the partition table
 ----------------------------

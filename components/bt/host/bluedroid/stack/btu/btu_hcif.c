@@ -1071,6 +1071,9 @@ static void btu_hcif_hdl_command_complete (UINT16 opcode, UINT8 *p, UINT16 evt_l
     case HCI_BLE_TEST_END:
         btm_ble_test_command_complete(p);
         break;
+    case HCI_BLE_CREATE_CONN_CANCEL:
+        btm_ble_create_conn_cancel_complete(p);
+        break;
 
 #if (defined BLE_PRIVACY_SPT && BLE_PRIVACY_SPT == TRUE)
     case HCI_BLE_ADD_DEV_RESOLVING_LIST:
@@ -2068,6 +2071,8 @@ static void btu_ble_ext_adv_report_evt(UINT8 *p, UINT16 evt_len)
     UINT8 num_reports = {0};
     //UINT8 legacy_event_type = 0;
     UINT16 evt_type = 0;
+    uint8_t addr_type;
+    BD_ADDR bda;
 
     if (!p) {
         HCI_TRACE_ERROR("%s, Invalid params.", __func__);
@@ -2099,8 +2104,16 @@ static void btu_ble_ext_adv_report_evt(UINT8 *p, UINT16 evt_len)
             }
         }
 
-        STREAM_TO_UINT8(ext_adv_report.addr_type, p);
-        STREAM_TO_BDADDR(ext_adv_report.addr, p);
+        STREAM_TO_UINT8(addr_type, p);
+        STREAM_TO_BDADDR(bda, p);
+        // if it is an anonymous adv, skip address resolution
+        if(addr_type != 0xFF) {
+#if (defined BLE_PRIVACY_SPT && BLE_PRIVACY_SPT == TRUE)
+            btm_identity_addr_to_random_pseudo(bda, &addr_type, FALSE);
+#endif
+        }
+        ext_adv_report.addr_type = addr_type;
+        memcpy(ext_adv_report.addr, bda, 6);
         STREAM_TO_UINT8(ext_adv_report.primary_phy, p);
         STREAM_TO_UINT8(ext_adv_report.secondry_phy, p);
         STREAM_TO_UINT8(ext_adv_report.sid, p);

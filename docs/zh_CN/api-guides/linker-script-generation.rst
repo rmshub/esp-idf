@@ -388,7 +388,10 @@ ESP-IDF v4.0 变更了链接器脚本片段文件使用的一些语法：
 
 这些生成的包罗规则将用于未指定映射规则的情况。
 
-``默认`` 协议在 :component_file:`esp_system/app.lf` 文件中定义，快速上手指南中提到的内置 ``noflash`` 协议和 ``rtc`` 协议也在该文件中定义。
+
+``默认`` 协议在 :component_file:`esp_system/app.lf` 文件中定义。
+快速上手指南中提到的内置 ``noflash`` 协议和 ``rtc`` 协议也在该文件中定义。
+
 
 .. _ldgen-mapping-fragment :
 
@@ -511,19 +514,18 @@ ESP-IDF v4.0 变更了链接器脚本片段文件使用的一些语法：
 .. code-block:: none
 
     . = ALIGN(8)
-    __my_sym_start = ABSOLUTE(.)
+    _my_sym_start = ABSOLUTE(.)
     KEEP(lib1.a:obj1.*( SORT(.rodata) SORT(.rodata.*) ))
-    __my_sym_end = ABSOLUTE(.)
+    _my_sym_end = ABSOLUTE(.)
 
 注意，正如在 flag 描述中提到的，ALIGN 和 SURROUND 的使用对顺序敏感，因此如果将两者顺序调换后用到相同的映射片段，则会生成：
 
 .. code-block:: none
 
-    __my_sym_start = ABSOLUTE(.)
+    _my_sym_start = ABSOLUTE(.)
     . = ALIGN(8)
     KEEP(lib1.a:obj1.*( SORT(.rodata) SORT(.rodata.*) ))
-    __my_sym_end = ABSOLUTE(.)
-
+    _my_sym_end = ABSOLUTE(.)
 
 .. _ldgen-symbol-granularity-placements :
 
@@ -617,4 +619,4 @@ ESP-IDF v4.0 变更了链接器脚本片段文件使用的一些语法：
 
     这是根据默认协议条目 ``iram -> iram0_text`` 生成的规则。默认协议指定了 ``iram -> iram0_text`` 条目，因此生成的规则同样也放在被 ``iram0_text`` 标记的地方。由于该规则是根据默认协议生成的，因此在同一目标下收集的所有规则下排在第一位。
 
-    目前使用的链接器脚本模板是 :component_file:`{IDF_TARGET_PATH_NAME}/ld/{IDF_TARGET_PATH_NAME}.project.ld.in`，由 ``{IDF_TARGET_PATH_NAME}`` 组件指定，生成的脚本存放在构建目录下。
+    目前使用的链接器脚本模板是 :component_file:`esp_system/ld/{IDF_TARGET_PATH_NAME}/sections.ld.in`，生成的脚本存放在构建目录下。

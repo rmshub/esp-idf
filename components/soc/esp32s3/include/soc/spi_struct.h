@@ -1,4 +1,4 @@
-// Copyright 2017-2018 Espressif Systems (Shanghai) PTE LTD
+// Copyright 2017-2021 Espressif Systems (Shanghai) PTE LTD
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,11 +13,14 @@
 // limitations under the License.
 #ifndef _SOC_SPI_STRUCT_H_
 #define _SOC_SPI_STRUCT_H_
+
+
+#include <stdint.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-typedef volatile struct {
+typedef volatile struct spi_dev_s {
     union {
         struct {
             uint32_t conf_bitlen                   :    18;  /*Define the APB cycles of  SPI_CONF state. Can be configured in CONF state.*/
@@ -32,7 +35,7 @@ typedef volatile struct {
     union {
         struct {
             uint32_t reserved0                     :    3;  /*reserved*/
-            uint32_t dummy_out                     :    1;  /*In the dummy phase the signal level of spi is output by the spi controller. Can be configured in CONF state.*/
+            uint32_t dummy_out                     :    1;  /*0: In the dummy phase, the FSPI bus signals are not output. 1: In the dummy phase, the FSPI bus signals are output. Can be configured in CONF state.*/
             uint32_t reserved4                     :    1;  /*reserved*/
             uint32_t faddr_dual                    :    1;  /*Apply 2 signals during addr phase 1:enable 0: disable. Can be configured in CONF state.*/
             uint32_t faddr_quad                    :    1;  /*Apply 4 signals during addr phase 1:enable 0: disable. Can be configured in CONF state.*/
@@ -145,7 +148,7 @@ typedef volatile struct {
             uint32_t reserved25                    :    4;  /*reserved*/
             uint32_t ck_idle_edge                  :    1;  /*1: spi clk line is high when idle     0: spi clk line is low when idle. Can be configured in CONF state.*/
             uint32_t cs_keep_active                :    1;  /*spi cs line keep low when the bit is set. Can be configured in CONF state.*/
-            uint32_t quad_din_pin_swap             :    1;  /*1:  spi quad input swap enable  0:  spi quad input swap disable. Can be configured in CONF state.*/
+            uint32_t quad_din_pin_swap             :    1;  /*1: SPI quad input swap enable, swap FSPID with FSPIQ, swap FSPIWP with FSPIHD. 0:  spi quad input swap disable. Can be configured in CONF state.*/
         };
         uint32_t val;
     } misc;
@@ -420,4 +423,6 @@ extern spi_dev_t GPSPI3;
 }
 #endif
 
-#endif  /* _SOC_SPI_STRUCT_H_ */
+
+
+#endif /*_SOC_SPI_STRUCT_H_ */

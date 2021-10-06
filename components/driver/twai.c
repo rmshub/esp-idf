@@ -1,16 +1,8 @@
-// Copyright 2015-2018 Espressif Systems (Shanghai) PTE LTD
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+/*
+ * SPDX-FileCopyrightText: 2015-2021 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 
 #include "sdkconfig.h"
@@ -138,6 +130,7 @@ static inline void twai_handle_rx_buffer_frames(BaseType_t *task_woken, int *ale
             //Valid frame copied from RX buffer
             if (xQueueSendFromISR(p_twai_obj->rx_queue, &frame, task_woken) == pdTRUE) {
                 p_twai_obj->rx_msg_count++;
+                twai_alert_handler(TWAI_ALERT_RX_DATA, alert_req);
             } else {    //Failed to send to queue
                 p_twai_obj->rx_missed_count++;
                 twai_alert_handler(TWAI_ALERT_RX_QUEUE_FULL, alert_req);
@@ -157,6 +150,7 @@ static inline void twai_handle_rx_buffer_frames(BaseType_t *task_woken, int *ale
             //Valid frame copied from RX buffer
             if (xQueueSendFromISR(p_twai_obj->rx_queue, &frame, task_woken) == pdTRUE) {
                 p_twai_obj->rx_msg_count++;
+                twai_alert_handler(TWAI_ALERT_RX_DATA, alert_req);
             } else {
                 p_twai_obj->rx_missed_count++;
                 twai_alert_handler(TWAI_ALERT_RX_QUEUE_FULL, alert_req);
@@ -399,8 +393,6 @@ cleanup:
     return NULL;
 }
 
-
-
 /* ---------------------------- Public Functions ---------------------------- */
 
 esp_err_t twai_driver_install(const twai_general_config_t *g_config, const twai_timing_config_t *t_config, const twai_filter_config_t *f_config)
@@ -412,11 +404,7 @@ esp_err_t twai_driver_install(const twai_general_config_t *g_config, const twai_
     TWAI_CHECK(g_config->rx_queue_len > 0, ESP_ERR_INVALID_ARG);
     TWAI_CHECK(g_config->tx_io >= 0 && g_config->tx_io < GPIO_NUM_MAX, ESP_ERR_INVALID_ARG);
     TWAI_CHECK(g_config->rx_io >= 0 && g_config->rx_io < GPIO_NUM_MAX, ESP_ERR_INVALID_ARG);
-#if (CONFIG_ESP32_REV_MIN >= 2)
-    TWAI_CHECK(t_config->brp >= SOC_TWAI_BRP_MIN && t_config->brp <= SOC_TWAI_BRP_MAX_ECO, ESP_ERR_INVALID_ARG);
-#else
     TWAI_CHECK(t_config->brp >= SOC_TWAI_BRP_MIN && t_config->brp <= SOC_TWAI_BRP_MAX, ESP_ERR_INVALID_ARG);
-#endif
 #ifndef CONFIG_TWAI_ISR_IN_IRAM
     TWAI_CHECK(!(g_config->intr_flags & ESP_INTR_FLAG_IRAM), ESP_ERR_INVALID_ARG);
 #endif

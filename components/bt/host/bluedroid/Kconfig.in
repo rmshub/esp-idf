@@ -42,7 +42,7 @@ config BT_BLUEDROID_MEM_DEBUG
 
 config BT_CLASSIC_ENABLED
     bool "Classic Bluetooth"
-    depends on BT_BLUEDROID_ENABLED && BT_CTRL_ESP32
+    depends on BT_BLUEDROID_ENABLED && IDF_TARGET_ESP32
     default n
     help
         For now this option needs "SMP_ENABLE" to be set to yes
@@ -99,12 +99,26 @@ config BT_HFP_WBS_ENABLE
         This enables Wide Band Speech. Should disable it when SCO data path is PCM.
         Otherwise there will be no data transmited via GPIOs.
 
-config BT_HID_HOST_ENABLED
-    bool "Classic BT HID Host"
+config BT_HID_ENABLED
+    bool "Classic BT HID"
     depends on BT_CLASSIC_ENABLED
     default n
     help
         This enables the BT HID Host
+
+choice BT_HID_ROLE
+    prompt "Profile Role configuration"
+    depends on BT_HID_ENABLED
+    config BT_HID_HOST_ENABLED
+        bool "Classic BT HID Host"
+        help
+            This enables the BT HID Host
+
+    config BT_HID_DEVICE_ENABLED
+        bool "Classic BT HID Device"
+        help
+            This enables the BT HID Device
+endchoice
 
 config BT_SSP_ENABLED
     bool "Secure Simple Pairing"
@@ -142,6 +156,16 @@ config BT_BLE_BLUFI_ENABLE
     default n
     help
         This option can be close when the app does not require blufi function.
+
+config BT_GATT_MAX_SR_PROFILES
+    int "Max GATT Server Profiles"
+    depends on BT_GATTS_ENABLE && BT_BLUEDROID_ENABLED
+    range 1 32
+    default 8
+    help
+        Maximum GATT Server Profiles Count
+
+
 
 choice BT_GATTS_SEND_SERVICE_CHANGE_MODE
     prompt "GATTS Service Change Mode"
@@ -182,6 +206,14 @@ config BT_GATTC_CACHE_NVS_FLASH
     default n
     help
         This select can save gattc cache data to nvs flash
+
+config BT_GATTC_CONNECT_RETRY_COUNT
+    int "The number of attempts to reconnect if the connection establishment failed"
+    depends on BT_GATTC_ENABLE
+    range 0 7
+    default 3
+    help
+        The number of attempts to reconnect if the connection establishment failed
 
 config BT_BLE_SMP_ENABLE
     bool "Include BLE security module(SMP)"
@@ -945,7 +977,6 @@ menu "BT DEBUG LOG LEVEL"
 
 endmenu #BT DEBUG LOG LEVEL
 
-
 config BT_ACL_CONNECTIONS
     int "BT/BLE MAX ACL CONNECTIONS(1~7)"
     depends on BT_BLUEDROID_ENABLED
@@ -953,6 +984,13 @@ config BT_ACL_CONNECTIONS
     default 4
     help
         Maximum BT/BLE connection count
+
+config BT_MULTI_CONNECTION_ENBALE
+    bool "Enable BLE multi-conections"
+    depends on BT_BLUEDROID_ENABLED
+    default y
+    help
+        Enable this option if there are multiple connections
 
 config BT_ALLOCATION_FROM_SPIRAM_FIRST
     bool "BT/BLE will first malloc the memory from the PSRAM"
@@ -1032,8 +1070,3 @@ config BT_BLE_42_FEATURES_SUPPORTED
     default n
     help
         This enables BLE 4.2 features.
-
-config BT_RESERVE_DRAM
-    hex
-    default 0xdb5c if BT_ENABLED
-    default 0

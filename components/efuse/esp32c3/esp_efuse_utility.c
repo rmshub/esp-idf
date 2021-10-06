@@ -1,16 +1,8 @@
-// Copyright 2017-2020 Espressif Systems (Shanghai) PTE LTD
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+/*
+ * SPDX-FileCopyrightText: 2017-2021 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 #include <sys/param.h>
 #include "sdkconfig.h"
@@ -63,8 +55,15 @@ const esp_efuse_range_addr_t range_write_addr_blocks[] = {
 // Update Efuse timing configuration
 static esp_err_t esp_efuse_set_timing(void)
 {
-    uint32_t clock_hz = esp_clk_apb_freq();
-    return ets_efuse_set_timing(clock_hz) ? ESP_FAIL : ESP_OK;
+    // efuse clock is fixed in ESP32-C3, so the ets_efuse_set_timing() function
+    // takes an argument for compatibility with older ROM functions but it's ignored.
+    int res = ets_efuse_set_timing(0);
+    assert(res == 0);
+    (void)res;
+
+    REG_SET_FIELD(EFUSE_WR_TIM_CONF2_REG, EFUSE_PWR_OFF_NUM, 0x60);
+
+    return ESP_OK;
 }
 #endif // ifndef CONFIG_EFUSE_VIRTUAL
 
@@ -76,7 +75,7 @@ void esp_efuse_utility_clear_program_registers(void)
 }
 
 // Burn values written to the efuse write registers
-void esp_efuse_utility_burn_efuses(void)
+void esp_efuse_utility_burn_chip(void)
 {
 #ifdef CONFIG_EFUSE_VIRTUAL
     ESP_LOGW(TAG, "Virtual efuses enabled: Not really burning eFuses");
@@ -86,6 +85,9 @@ void esp_efuse_utility_burn_efuses(void)
             virt_blocks[num_block][subblock++] |= REG_READ(addr_wr_block);
         }
     }
+#ifdef CONFIG_EFUSE_VIRTUAL_KEEP_IN_FLASH
+    esp_efuse_utility_write_efuses_to_flash();
+#endif
 #else
     if (esp_efuse_set_timing() != ESP_OK) {
         ESP_LOGE(TAG, "Efuse fields are not burnt");

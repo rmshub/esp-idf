@@ -6,13 +6,8 @@ idf_build_get_property(python PYTHON)
 idf_build_get_property(idf_path IDF_PATH)
 
 set(chip_model ${target})
-if(target STREQUAL "esp32s3")
-    if(CONFIG_IDF_TARGET_ESP32S3_BETA_VERSION_3)
-        set(chip_model "esp32s3beta3")
-    endif()
-endif()
 
-set(ESPTOOLPY ${python} "${CMAKE_CURRENT_LIST_DIR}/esptool/esptool.py" --chip ${chip_model})
+set(ESPTOOLPY ${python} "$ENV{ESPTOOL_WRAPPER}" "${CMAKE_CURRENT_LIST_DIR}/esptool/esptool.py" --chip ${chip_model})
 set(ESPSECUREPY ${python} "${CMAKE_CURRENT_LIST_DIR}/esptool/espsecure.py")
 set(ESPEFUSEPY ${python} "${CMAKE_CURRENT_LIST_DIR}/esptool/espefuse.py")
 set(ESPMONITOR ${python} "${idf_path}/tools/idf_monitor.py")
@@ -20,6 +15,8 @@ set(ESPMONITOR ${python} "${idf_path}/tools/idf_monitor.py")
 set(ESPFLASHMODE ${CONFIG_ESPTOOLPY_FLASHMODE})
 set(ESPFLASHFREQ ${CONFIG_ESPTOOLPY_FLASHFREQ})
 set(ESPFLASHSIZE ${CONFIG_ESPTOOLPY_FLASHSIZE})
+
+set(ESPTOOLPY_CHIP "${chip_model}")
 
 set(ESPTOOLPY_FLASH_OPTIONS
     --flash_mode ${ESPFLASHMODE}
@@ -49,7 +46,7 @@ endif()
 
 if(min_rev)
     list(APPEND esptool_elf2image_args --min-rev ${min_rev})
-    set(monitor_rev_args --revision ${min_rev})
+    set(monitor_rev_args "--revision;${min_rev}")
     unset(min_rev)
 endif()
 
@@ -155,7 +152,7 @@ add_custom_target(monitor
     COMMAND ${CMAKE_COMMAND}
     -D IDF_PATH="${idf_path}"
     -D SERIAL_TOOL="${ESPMONITOR}"
-    -D SERIAL_TOOL_ARGS="--target ${target} ${monitor_rev_args} ${elf_dir}/${elf}"
+    -D SERIAL_TOOL_ARGS="--target;${target};${monitor_rev_args};${elf_dir}/${elf}"
     -D WORKING_DIRECTORY="${build_dir}"
     -P run_serial_tool.cmake
     WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}

@@ -113,6 +113,9 @@ extern "C" {
 #define RTC_CNTL_CK8M_DFREQ_DEFAULT 172
 #define RTC_CNTL_SCK_DCAP_DEFAULT   255
 
+#define RTC_CNTL_ULPCP_TOUCH_START_WAIT_IN_SLEEP    (0xFF)
+#define RTC_CNTL_ULPCP_TOUCH_START_WAIT_DEFAULT     (0x10)
+
 /*
 set sleep_init default param
 */
@@ -139,6 +142,13 @@ set sleep_init default param
 typedef enum {
     RTC_XTAL_FREQ_40M = 40,     //!< 40 MHz XTAL
 } rtc_xtal_freq_t;
+
+/** @brief Fixed crystal frequency for this SoC
+
+    On an SoC where only one crystal frequency is supported,
+    using this macro is an alternative to calling rtc_clk_xtal_freq_get()
+ */
+#define RTC_XTAL_FREQ RTC_XTAL_FREQ_40M
 
 /**
  * @brief CPU frequency values
@@ -205,7 +215,8 @@ typedef enum {
 typedef enum {
     RTC_CAL_RTC_MUX = 0,       //!< Currently selected RTC SLOW_CLK
     RTC_CAL_8MD256 = 1,        //!< Internal 8 MHz RC oscillator, divided by 256
-    RTC_CAL_32K_XTAL = 2       //!< External 32 kHz XTAL
+    RTC_CAL_32K_XTAL = 2,      //!< External 32 kHz XTAL
+    RTC_CAL_INTERNAL_OSC = 3   //!< Internal 150 kHz oscillator
 } rtc_cal_sel_t;
 
 /**
@@ -312,22 +323,15 @@ void rtc_clk_init(rtc_clk_config_t cfg);
 /**
  * @brief Get main XTAL frequency
  *
- * This is the value stored in RTC register RTC_XTAL_FREQ_REG by the bootloader. As passed to
- * rtc_clk_init function
+ * Result is a constant as XTAL frequency is fixed.
  *
- * @return XTAL frequency, one of rtc_xtal_freq_t
+ * @note Function is included for ESP32 compatible code only. Code which only
+ * needs to support this SoC can use the macro RTC_XTAL_FREQ for this SoC's
+ * fixed crystal value.
+ *
+ * @return XTAL frequency in MHz, RTC_XTAL_FREQ_40M
  */
 rtc_xtal_freq_t rtc_clk_xtal_freq_get(void);
-
-/**
- * @brief Update XTAL frequency
- *
- * Updates the XTAL value stored in RTC_XTAL_FREQ_REG. Usually this value is ignored
- * after startup.
- *
- * @param xtal_freq New frequency value
- */
-void rtc_clk_xtal_freq_update(rtc_xtal_freq_t xtal_freq);
 
 /**
  * @brief Enable or disable 32 kHz XTAL oscillator

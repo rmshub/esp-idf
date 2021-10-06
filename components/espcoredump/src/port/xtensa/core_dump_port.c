@@ -228,7 +228,7 @@ static esp_err_t esp_core_dump_get_regs_from_stack(void* stack_addr,
             regs->ar[i] = stack_arr[XT_STK_AR_START + i];
         }
         regs->sar = exc_frame->sar;
-#if CONFIG_IDF_TARGET_ESP32
+#if XCHAL_HAVE_LOOPS
         regs->lbeg = exc_frame->lbeg;
         regs->lend = exc_frame->lend;
         regs->lcount = exc_frame->lcount;
@@ -473,6 +473,8 @@ uint32_t esp_core_dump_get_extra_info(void **info)
     return sizeof(s_extra_info);
 }
 
+#if CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH && CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF
+
 void esp_core_dump_summary_parse_extra_info(esp_core_dump_summary_t *summary, void *ei_data)
 {
     int i;
@@ -513,6 +515,10 @@ void esp_core_dump_summary_parse_exc_regs(esp_core_dump_summary_t *summary, void
 void esp_core_dump_summary_parse_backtrace_info(esp_core_dump_bt_info_t *bt_info, const void *vaddr,
                                                 const void *paddr, uint32_t stack_size)
 {
+    if (!vaddr || !paddr || !bt_info) {
+        return;
+    }
+
     int offset;
     bool corrupted;
     esp_backtrace_frame_t frame;
@@ -558,5 +564,7 @@ void esp_core_dump_summary_parse_backtrace_info(esp_core_dump_bt_info_t *bt_info
     bt_info->depth = index;
     bt_info->corrupted = corrupted;
 }
+
+#endif /* #if CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH && CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF */
 
 #endif

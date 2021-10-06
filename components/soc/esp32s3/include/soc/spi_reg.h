@@ -1,4 +1,4 @@
-// Copyright 2017-2018 Espressif Systems (Shanghai) PTE LTD
+// Copyright 2017-2021 Espressif Systems (Shanghai) PTE LTD
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,10 +15,10 @@
 #define _SOC_SPI_REG_H_
 
 
+#include "soc.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
-#include "soc.h"
 
 #define SPI_CMD_REG(i)          (REG_SPI_BASE(i) + 0x0)
 /* SPI_USR : R/W/SC ;bitpos:[24] ;default: 1'b0 ; */
@@ -158,8 +158,8 @@ ONF state..*/
 #define SPI_FADDR_DUAL_V  0x1
 #define SPI_FADDR_DUAL_S  5
 /* SPI_DUMMY_OUT : R/W ;bitpos:[3] ;default: 1'b0 ; */
-/*description: In the dummy phase the signal level of spi is output by the spi controller. Can
-be configured in CONF state..*/
+/*description: 0: In the dummy phase, the FSPI bus signals are not output. 1: In the dummy phas
+e, the FSPI bus signals are output. Can be configured in CONF state..*/
 #define SPI_DUMMY_OUT    (BIT(3))
 #define SPI_DUMMY_OUT_M  (BIT(3))
 #define SPI_DUMMY_OUT_V  0x1
@@ -426,8 +426,8 @@ the configured bit length in slave mode DMA RX controlled transfer. The register
 
 #define SPI_MISC_REG(i)          (REG_SPI_BASE(i) + 0x20)
 /* SPI_QUAD_DIN_PIN_SWAP : R/W ;bitpos:[31] ;default: 1'b0 ; */
-/*description: 1:  spi quad input swap enable  0:  spi quad input swap disable. Can be configur
-ed in CONF state..*/
+/*description: 1: SPI quad input swap enable, swap FSPID with FSPIQ, swap FSPIWP with FSPIHD. 0
+:  spi quad input swap disable. Can be configured in CONF state..*/
 #define SPI_QUAD_DIN_PIN_SWAP    (BIT(31))
 #define SPI_QUAD_DIN_PIN_SWAP_M  (BIT(31))
 #define SPI_QUAD_DIN_PIN_SWAP_V  0x1
@@ -1740,7 +1740,7 @@ M. 0: XTAL CLK..*/
 #define SPI_CLK_EN_S  0
 
 #define SPI_DATE_REG(i)          (REG_SPI_BASE(i) + 0xF0)
-/* SPI_DATE : R/W ;bitpos:[27:0] ;default: 28'h2012290 ; */
+/* SPI_DATE : R/W ;bitpos:[27:0] ;default: 28'h2101190 ; */
 /*description: SPI register version..*/
 #define SPI_DATE    0x0FFFFFFF
 #define SPI_DATE_M  ((SPI_DATE_V)<<(SPI_DATE_S))

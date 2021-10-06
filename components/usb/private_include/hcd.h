@@ -1,16 +1,8 @@
-// Copyright 2015-2020 Espressif Systems (Shanghai) PTE LTD
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+/*
+ * SPDX-FileCopyrightText: 2015-2021 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 #pragma once
 
@@ -21,9 +13,9 @@ extern "C" {
 #include <stdint.h>
 #include <stdbool.h>
 #include <sys/queue.h>
-#include "hal/usb_types.h"
-#include "hal/usbh_hal.h"
 #include "esp_err.h"
+#include "usb_private.h"
+#include "usb/usb_types_ch9.h"
 
 // ------------------------------------------------- Macros & Types ----------------------------------------------------
 
@@ -39,7 +31,7 @@ extern "C" {
  */
 typedef enum {
     HCD_PORT_STATE_NOT_POWERED,     /**< The port is not powered */
-    HCD_PORT_STATE_DISCONNECTED,    /**< The port is powered but no device is conencted */
+    HCD_PORT_STATE_DISCONNECTED,    /**< The port is powered but no device is connected */
     HCD_PORT_STATE_DISABLED,        /**< A device has connected to the port but has not been reset. SOF/keep alive are not being sent */
     HCD_PORT_STATE_RESETTING,       /**< The port is issuing a reset condition */
     HCD_PORT_STATE_SUSPENDED,       /**< The port has been suspended. */
@@ -52,19 +44,15 @@ typedef enum {
  * @brief States of an HCD pipe
  *
  * Active:
- *  - Pipe is able to transmit data. Transfer request can be enqueued.
- *  - Event if pipe has no transfer requests enqueued, it can still be in the active state.
+ *  - Pipe is able to transmit data. URBs can be enqueued.
+ *  - Even if pipe has no URBs enqueued, it can still be in the active state.
  * Halted:
- *  - An error has occurred on the pipe. Transfer request will no longer be executed.
- *  - Halt should be cleared using the clear command
- * Invalid:
- *  - The underlying device that the pipe connects is not longer valid, thus making the pipe invalid.
- *  - Pending transfer requests should be dequeued and the pipe should be freed.
+ *  - An error has occurred on the pipe. URBs will no longer be executed.
+ *  - Halt should be cleared using the HCD_PIPE_CMD_CLEAR command
  */
 typedef enum {
     HCD_PIPE_STATE_ACTIVE,          /**< The pipe is active */
     HCD_PIPE_STATE_HALTED,          /**< The pipe is halted */
-    HCD_PIPE_STATE_INVALID,         /**< The pipe no longer exists and should be freed */
 } hcd_pipe_state_t;
 
 // ----------------------- Events --------------------------
@@ -75,27 +63,23 @@ typedef enum {
  * On receiving a port event, hcd_port_handle_event() should be called to handle that event
  */
 typedef enum {
-    HCD_PORT_EVENT_NONE,            /**< No event has ocurred. Or the previous event is no longer valid */
+    HCD_PORT_EVENT_NONE,            /**< No event has occurred. Or the previous event is no longer valid */
     HCD_PORT_EVENT_CONNECTION,      /**< A device has been connected to the port */
     HCD_PORT_EVENT_DISCONNECTION,   /**< A device disconnection has been detected */
     HCD_PORT_EVENT_ERROR,           /**< A port error has been detected. Port is now HCD_PORT_STATE_RECOVERY  */
     HCD_PORT_EVENT_OVERCURRENT,     /**< Overcurrent detected on the port. Port is now HCD_PORT_STATE_RECOVERY */
-    HCD_PORT_EVENT_SUDDEN_DISCONN,  /**< The port has suddenly disconencted (i.e., there was an enabled device connected
-                                         to the port when the disconnection occurred. Port is now HCD_PORT_STATE_RECOVERY. */
 } hcd_port_event_t;
 
 /**
  * @brief HCD pipe events
  *
  * @note Pipe error events will put the pipe into the HCD_PIPE_STATE_HALTED state
- * @note The HCD_PIPE_EVENT_INVALID will put the pipe in the HCD_PIPE_STATE_INVALID state
  */
 typedef enum {
     HCD_PIPE_EVENT_NONE,                    /**< The pipe has no events (used to indicate no events when polling) */
-    HCD_PIPE_EVENT_XFER_REQ_DONE,           /**< The pipe has completed a transfer request and can be dequeued */
-    HCD_PIPE_EVENT_INVALID,                 /**< The pipe is invalid because  */
+    HCD_PIPE_EVENT_URB_DONE,                /**< The pipe has completed an URB. The URB can be dequeued */
     HCD_PIPE_EVENT_ERROR_XFER,              /**< Excessive (three consecutive) transaction errors (e.g., no ACK, bad CRC etc) */
-    HCD_PIPE_EVENT_ERROR_XFER_NOT_AVAIL,    /**< Transfer request was not available */
+    HCD_PIPE_EVENT_ERROR_URB_NOT_AVAIL,     /**< URB was not available */
     HCD_PIPE_EVENT_ERROR_OVERFLOW,          /**< Received more data than requested. Usually a Packet babble error
                                                  (i.e., an IN packet has exceeded the endpoint's MPS) */
     HCD_PIPE_EVENT_ERROR_STALL,             /**< Pipe received a STALL response received */
@@ -108,11 +92,12 @@ typedef enum {
  */
 typedef enum {
     HCD_PORT_CMD_POWER_ON,          /**< Power ON the port */
-    HCD_PORT_CMD_POWER_OFF,         /**< Power OFF the port */
+    HCD_PORT_CMD_POWER_OFF,         /**< Power OFF the port. If the port is enabled, this will cause a HCD_PORT_EVENT_SUDDEN_DISCONN event.
+                                         If the port is disabled, this will cause a HCD_PORT_EVENT_DISCONNECTION event. */
     HCD_PORT_CMD_RESET,             /**< Issue a reset on the port */
-    HCD_PORT_CMD_SUSPEND,           /**< Suspend the port */
+    HCD_PORT_CMD_SUSPEND,           /**< Suspend the port. All pipes must be halted */
     HCD_PORT_CMD_RESUME,            /**< Resume the port */
-    HCD_PORT_CMD_DISABLE,           /**< Disable the port (stops the SOFs or keep alive) */
+    HCD_PORT_CMD_DISABLE,           /**< Disable the port (stops the SOFs or keep alive). All pipes must be halted. */
 } hcd_port_cmd_t;
 
 /**
@@ -121,10 +106,9 @@ typedef enum {
  * The pipe commands represent the list of pipe manipulations outlined in 10.5.2.2. of USB2.0 specification.
  */
 typedef enum {
-    HCD_PIPE_CMD_ABORT,             /**< Retire all scheduled transfer requests. Pipe's state remains unchanged */
-    HCD_PIPE_CMD_RESET,             /**< Retire all scheduled transfer requests. Pipe's state moves to active */
-    HCD_PIPE_CMD_CLEAR,             /**< Pipe's state moves from halted to active */
-    HCD_PIPE_CMD_HALT               /**< Pipe's state moves to halted */
+    HCD_PIPE_CMD_HALT,              /**< Halt an active pipe. The currently executing URB will be canceled. Enqueued URBs are left untouched */
+    HCD_PIPE_CMD_FLUSH,             /**< Can only be called when halted. Will cause all enqueued URBs to be canceled */
+    HCD_PIPE_CMD_CLEAR,             /**< Causes a halted pipe to become active again. Any enqueued URBs will being executing.*/
 } hcd_pipe_cmd_t;
 
 // -------------------- Object Types -----------------------
@@ -140,23 +124,24 @@ typedef void * hcd_port_handle_t;
 typedef void * hcd_pipe_handle_t;
 
 /**
- * @brief HCD transfer request handle type
- */
-typedef void * hcd_xfer_req_handle_t;
-
-/**
  * @brief Port event callback type
  *
  * This callback is run when a port event occurs
  */
-typedef bool (*hcd_port_isr_callback_t)(hcd_port_handle_t port_hdl, hcd_port_event_t port_event, void *user_arg, bool in_isr);
+typedef bool (*hcd_port_callback_t)(hcd_port_handle_t port_hdl, hcd_port_event_t port_event, void *user_arg, bool in_isr);
 
 /**
  * @brief Pipe event callback
  *
  * This callback is run when a pipe event occurs
  */
-typedef bool (*hcd_pipe_isr_callback_t)(hcd_pipe_handle_t pipe_hdl, hcd_pipe_event_t pipe_event, void *user_arg, bool in_isr);
+typedef bool (*hcd_pipe_callback_t)(hcd_pipe_handle_t pipe_hdl, hcd_pipe_event_t pipe_event, void *user_arg, bool in_isr);
+
+typedef enum {
+    HCD_PORT_FIFO_BIAS_BALANCED,    /**< Balanced FIFO sizing for RX, Non-periodic TX, and periodic TX */
+    HCD_PORT_FIFO_BIAS_RX,          /**< Bias towards a large RX FIFO */
+    HCD_PORT_FIFO_BIAS_PTX,         /**< Bias towards periodic TX FIFO */
+} hcd_port_fifo_bias_t;
 
 /**
  * @brief HCD configuration structure
@@ -169,9 +154,10 @@ typedef struct {
  * @brief Port configuration structure
  */
 typedef struct {
-    hcd_port_isr_callback_t callback;       /**< HCD port event callback */
+    hcd_port_fifo_bias_t fifo_bias;         /**< HCD port internal FIFO biasing */
+    hcd_port_callback_t callback;           /**< HCD port event callback */
     void *callback_arg;                     /**< User argument for HCD port callback */
-    void *context;
+    void *context;                          /**< Context variable used to associate the port with upper layer object */
 } hcd_port_config_t;
 
 /**
@@ -180,12 +166,12 @@ typedef struct {
  * @note The callback can be set to NULL if no callback is required (e.g., using HCD in a polling manner).
  */
 typedef struct {
-    hcd_pipe_isr_callback_t callback;       /**< HCD pipe event ISR callback */
+    hcd_pipe_callback_t callback;           /**< HCD pipe event ISR callback */
     void *callback_arg;                     /**< User argument for HCD pipe callback */
     void *context;                          /**< Context variable used to associate the pipe with upper layer object */
-    usb_desc_ep_t *ep_desc;                 /**< Pointer to endpoint descriptor of the pipe */
-    uint8_t dev_addr;                       /**< Device address of the pipe */
+    const usb_ep_desc_t *ep_desc;           /**< Pointer to endpoint descriptor of the pipe */
     usb_speed_t dev_speed;                  /**< Speed of the device */
+    uint8_t dev_addr;                       /**< Device address of the pipe */
 } hcd_pipe_config_t;
 
 // --------------------------------------------- Host Controller Driver ------------------------------------------------
@@ -236,7 +222,7 @@ esp_err_t hcd_uninstall(void);
  * @retval ESP_ERR_NOT_FOUND: Port number not found
  * @retval ESP_ERR_INVALID_ARG: Arguments are invalid
  */
-esp_err_t hcd_port_init(int port_number, hcd_port_config_t *port_config, hcd_port_handle_t *port_hdl);
+esp_err_t hcd_port_init(int port_number, const hcd_port_config_t *port_config, hcd_port_handle_t *port_hdl);
 
 /**
  * @brief Deinitialize a particular port
@@ -255,11 +241,12 @@ esp_err_t hcd_port_deinit(hcd_port_handle_t port_hdl);
  *
  * Call this function to manipulate a port (e.g., powering it ON, sending a reset etc). The following conditions
  * must be met when calling this function:
- * - The port is in the correct state for the command (e.g., port must be suspend in order to use the resume command)
+ * - The port is in the correct state for the command (e.g., port must be suspended in order to use the resume command)
  * - The port does not have any pending events
  *
  * @note This function is internally protected by a mutex. If multiple threads call this function, this function will
  *       can block.
+ * @note The function can block
  * @note For some of the commands that involve a blocking delay (e.g., reset and resume), if the port's state changes
  *       unexpectedly (e.g., a disconnect during a resume), this function will return ESP_ERR_INVALID_RESPONSE.
  *
@@ -303,7 +290,7 @@ esp_err_t hcd_port_get_speed(hcd_port_handle_t port_hdl, usb_speed_t *speed);
  *
  * If the port has no events, this function will return HCD_PORT_EVENT_NONE.
  *
- * @note If callbacks are not used, this function can also be used in a polling manner to repeatedely check for and
+ * @note If callbacks are not used, this function can also be used in a polling manner to repeatedly check for and
  *       handle a port's events.
  * @note This function is internally protected by a mutex. If multiple threads call this function, this function will
  *       can block.
@@ -331,7 +318,22 @@ esp_err_t hcd_port_recover(hcd_port_handle_t port_hdl);
  * @param port_hdl Port handle
  * @return void* Context variable
  */
-void *hcd_port_get_ctx(hcd_port_handle_t port_hdl);
+void *hcd_port_get_context(hcd_port_handle_t port_hdl);
+
+/**
+ * @brief Set the bias of the HCD port's internal FIFO
+ *
+ * @note This function can only be called when the following conditions are met:
+ *  - Port is initialized
+ *  - Port does not have any pending events
+ *  - Port does not have any allocated pipes
+ *
+ * @param port_hdl Port handle
+ * @param bias Fifo bias
+ * @retval ESP_OK FIFO sizing successfully set
+ * @retval ESP_ERR_INVALID_STATE Incorrect state for FIFO sizes to be set
+ */
+esp_err_t hcd_port_set_fifo_bias(hcd_port_handle_t port_hdl, hcd_port_fifo_bias_t bias);
 
 // --------------------------------------------------- HCD Pipes -------------------------------------------------------
 
@@ -341,8 +343,7 @@ void *hcd_port_get_ctx(hcd_port_handle_t port_hdl);
  * When allocating a pipe, the HCD will assess whether there are sufficient resources (i.e., bus time, and controller
  * channels). If sufficient, the pipe will be allocated.
  *
- * @note Currently, Interrupt and Isochronous pipes are not supported yet
- * @note The host port must be in the enabled state before a pipe can be allcoated
+ * @note The host port must be in the enabled state before a pipe can be allocated
  *
  * @param[in] port_hdl Handle of the port this pipe will be routed through
  * @param[in] pipe_config Pipe configuration
@@ -352,7 +353,7 @@ void *hcd_port_get_ctx(hcd_port_handle_t port_hdl);
  * @retval ESP_ERR_NO_MEM: Insufficient memory
  * @retval ESP_ERR_INVALID_ARG: Arguments are invalid
  * @retval ESP_ERR_INVALID_STATE: Host port is not in the correct state to allocate a pipe
- * @retval ESP_ERR_NOT_SUPPORTED: The pipe cannot be supported
+ * @retval ESP_ERR_NOT_SUPPORTED: The pipe's configuration cannot be supported
  */
 esp_err_t hcd_pipe_alloc(hcd_port_handle_t port_hdl, const hcd_pipe_config_t *pipe_config, hcd_pipe_handle_t *pipe_hdl);
 
@@ -361,7 +362,7 @@ esp_err_t hcd_pipe_alloc(hcd_port_handle_t port_hdl, const hcd_pipe_config_t *pi
  *
  * Frees the resources used by an HCD pipe. The pipe's handle should be discarded after calling this function. The pipe
  * must be in following condition before it can be freed:
- * - All transfers have been dequeued
+ * - All URBs have been dequeued
  *
  * @param pipe_hdl Pipe handle
  *
@@ -371,22 +372,68 @@ esp_err_t hcd_pipe_alloc(hcd_port_handle_t port_hdl, const hcd_pipe_config_t *pi
 esp_err_t hcd_pipe_free(hcd_pipe_handle_t pipe_hdl);
 
 /**
- * @brief Update a pipe's device address and maximum packet size
+ * @brief Update a pipe's maximum packet size
  *
- * This function is intended to be called on default pipes during enumeration in order to update the pipe's device
- * address and maximum packet size. This function can only be called on a pipe that has met the following conditions:
- * - Pipe is still valid (i.e., not in the HCD_PIPE_STATE_INVALID state)
- * - Pipe is not currently processing a command
- * - All transfer request have been dequeued from the pipe
+ * This function is intended to be called on default pipes during enumeration in order to update the pipe's maximum
+ * packet size. This function can only be called on a pipe that has met the following conditions:
+ * - Pipe is not current processing a command
+ * - Pipe does not have any enqueued URBs
+ * - Port cannot be resetting
  *
  * @param pipe_hdl Pipe handle
- * @param dev_addr New device address
  * @param mps New Maximum Packet Size
  *
  * @retval ESP_OK: Pipe successfully updated
- * @retval ESP_ERR_INVALID_STATE: Pipe is no in a condition to be updated
+ * @retval ESP_ERR_INVALID_STATE: Pipe is not in a condition to be updated
  */
-esp_err_t hcd_pipe_update(hcd_pipe_handle_t pipe_hdl, uint8_t dev_addr, int mps);
+esp_err_t hcd_pipe_update_mps(hcd_pipe_handle_t pipe_hdl, int mps);
+
+/**
+ * @brief Update a pipe's device address
+ *
+ * This function is intended to be called on default pipes during enumeration in order to update the pipe's device
+ * address. This function can only be called on a pipe that has met the following conditions:
+ * - Pipe is not current processing a command
+ * - Pipe does not have any enqueued URBs
+ * - Port cannot be resetting
+ *
+ * @param pipe_hdl Pipe handle
+ * @param dev_addr New device address
+ *
+ * @retval ESP_OK: Pipe successfully updated
+ * @retval ESP_ERR_INVALID_STATE: Pipe is not in a condition to be updated
+ */
+esp_err_t hcd_pipe_update_dev_addr(hcd_pipe_handle_t pipe_hdl, uint8_t dev_addr);
+
+/**
+ * @brief Update a pipe's callback
+ *
+ * This function is intended to be called on default pipes at the end of enumeration to switch to a callback that
+ * handles the completion of regular control transfer.
+ * - Pipe is not current processing a command
+ * - Pipe does not have any enqueued URBs
+ * - Port cannot be resetting
+ *
+ * @param pipe_hdl Pipe handle
+ * @param callback Callback
+ * @param user_arg Callback argument
+ * @return esp_err_t
+ */
+esp_err_t hcd_pipe_update_callback(hcd_pipe_handle_t pipe_hdl, hcd_pipe_callback_t callback, void *user_arg);
+
+/**
+ * @brief Make a pipe persist through a run time reset
+ *
+ * Normally when a HCD_PORT_CMD_RESET is called, all pipes should already have been freed. However There may be cases
+ * (such as during enumeration) when a pipe must persist through a reset. This function will mark a pipe as
+ * persistent allowing it to survive a reset. When HCD_PORT_CMD_RESET is called, the pipe can continue to be used after
+ * the reset.
+ *
+ * @param pipe_hdl Pipe handle
+ * @retval ESP_OK: Pipe successfully marked as persistent
+ * @retval ESP_ERR_INVALID_STATE: Pipe is not in a condition to be made persistent
+ */
+esp_err_t hcd_pipe_set_persist_reset(hcd_pipe_handle_t pipe_hdl);
 
 /**
  * @brief Get the context variable of a pipe from its handle
@@ -394,7 +441,7 @@ esp_err_t hcd_pipe_update(hcd_pipe_handle_t pipe_hdl, uint8_t dev_addr, int mps)
  * @param pipe_hdl Pipe handle
  * @return void* Context variable
  */
-void *hcd_pipe_get_ctx(hcd_pipe_handle_t pipe_hdl);
+void *hcd_pipe_get_context(hcd_pipe_handle_t pipe_hdl);
 
 /**
  * @brief Get the current sate of the pipe
@@ -407,19 +454,14 @@ hcd_pipe_state_t hcd_pipe_get_state(hcd_pipe_handle_t pipe_hdl);
 /**
  * @brief Execute a command on a particular pipe
  *
- * Pipe commands allow a pipe to be manipulated (such as clearing a halt, retiring all transfer requests etc). The
- * following conditions must for a pipe command to be issued:
- * - Pipe is still valid (i.e., not in the HCD_PIPE_STATE_INVALID)
- * - No other thread/task processing a command on the pipe concurrently (will return)
+ * Pipe commands allow a pipe to be manipulated (such as clearing a halt, retiring all URBs etc)
  *
- * @note Some pipe commands will block until the pipe's current inflight transfer is completed. If the pipe's state
- *       changes unexpectedley, this function will return ESP_ERR_INVALID_RESPONSE
+ * @note This function can block
  *
  * @param pipe_hdl Pipe handle
  * @param command Pipe command
  * @retval ESP_OK: Command executed successfully
  * @retval ESP_ERR_INVALID_STATE: The pipe is not in the correct state/condition too execute the command
- * @retval ESP_ERR_INVALID_RESPONSE: The pipe's state changed unexpectedley
  */
 esp_err_t hcd_pipe_command(hcd_pipe_handle_t pipe_hdl, hcd_pipe_cmd_t command);
 
@@ -434,92 +476,48 @@ esp_err_t hcd_pipe_command(hcd_pipe_handle_t pipe_hdl, hcd_pipe_cmd_t command);
  */
 hcd_pipe_event_t hcd_pipe_get_event(hcd_pipe_handle_t pipe_hdl);
 
-// ----------------------------------------------- HCD Transfer Requests -----------------------------------------------
+// ---------------------------------------------------- HCD URBs -------------------------------------------------------
 
 /**
- * @brief Allocate a transfer request
+ * @brief Enqueue an URB to a particular pipe
  *
- * @note The allocate transfer request will not have its target set (i.e., no target pipe and associated IRP). Call
- *       hcd_xfer_req_set_target() before enqueueing the transfer request
- *
- * @return hcd_xfer_req_handle_t Transfer request handle or NULL if failed.
- */
-hcd_xfer_req_handle_t hcd_xfer_req_alloc(void);
-
-/**
- * @brief Free a transfer request
- *
- * @note The transfer request must be dequeued before it can be freed
- *
- * @param req_hdl Transfer request handle
- */
-void hcd_xfer_req_free(hcd_xfer_req_handle_t req_hdl);
-
-/**
- * @brief Set a transfer request's target
- *
- * Setting a transfer request's target will associate a transfer request with a pipe and a USB IRP (i.e., the data). A
- * transfer request's target must be set before it can be enqueued.
- *
- * @note This should only be called when a transfer requests that are not currently enqueued
- *
- * @param req_hdl Transfer request handle
- * @param pipe_hdl Target pipe's handle
- * @param irp Target IRP handle
- * @param context Context variable to associate transfer request with upper layer object
- */
-void hcd_xfer_req_set_target(hcd_xfer_req_handle_t req_hdl, hcd_pipe_handle_t pipe_hdl, usb_irp_t *irp, void *context);
-
-/**
- * @brief Get the target of a transfer request
- *
- * @note This should only be called when a transfer requests that are not currently enqueued
- *
- * @param[in] req_hdl Transfer request handle
- * @param[out] pipe_hdl Target pipe's handle
- * @param[out] irp Target IRP's handle
- * @param[out] context Context variable
- */
-void hcd_xfer_req_get_target(hcd_xfer_req_handle_t req_hdl, hcd_pipe_handle_t *pipe_hdl, usb_irp_t **irp, void **context);
-
-/**
- * @brief Enqueue a transfer request
- *
- * The following conditions must be met for a transfer request to be enqueued:
- * - The transfer request's target must be set
- * - Transfer request must not already be enqueued
- * - The target pipe must be in the HCD_PIPE_STATE_ACTIVE state
- *
- * @param req_hdl Transfer request handle
- * @retval ESP_OK: Transfer request enqueued successfully
- * @retval ESP_ERR_INVALID_STATE: Conditions not met to enqueue transfer request
- */
-esp_err_t hcd_xfer_req_enqueue(hcd_xfer_req_handle_t req_hdl);
-
-/**
- * @brief Dequeue a completed transfer request from a pipe
- *
- * This function should be called on a pipe after it receives an pipe event. If a pipe has multiple transfer requests
- * that can be dequeued, this function must be called repeatedely until all transfer requests are dequeued. If a pipe
- * has no more transfer requests to dequeue, this function will return NULL.
+ * The following conditions must be met before an URB can be enqueued:
+ * - The URB is properly initialized (data buffer and transfer length are set)
+ * - The URB must not already be enqueued
+ * - The pipe must be in the HCD_PIPE_STATE_ACTIVE state
+ * - The pipe cannot be executing a command
  *
  * @param pipe_hdl Pipe handle
- * @return hcd_xfer_req_handle_t Transfer request handle or NULL if no more transfer requests to dequeue.
+ * @param urb URB to enqueue
+ * @retval ESP_OK: URB enqueued successfully
+ * @retval ESP_ERR_INVALID_STATE: Conditions not met to enqueue URB
  */
-hcd_xfer_req_handle_t hcd_xfer_req_dequeue(hcd_pipe_handle_t pipe_hdl);
+esp_err_t hcd_urb_enqueue(hcd_pipe_handle_t pipe_hdl, urb_t *urb);
 
 /**
- * @brief Abort an ongoing transfer request
+ * @brief Dequeue an URB from a particular pipe
  *
- * This function will attempt to abort an enqueued transfer request. If the transfer request has not yet been executed,
- * it will be marked as "cancelled" and can be dequeued. If a transfer request is already in progress or has completed,
- * it will not be affected by this function.
+ * This function should be called on a pipe after a pipe receives a HCD_PIPE_EVENT_URB_DONE event. If a pipe has
+ * multiple URBs that can be dequeued, this function should be called repeatedly until all URBs are dequeued. If a pipe
+ * has no more URBs to dequeue, this function will return NULL.
  *
- * @param req_hdl Transfer request handle
- * @retval ESP_OK: Transfer request successfully aborted, or did not need to be aborted
- * @retval ESP_ERR_INVALID_STATE: Transfer request was never enqueued
+ * @param pipe_hdl Pipe handle
+ * @return urb_t* Dequeued URB, or NULL if no more URBs to dequeue
  */
-esp_err_t hcd_xfer_req_abort(hcd_xfer_req_handle_t req_hdl);
+urb_t *hcd_urb_dequeue(hcd_pipe_handle_t pipe_hdl);
+
+/**
+ * @brief Abort an enqueued URB
+ *
+ * This function will attempt to abort an URB that is already enqueued. If the URB has yet to be executed, it will be
+ * "canceled" and can then be dequeued. If the URB is currently in-flight or has already completed, the URB will not be
+ * affected by this function.
+ *
+ * @param urb URB to abort
+ * @retval ESP_OK: URB successfully aborted, or was not affected by this function
+ * @retval ESP_ERR_INVALID_STATE: URB was never enqueued
+ */
+esp_err_t hcd_urb_abort(urb_t *urb);
 
 #ifdef __cplusplus
 }

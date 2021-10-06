@@ -37,9 +37,13 @@ def action_extensions(base_actions, project_path):
 
     def _get_esptool_args(args):
         esptool_path = os.path.join(os.environ['IDF_PATH'], 'components/esptool_py/esptool/esptool.py')
+        esptool_wrapper_path = os.environ.get('ESPTOOL_WRAPPER', '')
         if args.port is None:
             args.port = _get_default_serial_port(args)
-        result = [PYTHON, esptool_path]
+        result = [PYTHON]
+        if os.path.exists(esptool_wrapper_path):
+            result += [esptool_wrapper_path]
+        result += [esptool_path]
         result += ['-p', args.port]
         result += ['-b', str(args.baud)]
 
@@ -67,7 +71,7 @@ def action_extensions(base_actions, project_path):
 
         return result
 
-    def monitor(action, ctx, args, print_filter, monitor_baud, encrypted):
+    def monitor(action, ctx, args, print_filter, monitor_baud, encrypted, timestamps, timestamp_format):
         """
         Run idf_monitor.py to watch build output
         """
@@ -113,6 +117,12 @@ def action_extensions(base_actions, project_path):
 
         if encrypted:
             monitor_args += ['--encrypted']
+
+        if timestamps:
+            monitor_args += ['--timestamps']
+
+        if timestamp_format:
+            monitor_args += ['--timestamp-format', timestamp_format]
 
         idf_py = [PYTHON] + _get_commandline_options(ctx)  # commands to re-run idf.py
         monitor_args += ['-m', ' '.join("'%s'" % a for a in idf_py)]
@@ -210,7 +220,17 @@ def action_extensions(base_actions, project_path):
                                  'IDF Monitor will invoke encrypted-flash and encrypted-app-flash targets '
                                  'if this option is set. This option is set by default if IDF Monitor was invoked '
                                  'together with encrypted-flash or encrypted-app-flash target.'),
+                    }, {
+                        'names': ['--timestamps'],
+                        'is_flag': True,
+                        'help': 'Print a time stamp in the beginning of each line.',
+                    }, {
+                        'names': ['--timestamp-format'],
+                        'help': ('Set the formatting of timestamps compatible with strftime(). '
+                                 'For example, "%Y-%m-%d %H:%M:%S".'),
+                        'default': None
                     }
+
                 ],
                 'order_dependencies': [
                     'flash',

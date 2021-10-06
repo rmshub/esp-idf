@@ -91,6 +91,7 @@
 #include "riscv/riscv_interrupts.h"
 #include "riscv/interrupt.h"
 
+#include "port_systick.h"
 #include "esp_system.h"
 #include "esp_intr_alloc.h"
 #include "esp_private/crosscore_int.h"
@@ -115,8 +116,6 @@ StackType_t *xIsrStackTop = &xIsrStack[0] + (configISR_STACK_SIZE & (~((portPOIN
 
 static const char *TAG = "cpu_start"; // [refactor-todo]: might be appropriate to change in the future, but
 
-static void vPortSysTickHandler(void *arg);
-static void vPortSetupTimer(void);
 static void prvTaskExitError(void);
 
 extern void esprv_intc_int_set_threshold(int); // FIXME, this function is in ROM only
@@ -139,25 +138,6 @@ void vPortExitCritical(void)
             portEXIT_CRITICAL_NESTED(uxSavedInterruptState);
         }
     }
-}
-
-/**
- * @brief Set up the systimer peripheral to generate the tick interrupt
- *
- */
-void vPortSetupTimer(void)
-{
-    /* set system timer interrupt vector */
-    ESP_ERROR_CHECK(esp_intr_alloc(ETS_SYSTIMER_TARGET0_EDGE_INTR_SOURCE, ESP_INTR_FLAG_IRAM, vPortSysTickHandler, NULL, NULL));
-
-    /* configure the timer */
-    systimer_hal_init();
-    systimer_hal_connect_alarm_counter(SYSTIMER_ALARM_0, SYSTIMER_COUNTER_1);
-    systimer_hal_enable_counter(SYSTIMER_COUNTER_1);
-    systimer_hal_counter_can_stall_by_cpu(SYSTIMER_COUNTER_1, 0, true);
-    systimer_hal_set_alarm_period(SYSTIMER_ALARM_0, 1000000UL / CONFIG_FREERTOS_HZ);
-    systimer_hal_select_alarm_mode(SYSTIMER_ALARM_0, SYSTIMER_ALARM_MODE_PERIOD);
-    systimer_hal_enable_alarm_int(SYSTIMER_ALARM_0);
 }
 
 void prvTaskExitError(void)
@@ -224,18 +204,58 @@ StackType_t *pxPortInitialiseStack(StackType_t *pxTopOfStack, TaskFunction_t pxC
     extern uint32_t __global_pointer$;
     uint8_t* task_thread_local_start;
     uint8_t* threadptr;
-    extern char _thread_local_start, _thread_local_end, _rodata_start;
+    extern char _thread_local_start, _thread_local_end, _flash_rodata_start;
 
     /* Byte pointer, so that subsequent calculations don't depend on sizeof(StackType_t). */
-    uint8_t* sp = (uint8_t*) pxTopOfStack;
+    uint8_t *sp = (uint8_t *) pxTopOfStack;
 
-    /* Set up TLS area */
+    /* Set up TLS area.
+     * The following diagram illustrates the layout of link-time and run-time
+     * TLS sections.
+     *
+     *          +-------------+
+     *          |Section:     |      Linker symbols:
+     *          |.flash.rodata|      ---------------
+     *       0x0+-------------+ <-- _flash_rodata_start
+     *        ^ |             |
+     *        | | Other data  |
+     *        | |     ...     |
+     *        | +-------------+ <-- _thread_local_start
+     *        | |.tbss        | ^
+     *        v |             | |
+     *    0xNNNN|int example; | | (thread_local_size)
+     *          |.tdata       | v
+     *          +-------------+ <-- _thread_local_end
+     *          | Other data  |
+     *          |     ...     |
+     *          |             |
+     *          +-------------+
+     *
+     *                                Local variables of
+     *                              pxPortInitialiseStack
+     *                             -----------------------
+     *          +-------------+ <-- pxTopOfStack
+     *          |.tdata (*)   |  ^
+     *        ^ |int example; |  |(thread_local_size
+     *        | |             |  |
+     *        | |.tbss (*)    |  v
+     *        | +-------------+ <-- task_thread_local_start
+     * 0xNNNN | |             |  ^
+     *        | |             |  |
+     *        | |             |  |_thread_local_start - _rodata_start
+     *        | |             |  |
+     *        | |             |  v
+     *        v +-------------+ <-- threadptr
+     *
+     *   (*) The stack grows downward!
+     */
+
     uint32_t thread_local_sz = (uint32_t) (&_thread_local_end - &_thread_local_start);
     thread_local_sz = ALIGNUP(0x10, thread_local_sz);
     sp -= thread_local_sz;
     task_thread_local_start = sp;
     memcpy(task_thread_local_start, &_thread_local_start, thread_local_sz);
-    threadptr = task_thread_local_start - (&_thread_local_start - &_rodata_start);
+    threadptr = task_thread_local_start - (&_thread_local_start - &_flash_rodata_start);
 
     /* Simulate the stack frame as it would be created by a context switch interrupt. */
     sp -= RV_STK_FRMSZ;
@@ -251,35 +271,13 @@ StackType_t *pxPortInitialiseStack(StackType_t *pxTopOfStack, TaskFunction_t pxC
     return (StackType_t *)frame;
 }
 
-IRAM_ATTR void vPortSysTickHandler(void *arg)
-{
-    (void)arg;
-
-    systimer_ll_clear_alarm_int(SYSTIMER_ALARM_0);
-
-#ifdef CONFIG_PM_TRACE
-    ESP_PM_TRACE_ENTER(TICK, xPortGetCoreID());
-#endif
-
-    if (!uxSchedulerRunning) {
-        return;
-    }
-
-    if (xTaskIncrementTick() != pdFALSE) {
-        vPortYieldFromISR();
-    }
-
-#ifdef CONFIG_PM_TRACE
-    ESP_PM_TRACE_EXIT(TICK, xPortGetCoreID());
-#endif
-}
-
 BaseType_t xPortStartScheduler(void)
 {
     uxInterruptNesting = 0;
     uxCriticalNesting = 0;
     uxSchedulerRunning = 0;
 
+	/* Setup the hardware to generate the tick. */
     vPortSetupTimer();
 
     esprv_intc_int_set_threshold(1); /* set global INTC masking level */
@@ -304,6 +302,7 @@ void vPortYieldOtherCore(BaseType_t coreid)
 
 void vPortYieldFromISR( void )
 {
+    traceISR_EXIT_TO_SCHEDULER();
     uxSchedulerRunning = 1;
     xPortSwitchFlag = 1;
 }
@@ -340,8 +339,9 @@ void vPortSetStackWatchpoint(void *pxStackStart)
     esp_cpu_set_watchpoint(STACK_WATCH_POINT_NUMBER, (char *)addr, STACK_WATCH_AREA_SIZE, ESP_WATCHPOINT_STORE);
 }
 
-uint32_t xPortGetTickRateHz(void) {
-	return (uint32_t)configTICK_RATE_HZ;
+uint32_t xPortGetTickRateHz(void)
+{
+    return (uint32_t)configTICK_RATE_HZ;
 }
 
 BaseType_t xPortInIsrContext(void)

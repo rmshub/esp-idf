@@ -130,24 +130,15 @@
 #include "esp32s3/spiram.h"
 #endif
 
+#include "port_systick.h"
 #include "esp_private/startup_internal.h" // [refactor-todo] for g_spiram_ok
 #include "esp_app_trace.h" // [refactor-todo] for esp_app_trace_init
-
-/* Defined in portasm.h */
-extern void _frxt_tick_timer_init(void);
 
 /* Defined in xtensa_context.S */
 extern void _xt_coproc_init(void);
 
 static const char* TAG = "cpu_start"; // [refactor-todo]: might be appropriate to change in the future, but
 								// for now maintain the same log output
-
-#if CONFIG_FREERTOS_CORETIMER_0
-    #define SYSTICK_INTR_ID (ETS_INTERNAL_TIMER0_INTR_SOURCE+ETS_INTERNAL_INTR_SOURCE_OFF)
-#endif
-#if CONFIG_FREERTOS_CORETIMER_1
-    #define SYSTICK_INTR_ID (ETS_INTERNAL_TIMER1_INTR_SOURCE+ETS_INTERNAL_INTR_SOURCE_OFF)
-#endif
 
 _Static_assert(tskNO_AFFINITY == CONFIG_FREERTOS_NO_AFFINITY, "incorrect tskNO_AFFINITY value");
 
@@ -189,7 +180,7 @@ StackType_t *pxPortInitialiseStack( StackType_t *pxTopOfStack, TaskFunction_t px
 	#endif
 	uint32_t *threadptr;
 	void *task_thread_local_start;
-	extern int _thread_local_start, _thread_local_end, _rodata_start;
+	extern int _thread_local_start, _thread_local_end, _flash_rodata_start, _flash_rodata_align;
 	// TODO: check that TLS area fits the stack
 	uint32_t thread_local_sz = (uint8_t *)&_thread_local_end - (uint8_t *)&_thread_local_start;
 
@@ -204,7 +195,7 @@ StackType_t *pxPortInitialiseStack( StackType_t *pxTopOfStack, TaskFunction_t px
 					SP 																pxTopOfStack
 
 		All parts are aligned to 16 byte boundary. */
-	sp = (StackType_t *) (((UBaseType_t)(pxTopOfStack + 1) - XT_CP_SIZE - thread_local_sz - XT_STK_FRMSZ) & ~0xf);
+	sp = (StackType_t *) (((UBaseType_t)pxTopOfStack - XT_CP_SIZE - thread_local_sz - XT_STK_FRMSZ) & ~0xf);
 
 	/* Clear the entire frame (do not use memset() because we don't depend on C library) */
 	for (tp = sp; tp <= pxTopOfStack; ++tp)
@@ -248,31 +239,33 @@ StackType_t *pxPortInitialiseStack( StackType_t *pxTopOfStack, TaskFunction_t px
 	frame->vpri = 0xFFFFFFFF;
 	#endif
 
-	/* Init threadptr reg and TLS vars */
+	/* Init threadptr register and set up TLS run-time area.
+	 * The diagram in port/riscv/port.c illustrates the calculations below.
+	 */
 	task_thread_local_start = (void *)(((uint32_t)pxTopOfStack - XT_CP_SIZE - thread_local_sz) & ~0xf);
 	memcpy(task_thread_local_start, &_thread_local_start, thread_local_sz);
 	threadptr = (uint32_t *)(sp + XT_STK_EXTRA);
-	/* Calculate THREADPTR value:
+	/* Calculate THREADPTR value.
 	 * The generated code will add THREADPTR value to a constant value determined at link time,
 	 * to get the address of the TLS variable.
 	 * The constant value is calculated by the linker as follows
 	 * (search for 'tpoff' in elf32-xtensa.c in BFD):
 	 *    offset = address - tls_section_vma + align_up(TCB_SIZE, tls_section_alignment)
-	 * where TCB_SIZE is hardcoded to 8. There doesn't seem to be a way to propagate
-	 * the section alignment value from the ld script into the code, so it is hardcoded
-	 * in both places.
+	 * where TCB_SIZE is hardcoded to 8.
+	 * Note this is slightly different compared to the RISC-V port, where offset = address - tls_section_vma.
 	 */
-	const uint32_t tls_section_alignment = 0x10;  /* has to be in sync with ALIGN value of .flash.rodata section */
+	const uint32_t tls_section_alignment = (uint32_t) &_flash_rodata_align;  /* ALIGN value of .flash.rodata section */
 	const uint32_t tcb_size = 8; /* Unrelated to FreeRTOS, this is the constant from BFD */
 	const uint32_t base = (tcb_size + tls_section_alignment - 1) & (~(tls_section_alignment - 1));
-	*threadptr = (uint32_t)task_thread_local_start - ((uint32_t)&_thread_local_start - (uint32_t)&_rodata_start) - base;
+	*threadptr = (uint32_t)task_thread_local_start - ((uint32_t)&_thread_local_start - (uint32_t)&_flash_rodata_start) - base;
 
 	#if XCHAL_CP_NUM > 0
 	/* Init the coprocessor save area (see xtensa_context.h) */
 	/* No access to TCB here, so derive indirectly. Stack growth is top to bottom.
-         * //p = (uint32_t *) xMPUSettings->coproc_area;
+	 * //p = (uint32_t *) xMPUSettings->coproc_area;
 	 */
 	p = (uint32_t *)(((uint32_t) pxTopOfStack - XT_CP_SIZE) & ~0xf);
+	configASSERT( ( uint32_t ) p >= frame->a1 );
 	p[0] = 0;
 	p[1] = 0;
 	p[2] = (((uint32_t) p) + 12 + XCHAL_TOTAL_SA_ALIGN - 1) & -XCHAL_TOTAL_SA_ALIGN;
@@ -301,11 +294,8 @@ BaseType_t xPortStartScheduler( void )
 	_xt_coproc_init();
 	#endif
 
-	/* Init the tick divisor value */
-	_xt_tick_divisor_init();
-
 	/* Setup the hardware to generate the tick. */
-	_frxt_tick_timer_init();
+	vPortSetupTimer();
 
 	port_xSchedulerRunning[xPortGetCoreID()] = 1;
 
@@ -316,23 +306,6 @@ BaseType_t xPortStartScheduler( void )
 	return pdTRUE;
 }
 /*-----------------------------------------------------------*/
-
-BaseType_t xPortSysTickHandler( void )
-{
-	BaseType_t ret;
-
-	portbenchmarkIntLatency();
-	traceISR_ENTER(SYSTICK_INTR_ID);
-	ret = xTaskIncrementTick();
-	if( ret != pdFALSE )
-	{
-		portYIELD_FROM_ISR();
-	} else {
-		traceISR_EXIT();
-	}
-	return ret;
-}
-
 
 void vPortYieldOtherCore( BaseType_t coreid ) {
 	esp_crosscore_int_send_yield( coreid );
@@ -347,7 +320,9 @@ void vPortYieldOtherCore( BaseType_t coreid ) {
 void vPortStoreTaskMPUSettings( xMPU_SETTINGS *xMPUSettings, const struct xMEMORY_REGION * const xRegions, StackType_t *pxBottomOfStack, uint32_t usStackDepth )
 {
 	#if XCHAL_CP_NUM > 0
-	xMPUSettings->coproc_area = (StackType_t*)((((uint32_t)(pxBottomOfStack + usStackDepth - 1)) - XT_CP_SIZE ) & ~0xf);
+	xMPUSettings->coproc_area = ( StackType_t * ) ( ( uint32_t ) ( pxBottomOfStack + usStackDepth - 1 ));
+	xMPUSettings->coproc_area = ( StackType_t * ) ( ( ( portPOINTER_SIZE_TYPE ) xMPUSettings->coproc_area ) & ( ~( ( portPOINTER_SIZE_TYPE ) portBYTE_ALIGNMENT_MASK ) ) );
+	xMPUSettings->coproc_area = ( StackType_t * ) ( ( ( uint32_t ) xMPUSettings->coproc_area - XT_CP_SIZE ) & ~0xf );
 
 
 	/* NOTE: we cannot initialize the coprocessor save area here because FreeRTOS is going to
@@ -514,9 +489,6 @@ void esp_startup_start_app_other_cores(void)
 #endif
 
 	esp_crosscore_int_init();
-#if CONFIG_IDF_TARGET_ESP32
-	esp_dport_access_int_init();
-#endif
 
 	ESP_EARLY_LOGI(TAG, "Starting scheduler on APP CPU.");
 	xPortStartScheduler();

@@ -77,8 +77,11 @@ static esp_err_t _http_handle_response_code(esp_http_client_handle_t http_client
     } else if(status_code == HttpStatus_NotFound || status_code == HttpStatus_Forbidden) {
         ESP_LOGE(TAG, "File not found(%d)", status_code);
         return ESP_FAIL;
-    } else if (status_code == HttpStatus_InternalError) {
-        ESP_LOGE(TAG, "Server error occurred(%d)", status_code);
+    } else if (status_code >= HttpStatus_BadRequest && status_code < HttpStatus_InternalError) {
+        ESP_LOGE(TAG, "Client error (%d)", status_code);
+        return ESP_FAIL;
+    } else if (status_code >= HttpStatus_InternalError) {
+        ESP_LOGE(TAG, "Server error (%d)", status_code);
         return ESP_FAIL;
     }
 
@@ -165,7 +168,7 @@ static esp_err_t _ota_write(esp_https_ota_t *https_ota_handle, const void *buffe
 static bool is_server_verification_enabled(esp_https_ota_config_t *ota_config) {
     return  (ota_config->http_config->cert_pem
             || ota_config->http_config->use_global_ca_store
-            || !(ota_config->http_config->crt_bundle_attach == NULL));
+            || ota_config->http_config->crt_bundle_attach != NULL);
 }
 
 esp_err_t esp_https_ota_begin(esp_https_ota_config_t *ota_config, esp_https_ota_handle_t *handle)
@@ -180,13 +183,15 @@ esp_err_t esp_https_ota_begin(esp_https_ota_config_t *ota_config, esp_https_ota_
         return ESP_ERR_INVALID_ARG;
     }
 
-#if !CONFIG_OTA_ALLOW_HTTP
     if (!is_server_verification_enabled(ota_config)) {
+#if CONFIG_OTA_ALLOW_HTTP
+        ESP_LOGW(TAG, "Continuing with insecure option because CONFIG_OTA_ALLOW_HTTP is set.");
+#else
         ESP_LOGE(TAG, "No option for server verification is enabled in esp_http_client config.");
         *handle = NULL;
         return ESP_ERR_INVALID_ARG;
-    }
 #endif
+    }
 
     esp_https_ota_t *https_ota_handle = calloc(1, sizeof(esp_https_ota_t));
     if (!https_ota_handle) {
@@ -242,6 +247,10 @@ esp_err_t esp_https_ota_begin(esp_https_ota_config_t *ota_config, esp_https_ota_
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to establish HTTP connection");
         goto http_cleanup;
+    }
+
+    if (!https_ota_handle->partial_http_download) {
+        https_ota_handle->image_length = esp_http_client_get_content_length(https_ota_handle->http_client);
     }
 
     https_ota_handle->update_partition = NULL;
@@ -381,10 +390,11 @@ esp_err_t esp_https_ota_perform(esp_https_ota_handle_t https_ota_handle)
                 } else if (!is_recv_complete) {
                     return ESP_ERR_HTTPS_OTA_IN_PROGRESS;
                 }
-                ESP_LOGI(TAG, "Connection closed");
+                ESP_LOGD(TAG, "Connection closed");
             } else if (data_read > 0) {
                 return _ota_write(handle, (const void *)handle->ota_upgrade_buf, data_read);
             } else {
+                ESP_LOGE(TAG, "data read %d, errno %d", data_read, errno);
                 return ESP_FAIL;
             }
             if (!handle->partial_http_download || (handle->partial_http_download && handle->image_length == handle->binary_file_len)) {
@@ -416,6 +426,7 @@ esp_err_t esp_https_ota_perform(esp_https_ota_handle_t https_ota_handle)
                 ESP_LOGE(TAG, "Failed to establish HTTP connection");
                 return ESP_FAIL;
             }
+            ESP_LOGD(TAG, "Connection start");
             return ESP_ERR_HTTPS_OTA_IN_PROGRESS;
         }
     }
@@ -517,6 +528,18 @@ int esp_https_ota_get_image_len_read(esp_https_ota_handle_t https_ota_handle)
         return -1;
     }
     return handle->binary_file_len;
+}
+
+int esp_https_ota_get_image_size(esp_https_ota_handle_t https_ota_handle)
+{
+    esp_https_ota_t *handle = (esp_https_ota_t *)https_ota_handle;
+    if (handle == NULL) {
+        return -1;
+    }
+    if (handle->state < ESP_HTTPS_OTA_BEGIN) {
+        return -1;
+    }
+    return handle->image_length;
 }
 
 esp_err_t esp_https_ota(const esp_http_client_config_t *config)

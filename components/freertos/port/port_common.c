@@ -33,7 +33,7 @@
 #include "esp32s2/spiram.h"
 #elif CONFIG_IDF_TARGET_ESP32S3
 #include "esp32s3/spiram.h"
-#elif CONFIG_IDF_TARGET_ESP32C3
+#elif CONFIG_IDF_TARGET_ESP32C3 || CONFIG_IDF_TARGET_ESP32H2
 // SPIRAM is not supported on ESP32-C3
 #endif
 
@@ -61,6 +61,10 @@ volatile unsigned port_xSchedulerRunning[portNUM_PROCESSORS] = {0};
 
 static void main_task(void* args);
 
+#ifdef CONFIG_ESP_SYSTEM_GDBSTUB_RUNTIME
+void esp_gdbstub_init(void);
+#endif // CONFIG_ESP_SYSTEM_GDBSTUB_RUNTIME
+
 extern void app_main(void);
 
 void esp_startup_start_app_common(void)
@@ -73,11 +77,9 @@ void esp_startup_start_app_common(void)
 
 	esp_crosscore_int_init();
 
-#ifndef CONFIG_FREERTOS_UNICORE
-#if CONFIG_IDF_TARGET_ESP32
-	esp_dport_access_int_init();
-#endif
-#endif
+#ifdef CONFIG_ESP_SYSTEM_GDBSTUB_RUNTIME
+    esp_gdbstub_init();
+#endif // CONFIG_ESP_SYSTEM_GDBSTUB_RUNTIME
 
 	portBASE_TYPE res = xTaskCreatePinnedToCore(&main_task, "main",
 												ESP_TASK_MAIN_STACK, NULL,
