@@ -1,16 +1,8 @@
-// Copyright 2020 Espressif Systems (Shanghai) PTE LTD
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//         http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+/*
+ * SPDX-FileCopyrightText: 2020-2021 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 #pragma once
 
@@ -237,7 +229,7 @@ public:
     std::vector<uint8_t> sync_read(uint8_t i2c_addr, size_t n_bytes);
 
     /**
-     * Do a simple asynchronous write-read transfer.
+     * Do a simple synchronous write-read transfer.
      *
      * First, \c write_data will be written to the bus, then a number of \c read_n_bytes will be read from the bus
      * with a repeated start condition. The slave device is determined by \c i2c_addr.
@@ -419,6 +411,7 @@ protected:
 private:
     class CompTransferNode {
     public:
+        virtual ~CompTransferNode() { }
         virtual void queue_cmd(i2c_cmd_handle_t handle, uint8_t i2c_addr) = 0;
         virtual void process_result(std::vector<std::vector<uint8_t> > &read_results) { }
     };

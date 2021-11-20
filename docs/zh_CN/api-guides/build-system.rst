@@ -5,10 +5,6 @@
 
 本文档主要介绍 ESP-IDF 构建系统的实现原理以及 ``组件`` 等相关概念。如需您想了解如何组织和构建新的 ESP-IDF 项目或组件，请阅读本文档。
 
-.. only:: esp32
-
-   .. 注解:: 本文档将介绍基于 CMake 的构建系统，它是 ESP-IDF V4.0 及以上版本的默认系统。此外 ESP-IDF 还支持 :doc:`基于 GNU Make 的构建系统 <build-system-legacy>`，基于 GNU Make 的构建系统是 ESP-IDF V4.0 以下版本的默认系统。
-
 
 概述
 ====
@@ -96,9 +92,9 @@ idf.py
 高级命令
 ^^^^^^^^
 
-- ``idf.py app``，``idf.py bootloader``，``idf.py partition_table`` 仅可用于从适用的项目中构建应用程序、引导程序或分区表。
+- ``idf.py app``，``idf.py bootloader``，``idf.py partition-table`` 仅可用于从适用的项目中构建应用程序、引导程序或分区表。
 - ``idf.py app-flash`` 等匹配命令，仅将项目的特定部分烧录至 {IDF_TARGET_NAME}。
-- ``idf.py -p PORT erase_flash`` 会使用 esptool.py 擦除 {IDF_TARGET_NAME} 的整个 Flash。
+- ``idf.py -p PORT erase-flash`` 会使用 esptool.py 擦除 {IDF_TARGET_NAME} 的整个 Flash。
 - ``idf.py size`` 会打印应用程序相关的大小信息，``size-components`` 和 ``size-files`` 这两个命令相似，分别用于打印每个组件或源文件的详细信息。如果您在运行 CMake（或 ``idf.py``）时定义了变量 ``-DOUTPUT_JSON=1``，那么输出的格式会变成 JSON 而不是可读文本。详情请查看 ``idf.py-size``。
 - ``idf.py reconfigure`` 命令会重新运行 CMake_ （即便无需重新运行）。正常使用时，并不需要运行此命令，但当源码树中添加/删除文件后或更改 CMake cache 变量时，此命令会非常有用，例如，``idf.py -DNAME='VALUE' reconfigure`` 会将 CMake cache 中的变量 ``NAME`` 的值设置为 ``VALUE``。
 - ``idf.py python-clean`` 会从 IDF 目录中删除生成的 Python 字节码，Python 字节码可能会在切换 IDF 和 Python 版本时引发问题，因此建议在切换 Python 后运行该命令。
@@ -1546,29 +1542,12 @@ ESP-IDF 构建系统的列表文件位于 :idf:`/tools/cmake` 中。实现构建
 
 请参考 :idf_file:`/tools/cmake/project.cmake` 获取更多信息。
 
+.. _migrating_from_make:
+
 从 ESP-IDF GNU Make 构建系统迁移到 CMake 构建系统
 =================================================
 
 ESP-IDF CMake 构建系统与旧版的 GNU Make 构建系统在某些方面非常相似，开发者都需要提供 include 目录、源文件等。然而，有一个语法上的区别，即对于 ESP-IDF CMake 构建系统，开发者需要将这些作为参数传递给注册命令 ``idf_component_register``。
-
-自动转换工具
-------------
-
-.. highlight:: bash
-
-:idf_file:`/tools/cmake/convert_to_cmake.py` 中提供了一个项目自动转换工具。运行此命令时需要加上项目路径，如下所示::
-
-    $IDF_PATH/tools/cmake/convert_to_cmake.py /path/to/project_dir
-
-项目目录必须包含 Makefile 文件，并确保主机已安装 GNU Make (``make``) 工具，并且被添加到了 PATH 环境变量中。
-
-该工具会将项目 Makefile 文件和所有组件的 ``component.mk`` 文件转换为对应的 ``CMakeLists.txt`` 文件。
-
-转换过程如下：该工具首先运行 ``make`` 来展开 ESP-IDF 构建系统设置的变量，然后创建相应的 CMakelists 文件来设置相同的变量。
-
-.. important:: 当转换工具转换一个 ``component.mk`` 文件时，它并不能确定该组件依赖于哪些其他组件。这些信息需要通过编辑新的组件 ``CMakeLists.txt`` 文件并添加 ``REQUIRES`` 和/或 ``PRIV_REQUIRES`` 子句来手动添加。否则，组件中的源文件会因为找不到其他组件的头文件而编译失败。请参考 :ref:`component requirements` 获取更多信息。
-
-转换工具并不能处理复杂的 Makefile 逻辑或异常的目标，这些需要手动转换。
 
 CMake 中不可用的功能
 --------------------

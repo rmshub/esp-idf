@@ -126,7 +126,7 @@ function(__component_write_properties output_file)
         foreach(property ${component_properties})
             __component_get_property(val ${component_target} ${property})
             set(component_properties_text
-                "${component_properties_text}\nset(__component_${component_target}_${property} ${val})")
+                "${component_properties_text}\nset(__component_${component_target}_${property} \"${val}\")")
         endforeach()
         file(WRITE ${output_file} "${component_properties_text}")
     endforeach()
@@ -189,6 +189,9 @@ function(__component_add component_dir prefix)
 
     # Set Kconfig related properties on the component
     __kconfig_component_init(${component_target})
+
+    # set BUILD_COMPONENT_DIRS build property
+    idf_build_set_property(BUILD_COMPONENT_DIRS ${component_dir} APPEND)
 endfunction()
 
 #

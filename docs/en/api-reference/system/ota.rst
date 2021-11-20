@@ -43,15 +43,15 @@ App OTA State
 States control the process of selecting a boot app:
 
 ============================= ======================================================================
-            States            Restriction of selecting a boot app in bootloader                    
+            States            Restriction of selecting a boot app in bootloader
 ============================= ======================================================================
- ESP_OTA_IMG_VALID            None restriction. Will be selected.                                  
- ESP_OTA_IMG_UNDEFINED        None restriction. Will be selected.                                  
- ESP_OTA_IMG_INVALID          Will not be selected.                                                
- ESP_OTA_IMG_ABORTED          Will not be selected.                                                
+ ESP_OTA_IMG_VALID            None restriction. Will be selected.
+ ESP_OTA_IMG_UNDEFINED        None restriction. Will be selected.
+ ESP_OTA_IMG_INVALID          Will not be selected.
+ ESP_OTA_IMG_ABORTED          Will not be selected.
  ESP_OTA_IMG_NEW              If :ref:`CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE` option is set it will
                               be selected only once. In bootloader the state immediately changes to
-                              ``ESP_OTA_IMG_PENDING_VERIFY``.                                      
+                              ``ESP_OTA_IMG_PENDING_VERIFY``.
  ESP_OTA_IMG_PENDING_VERIFY   If :ref:`CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE` option is set it will
                               not be selected and the state will change to ``ESP_OTA_IMG_ABORTED``.
 ============================= ======================================================================
@@ -133,7 +133,7 @@ A typical anti-rollback scheme is
 
 Recommendation:
 
-If you want to avoid the download/erase overhead in case of the app from the server has security version lower then running app you have to get ``new_app_info.secure_version`` from the first package of an image and compare it with the secure version of efuse. Use ``esp_efuse_check_secure_version(new_app_info.secure_version)`` function if it is true then continue downloading otherwise abort.
+If you want to avoid the download/erase overhead in case of the app from the server has security version lower then running app, you have to get ``new_app_info.secure_version`` from the first package of an image and compare it with the secure version of efuse. Use ``esp_efuse_check_secure_version(new_app_info.secure_version)`` function if it is true then continue downloading otherwise abort.
 
 .. code-block:: c
 
@@ -165,9 +165,13 @@ If you want to avoid the download/erase overhead in case of the app from the ser
 
 Restrictions:
 
-- The number of bits in the ``secure_version`` field is limited to 32 bits. This means that only 32 times you can do an anti-rollback. You can reduce the length of this efuse field use :ref:`CONFIG_BOOTLOADER_APP_SEC_VER_SIZE_EFUSE_FIELD` option.
-- Anti-rollback only works if the encoding scheme for efuse is set to ``NONE``.
-- The partition table should not have a factory partition, only two of the app.
+.. list::
+
+    :esp32: - The number of bits in the ``secure_version`` field is limited to 32 bits. This means that only 32 times you can do an anti-rollback. You can reduce the length of this efuse field using :ref:`CONFIG_BOOTLOADER_APP_SEC_VER_SIZE_EFUSE_FIELD` option.
+    :not esp32: - The number of bits in the ``secure_version`` field is limited to 16 bits. This means that only 16 times you can do an anti-rollback. You can reduce the length of this efuse field using :ref:`CONFIG_BOOTLOADER_APP_SEC_VER_SIZE_EFUSE_FIELD` option.
+    :esp32: - Anti-rollback works only if the encoding scheme for efuse is set to ``NONE``.
+    - Factory partition is not supported in anti rollback scheme and hence partition table should not have partition with SubType set to ``factory``.
+    - Test partition is not supported in anti rollback scheme and hence partition table should not have partition with SubType set to ``test``.
 
 ``security_version``:
 

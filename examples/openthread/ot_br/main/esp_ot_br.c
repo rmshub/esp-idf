@@ -1,10 +1,15 @@
-/* OpenThread Border Router Example
-
-   This example code is in the Public Domain (or CC0 licensed, at your option.)
-
-   Unless required by applicable law or agreed to in writing, this
-   software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
-   CONDITIONS OF ANY KIND, either express or implied.
+/*
+ * SPDX-FileCopyrightText: 2021 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: CC0
+ *
+ * OpenThread Border Router Example
+ *
+ * This example code is in the Public Domain (or CC0 licensed, at your option.)
+ *
+ * Unless required by applicable law or agreed to in writing, this
+ * software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+ * CONDITIONS OF ANY KIND, either express or implied.
 */
 
 #include <stdio.h>
@@ -19,6 +24,7 @@
 #include "esp_netif_net_stack.h"
 #include "esp_openthread.h"
 #include "esp_openthread_border_router.h"
+#include "esp_openthread_cli.h"
 #include "esp_openthread_lock.h"
 #include "esp_openthread_netif_glue.h"
 #include "esp_openthread_types.h"
@@ -42,13 +48,12 @@
 #include "openthread/error.h"
 #include "openthread/instance.h"
 #include "openthread/ip6.h"
+#include "openthread/logging.h"
 #include "openthread/tasklet.h"
 #include "openthread/thread.h"
 #include "openthread/thread_ftd.h"
 
 #define TAG "esp_ot_br"
-
-extern void otAppCliInit(otInstance *aInstance);
 
 static int hex_digit_to_int(char hex)
 {
@@ -161,19 +166,22 @@ static void ot_task_worker(void *aContext)
     assert(openthread_netif != NULL);
 
     // Initialize the OpenThread stack
+    esp_openthread_set_backbone_netif(get_example_netif());
     ESP_ERROR_CHECK(esp_openthread_init(&config));
 
     // Initialize border routing features
-    ESP_ERROR_CHECK(esp_netif_attach(openthread_netif, esp_openthread_netif_glue_init(&config)));
-    ESP_ERROR_CHECK(esp_openthread_border_router_init(get_example_netif()));
-
     esp_openthread_lock_acquire(portMAX_DELAY);
-    otAppCliInit(esp_openthread_get_instance());
+    ESP_ERROR_CHECK(esp_netif_attach(openthread_netif, esp_openthread_netif_glue_init(&config)));
+    ESP_ERROR_CHECK(esp_openthread_border_router_init());
+
+    (void)otLoggingSetLevel(CONFIG_LOG_DEFAULT_LEVEL);
+    esp_openthread_cli_init();
     create_config_network(esp_openthread_get_instance());
     launch_openthread_network(esp_openthread_get_instance());
     esp_openthread_lock_release();
 
     // Run the main loop
+    esp_openthread_cli_create_task();
     esp_openthread_launch_mainloop();
 
     // Clean up
