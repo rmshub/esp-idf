@@ -102,9 +102,6 @@ components/bt/host/bluedroid/api/esp_a2dp_api.c
 components/bt/host/bluedroid/api/esp_avrc_api.c
 components/bt/host/bluedroid/api/esp_bt_main.c
 components/bt/host/bluedroid/api/esp_gap_bt_api.c
-components/bt/host/bluedroid/api/esp_gatt_common_api.c
-components/bt/host/bluedroid/api/esp_gattc_api.c
-components/bt/host/bluedroid/api/esp_gatts_api.c
 components/bt/host/bluedroid/api/esp_hf_ag_api.c
 components/bt/host/bluedroid/api/esp_hf_client_api.c
 components/bt/host/bluedroid/api/esp_hidd_api.c
@@ -238,7 +235,6 @@ components/bt/host/bluedroid/bta/sys/include/bta_sys_int.h
 components/bt/host/bluedroid/bta/sys/utl.c
 components/bt/host/bluedroid/btc/core/btc_ble_storage.c
 components/bt/host/bluedroid/btc/core/btc_config.c
-components/bt/host/bluedroid/btc/core/btc_dm.c
 components/bt/host/bluedroid/btc/core/btc_main.c
 components/bt/host/bluedroid/btc/core/btc_profile_queue.c
 components/bt/host/bluedroid/btc/core/btc_sm.c
@@ -271,12 +267,9 @@ components/bt/host/bluedroid/btc/profile/std/battery/include/srvc_battery_int.h
 components/bt/host/bluedroid/btc/profile/std/dis/dis_profile.c
 components/bt/host/bluedroid/btc/profile/std/dis/include/srvc_dis_int.h
 components/bt/host/bluedroid/btc/profile/std/gap/bta_gap_bt_co.c
-components/bt/host/bluedroid/btc/profile/std/gap/btc_gap_ble.c
 components/bt/host/bluedroid/btc/profile/std/gap/btc_gap_bt.c
 components/bt/host/bluedroid/btc/profile/std/gatt/btc_gatt_common.c
 components/bt/host/bluedroid/btc/profile/std/gatt/btc_gatt_util.c
-components/bt/host/bluedroid/btc/profile/std/gatt/btc_gattc.c
-components/bt/host/bluedroid/btc/profile/std/gatt/btc_gatts.c
 components/bt/host/bluedroid/btc/profile/std/hf_ag/bta_ag_co.c
 components/bt/host/bluedroid/btc/profile/std/hf_ag/btc_hf_ag.c
 components/bt/host/bluedroid/btc/profile/std/hf_client/bta_hf_client_co.c
@@ -605,9 +598,7 @@ components/esp_event/event_loop_legacy.c
 components/esp_event/event_send.c
 components/esp_event/host_test/esp_event_unit_test/main/esp_event_test.cpp
 components/esp_event/host_test/fixtures.hpp
-components/esp_event/include/esp_event.h
 components/esp_event/include/esp_event_base.h
-components/esp_event/include/esp_event_legacy.h
 components/esp_event/include/esp_event_loop.h
 components/esp_event/private_include/esp_event_internal.h
 components/esp_event/private_include/esp_event_private.h
@@ -676,14 +667,12 @@ components/esp_local_ctrl/src/esp_local_ctrl_transport_ble.c
 components/esp_local_ctrl/src/esp_local_ctrl_transport_httpd.c
 components/esp_netif/esp_netif_handlers.c
 components/esp_netif/esp_netif_objects.c
-components/esp_netif/include/esp_netif.h
 components/esp_netif/include/esp_netif_net_stack.h
 components/esp_netif/include/esp_netif_ppp.h
 components/esp_netif/include/esp_netif_slip.h
 components/esp_netif/include/esp_netif_sta_list.h
 components/esp_netif/loopback/esp_netif_loopback.c
 components/esp_netif/lwip/esp_netif_lwip_defaults.c
-components/esp_netif/lwip/esp_netif_lwip_internal.h
 components/esp_netif/lwip/esp_netif_lwip_ppp.c
 components/esp_netif/lwip/esp_netif_lwip_ppp.h
 components/esp_netif/lwip/esp_netif_lwip_slip.c
@@ -704,7 +693,6 @@ components/esp_pm/include/esp_private/pm_impl.h
 components/esp_pm/include/esp_private/pm_trace.h
 components/esp_pm/pm_locks.c
 components/esp_pm/test/test_pm.c
-components/esp_ringbuf/include/freertos/ringbuf.h
 components/esp_rom/esp32/esp_rom_caps.h
 components/esp_rom/esp32/ld/esp32.rom.api.ld
 components/esp_rom/esp32/ld/esp32.rom.eco3.ld
@@ -915,7 +903,6 @@ components/esp_system/include/esp_private/panic_internal.h
 components/esp_system/include/esp_private/startup_internal.h
 components/esp_system/include/esp_private/system_internal.h
 components/esp_system/include/esp_private/usb_console.h
-components/esp_system/include/esp_system.h
 components/esp_system/include/esp_task.h
 components/esp_system/include/esp_task_wdt.h
 components/esp_system/port/arch/riscv/expression_with_stack.c
@@ -1040,7 +1027,6 @@ components/fatfs/src/ffunicode.c
 components/fatfs/test/test_fatfs_common.c
 components/fatfs/test/test_fatfs_common.h
 components/fatfs/test/test_fatfs_rawflash.c
-components/fatfs/test/test_fatfs_sdmmc.c
 components/fatfs/test/test_fatfs_spiflash.c
 components/fatfs/test_fatfs_host/main.cpp
 components/fatfs/test_fatfs_host/sdkconfig/sdkconfig.h
@@ -1311,7 +1297,6 @@ components/hal/include/hal/dac_types.h
 components/hal/include/hal/ds_hal.h
 components/hal/include/hal/emac_hal.h
 components/hal/include/hal/esp_flash_err.h
-components/hal/include/hal/eth_types.h
 components/hal/include/hal/gpio_hal.h
 components/hal/include/hal/i2c_hal.h
 components/hal/include/hal/i2c_types.h
@@ -1396,11 +1381,9 @@ components/heap/include/esp_heap_caps_init.h
 components/heap/include/esp_heap_task_info.h
 components/heap/include/esp_heap_trace.h
 components/heap/include/heap_memory_layout.h
-components/heap/include/multi_heap.h
 components/heap/include/soc/soc_memory_layout.h
 components/heap/multi_heap_config.h
 components/heap/multi_heap_internal.h
-components/heap/multi_heap_platform.h
 components/heap/multi_heap_poisoning.c
 components/heap/test/test_aligned_alloc_caps.c
 components/heap/test/test_allocator_timings.c
@@ -1432,7 +1415,6 @@ components/lwip/apps/sntp/sntp.c
 components/lwip/include/apps/dhcpserver/dhcpserver.h
 components/lwip/include/apps/dhcpserver/dhcpserver_options.h
 components/lwip/include/apps/esp_ping.h
-components/lwip/include/apps/esp_sntp.h
 components/lwip/include/apps/ping/ping.h
 components/lwip/include/apps/ping/ping_sock.h
 components/lwip/include/apps/sntp/sntp.h
@@ -1458,7 +1440,6 @@ components/lwip/port/esp32/include/sntp/sntp_get_set_time.h
 components/lwip/port/esp32/include/sys/socket.h
 components/lwip/port/esp32/netif/dhcp_state.c
 components/lwip/port/esp32/netif/ethernetif.c
-components/lwip/port/esp32/netif/openthreadif.c
 components/lwip/port/esp32/netif/wlanif.c
 components/lwip/port/esp32/no_vfs_syscalls.c
 components/lwip/port/esp32/vfs_lwip.c
@@ -3470,6 +3451,16 @@ examples/wifi/smart_config/main/smartconfig_main.c
 examples/wifi/wifi_easy_connect/dpp-enrollee/main/dpp_enrollee_main.c
 examples/wifi/wifi_enterprise/main/wifi_enterprise_main.c
 examples/wifi/wps/main/wps.c
+examples/zigbee/light_sample/light_bulb/main/esp_zb_light.c
+examples/zigbee/light_sample/light_bulb/main/esp_zb_light.h
+examples/zigbee/light_sample/light_bulb/main/light_driver.c
+examples/zigbee/light_sample/light_bulb/main/light_driver.h
+examples/zigbee/light_sample/light_coordinator/main/esp_zb_coordinator.c
+examples/zigbee/light_sample/light_coordinator/main/esp_zb_coordinator.h
+examples/zigbee/light_sample/light_switch/main/esp_zb_switch.c
+examples/zigbee/light_sample/light_switch/main/esp_zb_switch.h
+examples/zigbee/light_sample/light_switch/main/switch_driver.c
+examples/zigbee/light_sample/light_switch/main/switch_driver.h
 tools/ble/lib_ble_client.py
 tools/ble/lib_gap.py
 tools/ble/lib_gatt.py
