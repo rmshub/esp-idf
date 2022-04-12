@@ -99,18 +99,18 @@ menu "PHY"
 
     config ESP_PHY_REDUCE_TX_POWER
         bool "Reduce PHY TX power when brownout reset"
-        depends on ESP32_BROWNOUT_DET
+        depends on ESP_BROWNOUT_DET
         default y
         help
             When brownout reset occurs, reduce PHY TX power to keep the code running.
 
     config ESP_PHY_ENABLE_USB
         bool "Enable USB when phy init"
-        depends on USB_OTG_SUPPORTED || ESP_CONSOLE_USB_SERIAL_JTAG
+        depends on USB_OTG_SUPPORTED || ESP_CONSOLE_USB_SERIAL_JTAG || ESP_CONSOLE_SECONDARY_USB_SERIAL_JTAG
         default y if IDF_TARGET_ESP32C3 || IDF_TARGET_ESP32S3
         default n
         help
             When using USB Serial/JTAG/OTG/CDC, PHY should enable USB, otherwise USB module
-            can not work properly.
+            can not work properly. Notice: Enabling this configuration option will slightly impact wifi performance.
 
 endmenu  # PHY

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2021-2022 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -7,6 +7,7 @@
 #include "esp_log.h"
 #include "esp_app_trace_membufs_proto.h"
 #include "esp_app_trace_port.h"
+#include "riscv/semihosting.h"
 
 /** RISCV HW transport data */
 typedef struct {
@@ -25,8 +26,6 @@ typedef struct {
     uint32_t                    stat;
     esp_apptrace_mem_block_t *  mem_blocks;
 } esp_apptrace_riscv_ctrl_block_t;
-
-#define RISCV_APPTRACE_SYSNR    0x64
 
 #define ESP_APPTRACE_RISCV_BLOCK_LEN_MSK         0x7FFFUL
 #define ESP_APPTRACE_RISCV_BLOCK_LEN(_l_)        ((_l_) & ESP_APPTRACE_RISCV_BLOCK_LEN_MSK)
@@ -57,11 +56,6 @@ static bool esp_apptrace_riscv_host_data_pending(void);
 const static char *TAG = "esp_apptrace";
 
 static esp_apptrace_riscv_ctrl_block_t s_tracing_ctrl[portNUM_PROCESSORS];
-
-esp_apptrace_hw_t *esp_apptrace_uart_hw_get(int num, void **data)
-{
-    return NULL;
-}
 
 esp_apptrace_hw_t *esp_apptrace_jtag_hw_get(void **data)
 {
@@ -103,7 +97,7 @@ __attribute__((weak)) int esp_apptrace_advertise_ctrl_block(void *ctrl_block_add
     if (!esp_cpu_in_ocd_debug_mode()) {
         return 0;
     }
-    return cpu_hal_syscall(RISCV_APPTRACE_SYSNR, (int)ctrl_block_addr, 0, 0, 0, NULL);
+    return (int) semihosting_call_noerrno(ESP_SEMIHOSTING_SYS_APPTRACE_INIT, (long*)ctrl_block_addr);
 }
 
 /* Returns up buffers config.

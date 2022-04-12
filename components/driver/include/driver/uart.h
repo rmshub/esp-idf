@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2022 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -58,6 +58,9 @@ typedef enum {
     UART_PARITY_ERR,        /*!< UART RX parity event*/
     UART_DATA_BREAK,        /*!< UART TX data and break event*/
     UART_PATTERN_DET,       /*!< UART pattern detected */
+#if SOC_UART_SUPPORT_WAKEUP_INT
+    UART_WAKEUP,            /*!< UART wakeup event */
+#endif
     UART_EVENT_MAX,         /*!< UART event max index*/
 } uart_event_type_t;
 
@@ -350,37 +353,6 @@ esp_err_t uart_disable_tx_intr(uart_port_t uart_num);
  *     - ESP_FAIL Parameter error
  */
 esp_err_t uart_enable_tx_intr(uart_port_t uart_num, int enable, int thresh);
-
-/**
- * @brief Register UART interrupt handler (ISR).
- *
- * @note UART ISR handler will be attached to the same CPU core that this function is running on.
- *
- * @param uart_num UART port number, the max port number is (UART_NUM_MAX -1).
- * @param fn  Interrupt handler function.
- * @param arg parameter for handler function
- * @param intr_alloc_flags Flags used to allocate the interrupt. One or multiple (ORred)
- *        ESP_INTR_FLAG_* values. See esp_intr_alloc.h for more info.
- * @param handle Pointer to return handle. If non-NULL, a handle for the interrupt will
- *        be returned here.
- *
- * @return
- *     - ESP_OK   Success
- *     - ESP_FAIL Parameter error
- */
-esp_err_t uart_isr_register(uart_port_t uart_num, void (*fn)(void*), void * arg, int intr_alloc_flags,  uart_isr_handle_t *handle);
-
-/**
- * @brief Free UART interrupt handler registered by uart_isr_register. Must be called on the same core as
- * uart_isr_register was called.
- *
- * @param uart_num UART port number, the max port number is (UART_NUM_MAX -1).
- *
- * @return
- *     - ESP_OK   Success
- *     - ESP_FAIL Parameter error
- */
-esp_err_t uart_isr_free(uart_port_t uart_num);
 
 /**
  * @brief Assign signals of a UART peripheral to GPIO pins

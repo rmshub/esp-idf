@@ -8,8 +8,6 @@ set(srcs
     "rtc_pm.c"
     "rtc_sleep.c"
     "rtc_time.c"
-    "rtc_wdt.c"
-    "regi2c_ctrl.c"
     "chip_info.c"
     )
 
@@ -21,6 +19,7 @@ if(NOT BOOTLOADER_BUILD)
                      "esp_ds.c"
                      "dport_access.c"
                      "spiram.c"
+                     "mmu_psram.c"
                      "spiram_psram.c")
 endif()
 

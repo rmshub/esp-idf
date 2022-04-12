@@ -13,25 +13,10 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "freertos/semphr.h"
-#include "freertos/queue.h"
 
-#include "lwip/sockets.h"
-#include "lwip/dns.h"
-#include "lwip/netdb.h"
-#include "lwip/igmp.h"
-
-#include "esp_wifi.h"
-#include "esp_system.h"
-#include "esp_event.h"
-#include "nvs_flash.h"
-#include "soc/rtc_periph.h"
-#include "driver/spi_slave.h"
 #include "esp_log.h"
-#include "esp_spi_flash.h"
+#include "driver/spi_slave.h"
 #include "driver/gpio.h"
-
-
 
 
 /*
@@ -56,7 +41,7 @@ Pins in use. The SPI Master can use the GPIO mux, so feel free to change these i
 #define GPIO_SCLK 15
 #define GPIO_CS 14
 
-#elif CONFIG_IDF_TARGET_ESP32C3
+#elif CONFIG_IDF_TARGET_ESP32C3 || CONFIG_IDF_TARGET_ESP32C2 || CONFIG_IDF_TARGET_ESP32H2
 #define GPIO_HANDSHAKE 3
 #define GPIO_MOSI 7
 #define GPIO_MISO 2
@@ -85,12 +70,12 @@ Pins in use. The SPI Master can use the GPIO mux, so feel free to change these i
 
 //Called after a transaction is queued and ready for pickup by master. We use this to set the handshake line high.
 void my_post_setup_cb(spi_slave_transaction_t *trans) {
-    WRITE_PERI_REG(GPIO_OUT_W1TS_REG, (1<<GPIO_HANDSHAKE));
+    gpio_set_level(GPIO_HANDSHAKE, 1);
 }
 
 //Called after transaction is sent/received. We use this to set the handshake line low.
 void my_post_trans_cb(spi_slave_transaction_t *trans) {
-    WRITE_PERI_REG(GPIO_OUT_W1TC_REG, (1<<GPIO_HANDSHAKE));
+    gpio_set_level(GPIO_HANDSHAKE, 0);
 }
 
 //Main application

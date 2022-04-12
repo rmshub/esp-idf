@@ -1,16 +1,8 @@
-// Copyright 2018 Espressif Systems (Shanghai) PTE LTD
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+/*
+ * SPDX-FileCopyrightText: 2018-2021 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 #include <string.h>
 #include "esp_system.h"
@@ -26,13 +18,13 @@
 #include "soc/efuse_periph.h"
 #include "soc/rtc_periph.h"
 #include "soc/timer_periph.h"
-#include "soc/cpu.h"
+#include "esp_cpu.h"
 #include "soc/rtc.h"
 #include "hal/wdt_hal.h"
 #include "hal/cpu_hal.h"
 #include "freertos/xtensa_api.h"
 #include "soc/soc_memory_layout.h"
-#include "cache_err_int.h"
+#include "esp_private/cache_err_int.h"
 
 #include "esp32/rom/cache.h"
 #include "esp32/rom/rtc.h"
@@ -56,7 +48,6 @@ void IRAM_ATTR esp_restart_noos(void)
 
     //Enable flash boot mode so that flash booting after restart is protected by the RTC WDT.
     wdt_hal_set_flashboot_en(&rtc_wdt_ctx, true);
-    wdt_hal_write_protect_enable(&rtc_wdt_ctx);
 
     // Reset and stall the other CPU.
     // CPU must be reset before stalling, in case it was running a s32c1i

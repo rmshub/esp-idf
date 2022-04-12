@@ -4,6 +4,7 @@ SOURCE_FILES := \
     flash_mock_util.c \
     $(addprefix ../, \
     partition.c \
+    ../spi_flash/partition_target.c \
     flash_ops.c \
     esp32/flash_ops_esp32.c \
     ) \
@@ -37,6 +38,7 @@ INCLUDE_DIRS := \
     esp32/include \
     esp_timer/include \
     bootloader_support/include \
+    bootloader_support/bootloader_flash/include \
     app_update/include \
     hal/include \
     hal/esp32/include \

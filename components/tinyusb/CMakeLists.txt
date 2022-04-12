@@ -53,9 +53,12 @@ if(CONFIG_TINYUSB)
         "tinyusb/src/tusb.c"
         "additions/src/descriptors_control.c"
         "additions/src/tinyusb.c"
-        "additions/src/tusb_tasks.c"
         "additions/src/usb_descriptors.c"
         )
+
+    if(NOT CONFIG_TINYUSB_NO_DEFAULT_TASK)
+        list(APPEND srcs "additions/src/tusb_tasks.c")
+    endif()
 
     # when no builtin class driver is enabled, an uint8_t data compared with `BUILTIN_DRIVER_COUNT` will always be false
     set_source_files_properties("tinyusb/src/device/usbd.c" PROPERTIES COMPILE_FLAGS "-Wno-type-limits")
@@ -73,7 +76,7 @@ endif() # CONFIG_TINYUSB
 idf_component_register(SRCS ${srcs}
                        INCLUDE_DIRS ${includes_public}
                        PRIV_INCLUDE_DIRS ${includes_private}
-                       PRIV_REQUIRES "vfs" "usb"
+                       PRIV_REQUIRES "vfs" "usb" "driver"
                        )
 
 if(CONFIG_TINYUSB)

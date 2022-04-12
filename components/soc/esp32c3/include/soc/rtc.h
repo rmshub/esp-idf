@@ -1,16 +1,8 @@
-// Copyright 2020 Espressif Systems (Shanghai) PTE LTD
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+/*
+ * SPDX-FileCopyrightText: 2020-2021 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 #pragma once
 
 #include <stdbool.h>
@@ -165,7 +157,6 @@ typedef enum {
     RTC_CPU_FREQ_SRC_XTAL,  //!< XTAL
     RTC_CPU_FREQ_SRC_PLL,   //!< PLL (480M or 320M)
     RTC_CPU_FREQ_SRC_8M,    //!< Internal 8M RTC oscillator
-    RTC_CPU_FREQ_SRC_APLL   //!< APLL
 } rtc_cpu_freq_src_t;
 
 /**
@@ -370,24 +361,6 @@ bool rtc_clk_8m_enabled(void);
  * @return true if the divided output is enabled
  */
 bool rtc_clk_8md256_enabled(void);
-
-/**
- * @brief Enable or disable APLL
- *
- * Output frequency is given by the formula:
- * apll_freq = xtal_freq * (4 + sdm2 + sdm1/256 + sdm0/65536)/((o_div + 2) * 2)
- *
- * The dividend in this expression should be in the range of 240 - 600 MHz.
- *
- * In rev. 0 of ESP32, sdm0 and sdm1 are unused and always set to 0.
- *
- * @param enable  true to enable, false to disable
- * @param sdm0  frequency adjustment parameter, 0..255
- * @param sdm1  frequency adjustment parameter, 0..255
- * @param sdm2  frequency adjustment parameter, 0..63
- * @param o_div  frequency divider, 0..31
- */
-void rtc_clk_apll_enable(bool enable, uint32_t sdm0, uint32_t sdm1, uint32_t sdm2, uint32_t o_div);
 
 /**
  * @brief Select source for RTC_SLOW_CLK

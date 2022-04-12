@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2020-2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2020-2022 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -17,7 +17,6 @@
 #include "soc/system_reg.h"
 #include "soc/syscon_reg.h"
 #include "regi2c_ctrl.h"
-#include "soc_log.h"
 #include "esp_efuse.h"
 #include "esp_efuse_table.h"
 #include "i2c_pmu.h"
@@ -80,8 +79,13 @@ void rtc_init(rtc_config_t cfg)
             SET_PERI_REG_MASK(RTC_CNTL_OPTIONS0_REG, RTC_CNTL_BB_I2C_FORCE_PU);
         }
 
+#if CONFIG_IDF_TARGET_ESP32H2_BETA_VERSION_2
+        CLEAR_PERI_REG_MASK(RTC_CNTL_REGULATOR_REG, RTC_CNTL_REGULATOR_FORCE_PU);
+        CLEAR_PERI_REG_MASK(RTC_CNTL_REGULATOR_REG, RTC_CNTL_DBOOST_FORCE_PU);
+#elif CONFIG_IDF_TARGET_ESP32H2_BETA_VERSION_1
         CLEAR_PERI_REG_MASK(RTC_CNTL_REG, RTC_CNTL_REGULATOR_FORCE_PU);
         CLEAR_PERI_REG_MASK(RTC_CNTL_REG, RTC_CNTL_DBOOST_FORCE_PU);
+#endif
 
         // clear i2c_reset_protect pd force, need tested in low temperature.
         CLEAR_PERI_REG_MASK(RTC_CNTL_ANA_CONF_REG,RTC_CNTL_I2C_RESET_POR_FORCE_PD);

@@ -3,7 +3,7 @@
   stage: host_test
   image: $ESP_ENV_IMAGE
   variables:
-    PYTHON_VER: 3.6.13
+    PYTHON_VER: 3.7.10
   tags:
     - host_test
   dependencies: []
@@ -57,10 +57,8 @@ test_ldgen_on_host:
   extends: .host_test_template
   script:
     - cd tools/ldgen/test
-    - ./test_fragments.py
-    - ./test_generation.py
-    - ./test_entity.py
-    - ./test_output_commands.py
+    - export PYTHONPATH=$PYTHONPATH:..
+    - python -m unittest
   variables:
     LC_ALL: C.UTF-8
 
@@ -106,6 +104,12 @@ test_mdns_fuzzer_on_host:
   variables:
     FUZZER_TEST_DIR: components/mdns/test_afl_fuzz_host
 
+test_mdns_no_serv_fuzzer_on_host:
+  extends: .host_fuzzer_test_template
+  variables:
+    FUZZER_TEST_DIR: components/mdns/test_afl_fuzz_host
+    FUZZER_PARAMS: MDNS_NO_SERVICES=on
+
 test_lwip_dns_fuzzer_on_host:
   extends: .host_fuzzer_test_template
   variables:
@@ -137,6 +141,7 @@ test_fatfsgen_on_host:
   script:
     - cd components/fatfs/test_fatfsgen/
     - ./test_fatfsgen.py
+    - ./test_wl_fatfsgen.py
 
 test_multi_heap_on_host:
   extends: .host_test_template
@@ -180,6 +185,7 @@ test_idf_monitor:
       - tools/test_idf_monitor/outputs/*
     expire_in: 1 week
   script:
+    - eval $($IDF_PATH/tools/idf_tools.py export)
     - cd ${IDF_PATH}/tools/test_idf_monitor
     - ./run_test_idf_monitor.py
 
@@ -216,8 +222,7 @@ test_idf_tools:
     - cd ${IDF_PATH}/tools/test_idf_tools
     - ./test_idf_tools.py
     # Test for create virtualenv. It must be invoked from Python, not from virtualenv.
-    - cd ${IDF_PATH}/tools
-    - python3 ./idf_tools.py install-python-env
+    - python3 ./test_idf_tools_python_env.py
 
 .test_efuse_table_on_host_template:
   extends: .host_test_template
@@ -272,6 +277,7 @@ test_espcoredump:
     # install CMake version specified in tools.json
     SETUP_TOOLS_LIST: "all"
   script:
+    - eval $($IDF_PATH/tools/idf_tools.py export)
     - retry_failed git clone ${IDF_COREDUMP_ELF_REPO} -b $IDF_COREDUMP_ELF_TAG
     - cd ${IDF_PATH}/components/espcoredump/test/
     - ./test_espcoredump.sh ${CI_PROJECT_DIR}/idf-coredump-elf
@@ -316,7 +322,7 @@ test_mkuf2:
 
 test_autocomplete:
   extends: .host_test_template
-  image: $CI_DOCKER_REGISTRY/linux-shells:1
+  image: $LINUX_SHELL_IMAGE
   artifacts:
     when: on_failure
     paths:
@@ -327,7 +333,7 @@ test_autocomplete:
 
 test_detect_python:
   extends: .host_test_template
-  image: $CI_DOCKER_REGISTRY/linux-shells:1
+  image: $LINUX_SHELL_IMAGE
   script:
     - cd ${IDF_PATH}
     - shellcheck -s sh tools/detect_python.sh
@@ -337,6 +343,12 @@ test_detect_python:
     - "dash -c '. tools/detect_python.sh && echo Our Python: ${ESP_PYTHON?Python is not set}'"
     - "zsh -c '. tools/detect_python.sh && echo Our Python: ${ESP_PYTHON?Python is not set}'"
     - "fish -c 'source tools/detect_python.fish && echo Our Python: $ESP_PYTHON'"
+
+test_split_path_by_spaces:
+  extends: .host_test_template
+  script:
+    - cd ${IDF_PATH}/tools
+    - python -m unittest split_paths_by_spaces.py
 
 test_nvs_page:
   extends: .host_test_template
@@ -415,3 +427,9 @@ test_linux_example:
     - idf.py build
     - timeout 5 ./build/linux_host_app.elf >test.log || true
     - grep "Restarting" test.log
+
+test_gen_soc_caps_kconfig:
+  extends: .host_test_template
+  script:
+    - cd ${IDF_PATH}/tools/gen_soc_caps_kconfig/
+    - ./test/test_gen_soc_caps_kconfig.py

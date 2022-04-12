@@ -6,7 +6,6 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include "soc/cpu.h"
 #include "FreeRTOS.h"
 #include "task.h"
 #include "esp_intr_alloc.h"
@@ -19,6 +18,10 @@
 #include "hal/systimer_hal.h"
 #include "hal/systimer_ll.h"
 #endif
+
+#ifdef CONFIG_PM_TRACE
+#include "esp_private/pm_trace.h"
+#endif //CONFIG_PM_TRACE
 
 BaseType_t xPortSysTickHandler(void);
 
@@ -158,7 +161,9 @@ IRAM_ATTR void SysTickIsrHandler(void *arg)
  */
 BaseType_t xPortSysTickHandler(void)
 {
+#if configBENCHMARK
     portbenchmarkIntLatency();
+#endif //configBENCHMARK
     traceISR_ENTER(SYSTICK_INTR_ID);
     BaseType_t ret = xTaskIncrementTick();
     if(ret != pdFALSE) {

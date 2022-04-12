@@ -1,20 +1,13 @@
-// Copyright 2020 Espressif Systems (Shanghai) PTE LTD
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+/*
+ * SPDX-FileCopyrightText: 2020-2022 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 #pragma once
 
 #include <stdbool.h>
+#include "esp_err.h"
 #include "tusb.h"
 #include "tusb_option.h"
 #include "tusb_config.h"
@@ -71,9 +64,13 @@ extern "C" {
  * @brief Configuration structure of the tinyUSB core
  */
 typedef struct {
-    tusb_desc_device_t *descriptor; /*!< Pointer to a device descriptor */
-    const char **string_descriptor; /*!< Pointer to an array of string descriptors */
-    bool external_phy;              /*!< Should USB use an external PHY */
+    union {
+        const tusb_desc_device_t *device_descriptor; /*!< Pointer to a device descriptor. If set to NULL, the TinyUSB device will use a default device descriptor whose values are set in Kconfig */
+        const tusb_desc_device_t *descriptor  __attribute__((deprecated)); /*!< Alias to `device_descriptor` for backward compatibility */
+    };
+    const char **string_descriptor;            /*!< Pointer to an array of string descriptors */
+    bool external_phy;                         /*!< Should USB use an external PHY */
+    const uint8_t *configuration_descriptor;   /*!< Pointer to a configuration descriptor. If set to NULL, TinyUSB device will use a default configuration descriptor whose values are set in Kconfig */
 } tinyusb_config_t;
 
 /**

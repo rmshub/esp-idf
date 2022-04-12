@@ -16,22 +16,10 @@
 #include "esp_flash_internal.h"
 #include "spi_flash_defs.h"
 #include "esp_rom_caps.h"
+#include "esp_rom_spiflash.h"
 #if CONFIG_IDF_TARGET_ESP32S2
 #include "esp_crypto_lock.h" // for locking flash encryption peripheral
 #endif //CONFIG_IDF_TARGET_ESP32S2
-#if CONFIG_IDF_TARGET_ESP32
-#include "esp32/rom/spi_flash.h"
-#elif CONFIG_IDF_TARGET_ESP32S2
-#include "esp32s2/rom/spi_flash.h"
-#elif CONFIG_IDF_TARGET_ESP32S3
-#include "esp32s3/rom/spi_flash.h"
-#elif CONFIG_IDF_TARGET_ESP32C3
-#include "esp32c3/rom/spi_flash.h"
-#elif CONFIG_IDF_TARGET_ESP32H2
-#include "esp32h2/rom/spi_flash.h"
-#elif CONFIG_IDF_TARGET_ESP8684
-#include "esp8684/rom/spi_flash.h"
-#endif
 
 static const char TAG[] = "spi_flash";
 
@@ -265,12 +253,14 @@ esp_err_t IRAM_ATTR esp_flash_init_main(esp_flash_t *chip)
     // 3. Get basic parameters of the chip (size, dummy count, etc.)
     // 4. Init chip into desired mode (without breaking the cache!)
     esp_err_t err = ESP_OK;
-    bool octal_mode = (chip->read_mode >= SPI_FLASH_OPI_FLAG);
+    bool octal_mode;
+
     if (chip == NULL || chip->host == NULL || chip->host->driver == NULL ||
         ((memspi_host_inst_t*)chip->host)->spi == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
 
+    octal_mode = (chip->read_mode >= SPI_FLASH_OPI_FLAG);
     //read chip id
     // This can indicate the MSPI support OPI, if the flash works on MSPI in OPI mode, we directly bypass read id.
     uint32_t flash_id = 0;

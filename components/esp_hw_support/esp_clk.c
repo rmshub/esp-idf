@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2022 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -12,32 +12,27 @@
 #include "soc/rtc.h"
 #include "soc/soc_caps.h"
 #include "esp_rom_caps.h"
+#include "esp_rom_sys.h"
+#include "esp_private/esp_clk.h"
 
 #if CONFIG_IDF_TARGET_ESP32
 #include "esp32/rom/rtc.h"
-#include "esp32/clk.h"
 #include "esp32/rtc.h"
 #elif CONFIG_IDF_TARGET_ESP32S2
 #include "esp32s2/rom/rtc.h"
-#include "esp32s2/clk.h"
 #include "esp32s2/rtc.h"
 #elif CONFIG_IDF_TARGET_ESP32S3
 #include "esp32s3/rom/rtc.h"
-#include "esp32s3/clk.h"
 #include "esp32s3/rtc.h"
-#include "esp32s3/rom/ets_sys.h"
 #elif CONFIG_IDF_TARGET_ESP32C3
 #include "esp32c3/rom/rtc.h"
-#include "esp32c3/clk.h"
 #include "esp32c3/rtc.h"
 #elif CONFIG_IDF_TARGET_ESP32H2
 #include "esp32h2/rom/rtc.h"
-#include "esp32h2/clk.h"
 #include "esp32h2/rtc.h"
-#elif CONFIG_IDF_TARGET_ESP8684
-#include "esp8684/rom/rtc.h"
-#include "esp_private/esp_clk.h"
-#include "esp8684/rtc.h"
+#elif CONFIG_IDF_TARGET_ESP32C2
+#include "esp32c2/rom/rtc.h"
+#include "esp32c2/rtc.h"
 #endif
 
 #define MHZ (1000000)
@@ -58,7 +53,7 @@ static RTC_DATA_ATTR uint64_t s_esp_rtc_time_us = 0, s_rtc_last_ticks = 0;
 inline static int IRAM_ATTR s_get_cpu_freq_mhz(void)
 {
 #if ESP_ROM_GET_CLK_FREQ
-    return ets_get_cpu_frequency();
+    return esp_rom_get_cpu_ticks_per_us();
 #else
     return g_ticks_per_us_pro;
 #endif
@@ -79,7 +74,7 @@ int IRAM_ATTR esp_clk_xtal_freq(void)
     return rtc_clk_xtal_freq_get() * MHZ;
 }
 
-#if !CONFIG_IDF_TARGET_ESP32C3 && !CONFIG_IDF_TARGET_ESP32H2 && !CONFIG_IDF_TARGET_ESP8684
+#if !CONFIG_IDF_TARGET_ESP32C3 && !CONFIG_IDF_TARGET_ESP32H2 && !CONFIG_IDF_TARGET_ESP32C2
 void IRAM_ATTR ets_update_cpu_frequency(uint32_t ticks_per_us)
 {
     /* Update scale factors used by esp_rom_delay_us */

@@ -23,7 +23,9 @@ After being updated, this configuration is saved inside ``sdkconfig`` file in th
 Using sdkconfig.defaults
 ========================
 
-In some cases, such as when ``sdkconfig`` file is under revision control, the fact that ``sdkconfig`` file gets changed by the build system may be inconvenient. The build system offers a way to avoid this, in the form of ``sdkconfig.defaults`` file. This file is never touched by the build system, and must be created manually. It can contain all the options which matter for the given application. The format is the same as that of the ``sdkconfig`` file. Once ``sdkconfig.defaults`` is created, ``sdkconfig`` can be deleted and added to the ignore list of the revision control system (e.g. ``.gitignore`` file for git). Project build targets will automatically create ``sdkconfig`` file, populated with the settings from ``sdkconfig.defaults`` file, and the rest of the settings will be set to their default values. Note that the build process will not override settings that are already in ``sdkconfig`` by ones from ``sdkconfig.defaults``. For more information, see :ref:`custom-sdkconfig-defaults`.
+In some cases, such as when ``sdkconfig`` file is under revision control, the fact that ``sdkconfig`` file gets changed by the build system may be inconvenient. The build system offers a way to avoid this, in the form of ``sdkconfig.defaults`` file. This file is never touched by the build system, and can be created manually or automatically. It can contain all the options which matter for the given application and are different from the default ones. The format is the same as that of the ``sdkconfig`` file. ``sdkconfig.defaults`` can be created manually when one remembers all the changed configurations. Otherwise, the file can be generated automatically by running the ``idf.py save-defconfig`` command.
+
+Once ``sdkconfig.defaults`` is created, ``sdkconfig`` can be deleted and added to the ignore list of the revision control system (e.g. ``.gitignore`` file for ``git``). Project build targets will automatically create ``sdkconfig`` file, populated with the settings from ``sdkconfig.defaults`` file, and the rest of the settings will be set to their default values. Note that the build process will not override settings that are already in ``sdkconfig`` by ones from ``sdkconfig.defaults``. For more information, see :ref:`custom-sdkconfig-defaults`.
 
 Kconfig Formatting Rules
 ========================
@@ -38,8 +40,6 @@ The following attributes of ``Kconfig`` files are standardized:
 - No trailing spaces are allowed at the end of the lines.
 - The maximum length of options is set to 40 characters.
 - The maximum length of lines is set to 120 characters.
-- Lines cannot be wrapped by backslash (because there is a bug in earlier versions of ``conf-idf`` which causes that
-  Windows line endings are not recognized after a backslash).
 
 Format checker
 --------------
@@ -67,7 +67,7 @@ Therefore, several features have been adopted to avoid this:
 1. ``confgen.py`` is used by the tool chain to pre-process ``sdkconfig`` files before anything else, for example
    ``menuconfig``, would read them. As the consequence, the settings for old options will be kept and not ignored.
 2. ``confgen.py`` recursively finds all ``sdkconfig.rename`` files in ESP-IDF directory which contain old and new
-   ``Kconfig`` option names. Old options are replaced by new ones in the ``sdkconfig`` file.
+   ``Kconfig`` option names. Old options are replaced by new ones in the ``sdkconfig`` file. Renames that should only appear for a single target can be placed in a target specific rename file: `sdkconfig.rename.TARGET`, where `TARGET` is the target name, e.g. `sdkconfig.rename.esp32s2`.
 3. ``confgen.py`` post-processes ``sdkconfig`` files and generates all build
    outputs (``sdkconfig.h``, ``sdkconfig.cmake``, ``auto.conf``) by adding a list
    of compatibility statements, i.e. value of the old option is set the value of

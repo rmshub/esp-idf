@@ -11,7 +11,6 @@
 #include "sdkconfig.h"
 #include "esp_attr.h"
 #include "esp_log.h"
-#include "esp32h2/clk.h"
 #include "esp_clk_internal.h"
 #include "esp32h2/rom/ets_sys.h"
 #include "esp32h2/rom/uart.h"
@@ -25,6 +24,7 @@
 #include "hal/cpu_hal.h"
 #include "hal/wdt_hal.h"
 #include "esp_private/periph_ctrl.h"
+#include "esp_private/esp_clk.h"
 #include "bootloader_clock.h"
 #include "soc/syscon_reg.h"
 #include "esp_rom_uart.h"
@@ -200,25 +200,23 @@ __attribute__((weak)) void esp_perip_clk_init(void)
     uint32_t common_perip_clk, hwcrypto_perip_clk = 0;
     uint32_t common_perip_clk1 = 0;
 
-    soc_reset_reason_t rst_reas[1];
-    rst_reas[0] = esp_rom_get_reset_reason(0);
+    soc_reset_reason_t rst_reason = esp_rom_get_reset_reason(0);
 
     /* For reason that only reset CPU, do not disable the clocks
      * that have been enabled before reset.
      */
-    /* For reason that only reset CPU, do not disable the clocks
-     * that have been enabled before reset.
-     */
-    if ((rst_reas[0] >= RESET_REASON_CPU0_MWDT0 && rst_reas[0] <= RESET_REASON_CPU0_RTC_WDT && rst_reas[0] != RESET_REASON_SYS_BROWN_OUT)) {
+    if (rst_reason == RESET_REASON_CPU0_MWDT0 || rst_reason == RESET_REASON_CPU0_SW ||
+            rst_reason == RESET_REASON_CPU0_RTC_WDT || rst_reason == RESET_REASON_CPU0_MWDT1 ||
+            rst_reason == RESET_REASON_CPU0_JTAG) {
         common_perip_clk = ~READ_PERI_REG(SYSTEM_PERIP_CLK_EN0_REG);
         hwcrypto_perip_clk = ~READ_PERI_REG(SYSTEM_PERIP_CLK_EN1_REG);
     } else {
         common_perip_clk = SYSTEM_WDG_CLK_EN |
                            SYSTEM_I2S0_CLK_EN |
-#if CONFIG_CONSOLE_UART_NUM != 0
+#if CONFIG_ESP_CONSOLE_UART_NUM != 0
                            SYSTEM_UART_CLK_EN |
 #endif
-#if CONFIG_CONSOLE_UART_NUM != 1
+#if CONFIG_ESP_CONSOLE_UART_NUM != 1
                            SYSTEM_UART1_CLK_EN |
 #endif
                            SYSTEM_SPI2_CLK_EN |
@@ -242,10 +240,10 @@ __attribute__((weak)) void esp_perip_clk_init(void)
 
     //Reset the communication peripherals like I2C, SPI, UART, I2S and bring them to known state.
     common_perip_clk |= SYSTEM_I2S0_CLK_EN |
-#if CONFIG_CONSOLE_UART_NUM != 0
+#if CONFIG_ESP_CONSOLE_UART_NUM != 0
                         SYSTEM_UART_CLK_EN |
 #endif
-#if CONFIG_CONSOLE_UART_NUM != 1
+#if CONFIG_ESP_CONSOLE_UART_NUM != 1
                         SYSTEM_UART1_CLK_EN |
 #endif
                         SYSTEM_SPI2_CLK_EN |

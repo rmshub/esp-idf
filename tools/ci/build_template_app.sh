@@ -31,6 +31,8 @@ gen_configs() {
     # CONFIG_COMPILER_OPTIMIZATION_DEFAULT with flag -Og
     echo "CONFIG_COMPILER_OPTIMIZATION_DEFAULT=y" > esp-idf-template/sdkconfig.ci2.Og
     echo "CONFIG_BOOTLOADER_COMPILER_OPTIMIZATION_DEBUG=y" >> esp-idf-template/sdkconfig.ci2.Og
+    # -Og makes the bootloader too large to fit in the default space, otherwise(!)
+    echo "CONFIG_PARTITION_TABLE_OFFSET=0x10000" >> esp-idf-template/sdkconfig.ci2.Og
 
     # Needs to be built with specific extra flags
     # Same as O2, but also disable assertions.
@@ -69,7 +71,7 @@ build_stage2() {
     search_cmake esp32s3 ${CONFIG_STR}
     search_cmake esp32c3 ${CONFIG_STR}
     search_cmake esp32h2 ${CONFIG_STR}
-    search_cmake esp8684 ${CONFIG_STR}
+    search_cmake esp32c2 ${CONFIG_STR}
 
     build build_list_1.json
 
@@ -79,7 +81,7 @@ build_stage2() {
     search_cmake esp32s3 ${CONFIG_STR}
     search_cmake esp32c3 ${CONFIG_STR}
     search_cmake esp32h2 ${CONFIG_STR}
-    search_cmake esp8684 ${CONFIG_STR}
+    search_cmake esp32c2 ${CONFIG_STR}
 
     # Override EXTRA_CFLAGS and EXTRA_CXXFLAGS in the environment
     export EXTRA_CFLAGS=${PEDANTIC_CFLAGS/-Werror=unused-variable -Werror=unused-but-set-variable -Werror=unused-function/}
@@ -94,7 +96,7 @@ build_stage1() {
     search_cmake esp32s3 ${CONFIG_STR}
     search_cmake esp32c3 ${CONFIG_STR}
     search_cmake esp32h2 ${CONFIG_STR}
-    search_cmake esp8684 ${CONFIG_STR}
+    search_cmake esp32c2 ${CONFIG_STR}
 
     build
 }

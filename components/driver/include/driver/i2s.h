@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2022 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -10,8 +10,6 @@
 #include "esp_err.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
-#include "soc/i2s_periph.h"
-#include "soc/rtc_periph.h"
 #include "soc/soc_caps.h"
 #include "hal/i2s_types.h"
 #include "esp_intr_alloc.h"
@@ -96,8 +94,15 @@ typedef struct {
     i2s_channel_fmt_t       channel_format;             /*!< I2S channel format.*/
     i2s_comm_format_t       communication_format;       /*!< I2S communication format */
     int                     intr_alloc_flags;           /*!< Flags used to allocate the interrupt. One or multiple (ORred) ESP_INTR_FLAG_* values. See esp_intr_alloc.h for more info */
-    int                     dma_buf_count;              /*!< I2S DMA Buffer Count */
-    int                     dma_buf_len;                /*!< I2S DMA Buffer Length */
+    union {
+        int dma_desc_num;                               /*!< The total number of descriptors used by I2S DMA to receive/transmit data */
+        int dma_buf_count __attribute__((deprecated));  /*!< This is an alias to 'dma_desc_num' for backward compatibility */
+    };
+    union {
+        int dma_frame_num;                              /*!< Number of frames for one-time sampling. The frame here means the total data from all the channels in a WS cycle */
+        int dma_buf_len __attribute__((deprecated));    /*!< This is an alias to 'dma_frame_num' for backward compatibility */
+    };
+
     bool                    use_apll;                   /*!< I2S using APLL as main I2S clock, enable it to get accurate clock */
     bool                    tx_desc_auto_clear;         /*!< I2S auto clear tx descriptor if there is underflow condition (helps in avoiding noise in case of data unavailability) */
     int                     fixed_mclk;                 /*!< I2S using fixed MCLK output. If use_apll = true and fixed_mclk > 0, then the clock output for i2s is fixed and equal to the fixed_mclk value. If fixed_mclk set, mclk_multiple won't take effect */

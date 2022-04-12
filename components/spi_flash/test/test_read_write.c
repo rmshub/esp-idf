@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2010-2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2010-2022 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -17,19 +17,16 @@
 #include <esp_spi_flash.h>
 #include "../cache_utils.h"
 #include "soc/timer_periph.h"
+#include "esp_attr.h"
 #include "esp_heap_caps.h"
-
+#include "esp_rom_spiflash.h"
 #if CONFIG_IDF_TARGET_ESP32
+// Used for rom_fix function
 #include "esp32/rom/spi_flash.h"
-#elif CONFIG_IDF_TARGET_ESP32S2
-#include "esp32s2/rom/spi_flash.h"
-#elif CONFIG_IDF_TARGET_ESP32S3
-#include "esp32s3/rom/spi_flash.h"
-#elif CONFIG_IDF_TARGET_ESP32C3
-#include "esp32c3/rom/spi_flash.h"
-#elif CONFIG_IDF_TARGET_ESP32H2
-#include "esp32h2/rom/spi_flash.h"
 #endif
+
+#if !TEMPORARY_DISABLED_FOR_TARGETS(ESP32C2)
+// TODO: SPI_FLASH IDF-4025
 
 #define MIN_BLOCK_SIZE  12
 /* Base offset in flash for tests. */
@@ -386,3 +383,5 @@ TEST_CASE("spi_flash_read less than 16 bytes into buffer in external RAM", "[spi
 }
 
 #endif // CONFIG_SPIRAM
+
+#endif // #if !TEMPORARY_DISABLED_FOR_TARGETS(ESP32C2)

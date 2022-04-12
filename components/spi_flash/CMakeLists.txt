@@ -1,6 +1,18 @@
 idf_build_get_property(target IDF_TARGET)
+if(${target} STREQUAL "linux")
+    set(srcs "partition.c"
+         "partition_linux.c")
+    idf_component_get_property(hal_dir hal COMPONENT_DIR)
+    idf_component_get_property(bootloader_support_dir bootloader_support COMPONENT_DIR)
+
+    idf_component_register(SRCS "${srcs}"
+        INCLUDE_DIRS include ${hal_dir}/include ${bootloader_support_dir}/include
+        PRIV_INCLUDE_DIRS include/spi_flash
+        PRIV_REQUIRES linux partition_table)
+    return()
+endif()
+
 if(BOOTLOADER_BUILD)
-    set(srcs "${target}/spi_flash_rom_patch.c")
     set(cache_srcs "")
     set(priv_requires bootloader_support soc)
 else()
@@ -12,7 +24,7 @@ else()
     )
     set(srcs
         "partition.c"
-        "${target}/spi_flash_rom_patch.c"
+        "partition_target.c"
     )
 
     if(CONFIG_ESPTOOLPY_OCT_FLASH)
@@ -22,7 +34,8 @@ else()
     if(CONFIG_IDF_TARGET_ESP32S3)
         list(APPEND srcs
             "esp32s3/spi_timing_config.c"
-            "spi_flash_timing_tuning.c")
+            "spi_flash_timing_tuning.c"
+            "spi_flash_hpm_enable.c")
     endif()
 
     # New implementation after IDF v4.0
@@ -35,6 +48,7 @@ else()
         "spi_flash_chip_winbond.c"
         "spi_flash_chip_boya.c"
         "spi_flash_chip_mxic_opi.c"
+        "spi_flash_chip_th.c"
         "memspi_host_driver.c")
 
     list(APPEND cache_srcs

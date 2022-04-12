@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2021-2022 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -13,15 +13,23 @@ extern "C" {
 /**
  * @brief LCD clock source
  * @note User should select the clock source based on the real requirement:
- *
- * | LCD clock source    | Features                 | Power Management           |
- * |---------------------|--------------------------|----------------------------|
- * | LCD_CLK_SRC_PLL160M | High resolution, fixed   | ESP_PM_APB_FREQ_MAX lock   |
- * | LCD_CLK_SRC_APLL    | Configurable resolution  | ESP_PM_NO_LIGHT_SLEEP lock |
- * | LCD_CLK_SRC_XTAL    | Medium resolution, fixed | No PM lock                 |
+ * @verbatim embed:rst:leading-asterisk
+ * +---------------------+-------------------------+----------------------------+
+ * | LCD clock source    | Features                | Power Management           |
+ * +=====================+=========================+============================+
+ * | LCD_CLK_SRC_PLL160M | High resolution         | ESP_PM_APB_FREQ_MAX lock   |
+ * +---------------------+-------------------------+----------------------------+
+ * | LCD_CLK_SRC_PLL240M | High resolution         | ESP_PM_APB_FREQ_MAX lock   |
+ * +---------------------+-------------------------+----------------------------+
+ * | LCD_CLK_SRC_APLL    | Configurable resolution | ESP_PM_NO_LIGHT_SLEEP lock |
+ * +---------------------+-------------------------+----------------------------+
+ * | LCD_CLK_SRC_XTAL    | Medium resolution       | No PM lock                 |
+ * +---------------------+-------------------------+----------------------------+
+ * @endverbatim
  */
 typedef enum {
     LCD_CLK_SRC_PLL160M, /*!< Select PLL160M as the source clock */
+    LCD_CLK_SRC_PLL240M, /*!< Select PLL240M as the source clock */
     LCD_CLK_SRC_APLL,    /*!< Select APLL as the source clock */
     LCD_CLK_SRC_XTAL,    /*!< Select XTAL as the source clock */
 } lcd_clock_source_t;

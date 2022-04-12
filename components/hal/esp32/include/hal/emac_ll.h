@@ -1,16 +1,8 @@
-// Copyright 2015-2019 Espressif Systems (Shanghai) PTE LTD
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+/*
+ * SPDX-FileCopyrightText: 2015-2022 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 /*******************************************************************************
  * NOTICE
@@ -344,6 +336,17 @@ static inline void emac_ll_clear(emac_mac_dev_t *mac_regs)
     mac_regs->gmacfc.val = 0;
 }
 
+/* emacdebug */
+static inline uint32_t emac_ll_transmit_frame_ctrl_status(emac_mac_dev_t *mac_regs)
+{
+    return mac_regs->emacdebug.mactfcs;
+}
+
+static inline uint32_t emac_ll_receive_read_ctrl_state(emac_mac_dev_t *mac_regs)
+{
+    return mac_regs->emacdebug.mtlrfrcs;
+}
+
 /* emacmiidata */
 static inline void emac_ll_set_phy_data(emac_mac_dev_t *mac_regs, uint32_t data)
 {
@@ -470,9 +473,14 @@ static inline void emac_ll_set_rx_dma_pbl(emac_dma_dev_t *dma_regs, uint32_t pbl
     dma_regs->dmabusmode.rx_dma_pbl = pbl;
 }
 
-static inline void emac_ll_set_prog_burst_len(emac_dma_dev_t *dma_regs, uint32_t len)
+static inline void emac_ll_set_prog_burst_len(emac_dma_dev_t *dma_regs, eth_mac_dma_burst_len_t dma_burst_len)
 {
-    dma_regs->dmabusmode.prog_burst_len = len;
+    dma_regs->dmabusmode.prog_burst_len =   dma_burst_len == ETH_DMA_BURST_LEN_1 ? EMAC_LL_DMA_BURST_LENGTH_1BEAT :
+                                            dma_burst_len == ETH_DMA_BURST_LEN_2 ? EMAC_LL_DMA_BURST_LENGTH_2BEAT :
+                                            dma_burst_len == ETH_DMA_BURST_LEN_4 ? EMAC_LL_DMA_BURST_LENGTH_4BEAT :
+                                            dma_burst_len == ETH_DMA_BURST_LEN_8 ? EMAC_LL_DMA_BURST_LENGTH_8BEAT :
+                                            dma_burst_len == ETH_DMA_BURST_LEN_16 ? EMAC_LL_DMA_BURST_LENGTH_16BEAT :
+                                            EMAC_LL_DMA_BURST_LENGTH_32BEAT;
 }
 
 static inline void emac_ll_enhance_desc_enable(emac_dma_dev_t *dma_regs, bool enable)

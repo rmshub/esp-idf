@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2022 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -15,7 +15,7 @@
 #include "esp_rom_sys.h"
 
 #include "soc/soc.h"
-#include "soc/cpu.h"
+#include "esp_cpu.h"
 #include "soc/rtc_periph.h"
 #include "hal/cpu_hal.h"
 
@@ -23,18 +23,8 @@
 
 #include "sdkconfig.h"
 
-#if defined(CONFIG_ESP32_BROWNOUT_DET_LVL)
-#define BROWNOUT_DET_LVL CONFIG_ESP32_BROWNOUT_DET_LVL
-#elif defined(CONFIG_ESP32S2_BROWNOUT_DET_LVL)
-#define BROWNOUT_DET_LVL CONFIG_ESP32S2_BROWNOUT_DET_LVL
-#elif defined(CONFIG_ESP32S3_BROWNOUT_DET_LVL)
-#define BROWNOUT_DET_LVL CONFIG_ESP32S3_BROWNOUT_DET_LVL
-#elif defined(CONFIG_ESP32C3_BROWNOUT_DET_LVL)
-#define BROWNOUT_DET_LVL CONFIG_ESP32C3_BROWNOUT_DET_LVL
-#elif defined(CONFIG_ESP32H2_BROWNOUT_DET_LVL)
-#define BROWNOUT_DET_LVL CONFIG_ESP32H2_BROWNOUT_DET_LVL
-#elif defined(CONFIG_ESP8684_BROWNOUT_DET_LVL)
-#define BROWNOUT_DET_LVL CONFIG_ESP8684_BROWNOUT_DET_LVL
+#if defined(CONFIG_ESP_BROWNOUT_DET_LVL)
+#define BROWNOUT_DET_LVL CONFIG_ESP_BROWNOUT_DET_LVL
 #else
 #define BROWNOUT_DET_LVL 0
 #endif

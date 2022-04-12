@@ -8,7 +8,6 @@ set(srcs
     "rtc_pm.c"
     "rtc_sleep.c"
     "rtc_time.c"
-    "rtc_wdt.c"
     "chip_info.c"
    )
 
@@ -18,7 +17,6 @@ if(NOT BOOTLOADER_BUILD)
         "esp_hmac.c"
         "esp_ds.c"
         "esp_crypto_lock.c"
-        "memprot.c"
         "spiram.c")
 
     if(CONFIG_SPIRAM_MODE_QUAD)

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2022 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -13,13 +13,15 @@
 #include "soc/rtc.h"
 #include "esp_err.h"
 #include "esp_phy_init.h"
-#include "esp_system.h"
+#include "esp_mac.h"
 #include "esp_log.h"
 #include "nvs.h"
 #include "nvs_flash.h"
+#include "esp_efuse.h"
 #include "sdkconfig.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/portmacro.h"
+#include "endian.h"
 #include "phy.h"
 #include "phy_init_data.h"
 #include "esp_coexist_internal.h"
@@ -619,6 +621,9 @@ void esp_phy_load_cal_and_init(void)
     char * phy_version = get_phy_version_str();
     ESP_LOGI(TAG, "phy_version %s", phy_version);
 
+#if CONFIG_IDF_TARGET_ESP32S2
+    phy_eco_version_sel(esp_efuse_get_chip_ver());
+#endif
     esp_phy_calibration_data_t* cal_data =
             (esp_phy_calibration_data_t*) calloc(sizeof(esp_phy_calibration_data_t), 1);
     if (cal_data == NULL) {
@@ -699,7 +704,7 @@ static esp_err_t phy_crc_check_init_data(uint8_t* init_data, const uint8_t* chec
 {
     uint32_t crc_data = 0;
     crc_data = esp_rom_crc32_le(crc_data, init_data, init_data_length);
-    uint32_t crc_size_conversion = htonl(crc_data);
+    uint32_t crc_size_conversion = htobe32(crc_data);
 
     if (crc_size_conversion != *(uint32_t*)(checksum)) {
         return ESP_FAIL;

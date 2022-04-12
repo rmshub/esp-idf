@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2021-2022 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -11,14 +11,7 @@
 #include "ccomp_timer.h"
 #include "esp_heap_caps.h"
 #include "idf_performance.h"
-
-#if CONFIG_IDF_TARGET_ESP32
-#include "esp32/clk.h"
-#elif CONFIG_IDF_TARGET_ESP32S2
-#include "esp32s2/clk.h"
-#elif CONFIG_IDF_TARGET_ESP32C3
-#include "esp32c3/clk.h"
-#endif
+#include "esp_private/esp_clk.h"
 
 #include "soc/soc_caps.h"
 
@@ -121,16 +114,16 @@ TEST_CASE("Test esp_sha() function with long input", "[hw_crypto]")
     /* Compare esp_sha() result to the mbedTLS result, should always be the same */
 
     esp_sha(SHA1, ptr, LEN, sha1_espsha);
-    int r = mbedtls_sha1_ret(ptr, LEN, sha1_mbedtls);
+    int r = mbedtls_sha1(ptr, LEN, sha1_mbedtls);
     TEST_ASSERT_EQUAL(0, r);
 
     esp_sha(SHA2_256, ptr, LEN, sha256_espsha);
-    r = mbedtls_sha256_ret(ptr, LEN, sha256_mbedtls, 0);
+    r = mbedtls_sha256(ptr, LEN, sha256_mbedtls, 0);
     TEST_ASSERT_EQUAL(0, r);
 
 #if SOC_SHA_SUPPORT_SHA512
     esp_sha(SHA2_512, ptr, LEN, sha512_espsha);
-    r = mbedtls_sha512_ret(ptr, LEN, sha512_mbedtls, 0);
+    r = mbedtls_sha512(ptr, LEN, sha512_mbedtls, 0);
     TEST_ASSERT_EQUAL(0, r);
 #endif
 

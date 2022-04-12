@@ -9,7 +9,7 @@ ESP chips can generate various kinds of timings that needed by common LCDs on th
 Functional Overview
 -------------------
 
-In ``esp_lcd``, an LCD panel is represented by :c:type:`esp_lcd_panel_handle_t`, which plays the role of an **abstract frame buffer**, regardless of the frame memory is allocated inside ESP chip or in external LCD controller. Based on the location of the frame buffer, the LCD panel allocation functions are mainly grouped into the following categories:
+In ``esp_lcd``, an LCD panel is represented by :cpp:type:`esp_lcd_panel_handle_t`, which plays the role of an **abstract frame buffer**, regardless of the frame memory is allocated inside ESP chip or in external LCD controller. Based on the location of the frame buffer, the LCD panel allocation functions are mainly grouped into the following categories:
 
 -  ``RGB LCD panel`` - is simply based on a group of specific synchronous signals indicating where to start and stop a frame.
 
@@ -23,7 +23,10 @@ Application Example
 LCD examples are located under: :example:`peripherals/lcd`:
 
 * Jpeg decoding and LCD display - :example:`peripherals/lcd/tjpgd`
-* LVGL porting and animation UI - :example:`peripherals/lcd/lvgl`
+* i80 controller based LCD and LVGL animation UI - :example:`peripherals/lcd/i80_controller`
+* GC9A01 user customized driver and dash board UI - :example:`peripherals/lcd/gc9a01`
+* RGB panel example with scatter chart UI - :example:`peripherals/lcd/rgb_panel`
+* I2C interfaced OLED display scrolling text - :example:`peripherals/lcd/i2c_oled`
 
 API Reference
 -------------

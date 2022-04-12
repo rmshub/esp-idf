@@ -7,12 +7,12 @@ SPI Flash API
 --------
 Spi_flash 组件提供外部 flash 数据读取、写入、擦除和内存映射相关的 API 函数，同时也提供了更高层级的，面向分区的 API 函数（定义在 :doc:`分区表 </api-guides/partition-tables>` 中）。
 
-与 ESP-IDF V4.0 之前的 API 不同，这一版 `esp_flash_*` API 功能并不局限于主 SPI Flash 芯片（即运行程序的 SPI Flash 芯片）。使用不同的芯片指针，您可以访问连接到 SPI0/1 或 SPI2 总线的外部 flash 芯片。
+与 ESP-IDF V4.0 之前的 API 不同，这一版 `esp_flash_*` API 功能并不局限于主 SPI flash 芯片（即运行程序的 SPI flash 芯片）。使用不同的芯片指针，您可以访问连接到 SPI0/1 或 SPI2 总线的外部 flash 芯片。
 
 .. note::
 
     大多数 `esp_flash_*` API 使用 SPI1，SPI2 等外设而非通过 SPI0 上的 cache。这使得它们不仅能访问主 flash，也能访问外部 flash 。
-    
+
     而由于 cache 的限制，所有经过 cache 的操作都只能对主 flash 进行。这些操作的地址同样受到 cache 能力的限制。Cache 无法访问外部 flash 或者高于它能力的地址段。这些 cache 操作包括：mmap ，加密读写，执行代码或者访问在 flash 中的变量。
 
 .. note::
@@ -27,6 +27,9 @@ Kconfig 选项 :ref:`CONFIG_SPI_FLASH_USE_LEGACY_IMPL` 可将 ``spi_flash_*`` �
 Flash 特性支持情况
 -----------------------------------
 
+支持的 Flash 列表
+^^^^^^^^^^^^^^^^^^^^^
+
 不同厂家的 flash 特性有不同的操作方式，因此需要特殊的驱动支持。当前驱动支持大多数厂家 Flash 24 位地址范围内的快速/慢速读，以及二线模式 (DIO / DOUT)，因为他们不需要任何厂家的自定义命令。
 
 当前驱动支持以下厂家/型号的 flash 的四线模式 (QIO/QOUT)：
@@ -39,10 +42,33 @@ Flash 特性支持情况
 6. XMC
 7. BOYA
 
-当前驱动支持以下厂家/型号的 flash 的 32 位地址范围的访问：
+Flash 可选的功能
+^^^^^^^^^^^^^^^^^^^^
 
-1. W25Q256
-2. GD25Q256
+.. toctree::
+    :hidden:
+
+    spi_flash_optional_feature
+
+有一些功能可能不是所有的 flash 芯片都支持，或不是所有的 ESP 芯片都支持。这些功能包括：
+
+.. only:: esp32s3
+
+    -  OPI flash - 表示 Flash 支持 8 线模式。
+
+-  32 比特地址的 flash 支持 - 通常意味着拥有大于 16MB 内存空间的大容量 flash 需要更长的地址去访问。
+
+.. only:: esp32s3
+
+    -  高性能 (HPM) 模式 - 表示 flash 工作频率大于 80MHz 。
+
+-  flash 的私有ID (unique ID) - 表示 flash 支持它自己的 64-bits 独一无二的 ID 。
+
+.. only:: esp32c3
+
+    -  暂停与恢复 - 表示 flash 可以在读/写的过程中接受暂停/恢复的命令。{IDF_TARGET_NAME} 可以在 flash 正在写/擦除的过程中保持 cache 开启，并能随机读取 flash 中的内容。
+
+如果您想使用这些功能，则需保证 {IDF_TARGET_NAME} 支持这些功能，且产品里所使用的 flash 芯片也要支持这些功能。请参阅 :doc:`spi_flash_optional_feature`，查看更多信息。
 
 如果有需要，也可以自定义 flash 芯片驱动，参见 :doc:`spi_flash_override_driver` 。
 
@@ -73,16 +99,16 @@ SPI Flash 访问 API
 - :cpp:func:`esp_flash_write`：将数据从 RAM 写入到 flash；
 - :cpp:func:`esp_flash_erase_region`：擦除 flash 中指定区域的数据；
 - :cpp:func:`esp_flash_erase_chip`：擦除整个 flash；
-- :cpp:func:`esp_flash_get_chip_size`：返回 menuconfig 中设置的 flash 芯片容量（以字节为单位）。
+- :cpp:func:`spi_flash_get_chip_size`：返回 menuconfig 中设置的 flash 芯片容量（以字节为单位）。
 
 一般来说，请尽量避免对主 SPI flash 芯片直接使用原始 SPI flash 函数，如需对主 SPI flash 芯片进行操作，请使用 :ref:`分区专用函数 <flash-partition-apis>`。
 
 SPI Flash 容量
 --------------
 
-SPI flash 容量存储于引导程序映像头部（烧录偏移量为 0x1000）的一个字段。
+SPI flash 容量存储于引导程序镜像头部（烧录偏移量为 0x1000）的一个字段。
 
-默认情况下，引导程序写入 flash 时，esptool.py 将引导程序写入 flash 时，会自动检测 SPI flash 容量，同时使用正确容量更新引导程序的头部。您也可以在工程配置中设置 :envvar:`CONFIG_ESPTOOLPY_FLASHSIZE`，生成固定的 flash 容量。
+默认情况下，引导程序写入 flash 时，esptool.py 将引导程序写入 flash 时，会自动检测 SPI flash 容量，同时使用正确容量更新引导程序的头部。您也可以在工程配置中设置 :ref:`CONFIG_ESPTOOLPY_FLASHSIZE`，生成固定的 flash 容量。
 
 如需在运行时覆盖已配置的 flash 容量，请配置 ``g_rom_flashchip`` 结构中的 ``chip_size``。``esp_flash_*`` 函数使用此容量（于软件和 ROM 中）进行边界检查。
 
@@ -96,7 +122,7 @@ SPI1 Flash 并发约束
 
 .. attention::
 
-    指令/数据 cache（用以执行固件）与 SPI1 外设（由像 SPI flash 驱动一样的驱动程序控制）共享 SPI0/1 总线。因此，在 SPI1 总线上调用 SPI Flash API（包括访问主 flash）会对整个系统造成显著的影响。更多细节，参见 :doc:`spi_flash_concurrency`。
+    指令/数据 cache（用以执行固件）与 SPI1 外设（由像 SPI flash 驱动一样的驱动程序控制）共享 SPI0/1 总线。因此，在 SPI1 总线上调用 SPI flash API（包括访问主 flash）会对整个系统造成显著的影响。更多细节，参见 :doc:`spi_flash_concurrency`。
 
 .. _flash-partition-apis:
 
@@ -123,7 +149,7 @@ SPI Flash 加密
 
 您可以对 SPI flash 内容进行加密，并在硬件层对其进行透明解密。
 
-请参阅 :doc:`Flash 加密文档 </security/flash-encryption>`，查看详细信息。
+请参阅 :doc:`flash 加密 </security/flash-encryption>`，查看详细信息。
 
 内存映射 API
 ------------------
@@ -190,7 +216,7 @@ OS 函数
 
 OS 函数层目前提供访问锁和延迟的方法。
 
-锁（见 :ref:`spi_bus_lock`）用于解决同一 SPI 总线上的设备访问和 SPI Flash 芯片访问之间的冲突。例如：
+锁（见 :ref:`spi_bus_lock`）用于解决同一 SPI 总线上的设备访问和 SPI flash 芯片访问之间的冲突。例如：
 
 1. 经 SPI1 总线访问 flash 芯片时，应当禁用 cache（平时用于取代码和 PSRAM 数据）。
 
@@ -235,7 +261,9 @@ SPI Flash API 参考
 
 .. include-build-file:: inc/esp_flash_spi_init.inc
 .. include-build-file:: inc/esp_flash.inc
+.. include-build-file:: inc/esp_spi_flash.inc
 .. include-build-file:: inc/spi_flash_types.inc
+.. include-build-file:: inc/esp_flash_err.inc
 
 .. _api-reference-partition-table:
 
@@ -248,5 +276,3 @@ Flash 加密 API 参考
 -----------------------------
 
 .. include-build-file:: inc/esp_flash_encrypt.inc
-
-

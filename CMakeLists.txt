@@ -7,11 +7,8 @@ if(CMAKE_CURRENT_LIST_DIR STREQUAL CMAKE_SOURCE_DIR)
     "again.")
 endif()
 
-unset(compile_options)
-unset(c_compile_options)
-unset(cxx_compile_options)
-unset(compile_definitions)
-unset(link_options)
+# Variables compile_options, c_compile_options, cxx_compile_options, compile_definitions, link_options shall
+# not be unset as they may already contain flags, set by toolchain-TARGET.cmake files.
 
 # Add the following build specifications here, since these seem to be dependent
 # on config values on the root Kconfig.
@@ -119,6 +116,9 @@ if(CMAKE_C_COMPILER_ID MATCHES "Clang")
     # Multiple cases of attributes unknown to clang, for example
     # __attribute__((optimize("-O3")))
     list(APPEND compile_options "-Wno-unknown-attributes")
+    # Disable Clang warnings for atomic operations with access size
+    # more then 4 bytes
+    list(APPEND compile_options "-Wno-atomic-alignment")
     # Clang also produces many -Wunused-function warnings which GCC doesn't.
     # However these aren't treated as errors.
 endif()
@@ -198,6 +198,19 @@ if(CONFIG_ESP_SYSTEM_USE_EH_FRAME)
 endif()
 
 list(APPEND link_options "-fno-lto")
+list(APPEND link_options "-Wl,--warn-common")
+
+if(CONFIG_IDF_TARGET_LINUX AND CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin")
+    list(APPEND link_options "-Wl,-dead_strip")
+else()
+    list(APPEND link_options "-Wl,--gc-sections")
+endif()
+
+# SMP FreeRTOS user provided minimal idle hook. This allows the user to provide
+# their own copy of vApplicationMinimalIdleHook()
+if(CONFIG_FREERTOS_USE_MINIMAL_IDLE_HOOK)
+    list(APPEND link_options "-Wl,--wrap=vApplicationMinimalIdleHook")
+endif()
 
 # Placing jump tables in flash would cause issues with code that required
 # to be placed in IRAM
@@ -212,9 +225,20 @@ if(CMAKE_C_COMPILER_ID MATCHES "LLVM")
     list(APPEND compile_options "-fno-use-cxa-atexit")
 endif()
 
+# For the transition period from 32-bit time_t to 64-bit time_t,
+# auto-detect the size of this type and set corresponding variable.
+include(CheckTypeSize)
+check_type_size("time_t" TIME_T_SIZE)
+if(TIME_T_SIZE)
+    idf_build_set_property(TIME_T_SIZE ${TIME_T_SIZE})
+else()
+    message(FATAL_ERROR "Failed to determine sizeof(time_t)")
+endif()
+
 idf_build_set_property(COMPILE_OPTIONS "${compile_options}" APPEND)
 idf_build_set_property(C_COMPILE_OPTIONS "${c_compile_options}" APPEND)
 idf_build_set_property(CXX_COMPILE_OPTIONS "${cxx_compile_options}" APPEND)
+idf_build_set_property(ASM_COMPILE_OPTIONS "${asm_compile_options}" APPEND)
 idf_build_set_property(COMPILE_DEFINITIONS "${compile_definitions}" APPEND)
 idf_build_set_property(LINK_OPTIONS "${link_options}" APPEND)
 

@@ -1,4 +1,3 @@
-
 /*
  * SPDX-FileCopyrightText: 2015-2021 Espressif Systems (Shanghai) CO LTD
  *
@@ -12,7 +11,6 @@
 #include "sdkconfig.h"
 #include "esp_attr.h"
 #include "esp_log.h"
-#include "esp32s3/clk.h"
 #include "esp_clk_internal.h"
 #include "esp_rom_uart.h"
 #include "esp_rom_sys.h"
@@ -25,6 +23,7 @@
 #include "hal/cpu_hal.h"
 #include "hal/wdt_hal.h"
 #include "esp_private/periph_ctrl.h"
+#include "esp_private/esp_clk.h"
 #include "bootloader_clock.h"
 #include "soc/syscon_reg.h"
 
@@ -36,11 +35,7 @@ static const char *TAG = "clk";
  */
 #define SLOW_CLK_CAL_CYCLES     CONFIG_ESP32S3_RTC_CLK_CAL_CYCLES
 
-#ifdef CONFIG_ESP32S3_RTC_XTAL_CAL_RETRY
-#define RTC_XTAL_CAL_RETRY CONFIG_ESP32S3_RTC_XTAL_CAL_RETRY
-#else
 #define RTC_XTAL_CAL_RETRY 1
-#endif
 
 /* Lower threshold for a reasonably-looking calibration value for a 32k XTAL.
  * The ideal value (assuming 32768 Hz frequency) is 1000000/32768*(2**19) = 16*10^6.
@@ -220,9 +215,11 @@ __attribute__((weak)) void esp_perip_clk_init(void)
     /* For reason that only reset CPU, do not disable the clocks
      * that have been enabled before reset.
      */
-    if ((rst_reas[0] >= RESET_REASON_CPU0_MWDT0 && rst_reas[0] <= RESET_REASON_CPU0_RTC_WDT && rst_reas[0] != RESET_REASON_SYS_BROWN_OUT)
+    if ((rst_reas[0] == RESET_REASON_CPU0_MWDT0 || rst_reas[0] == RESET_REASON_CPU0_SW ||
+            rst_reas[0] == RESET_REASON_CPU0_RTC_WDT || rst_reas[0] == RESET_REASON_CPU0_MWDT1)
 #if !CONFIG_FREERTOS_UNICORE
-        || (rst_reas[1] >= RESET_REASON_CPU1_MWDT1 && rst_reas[1] <= RESET_REASON_CPU1_RTC_WDT && rst_reas[1] != RESET_REASON_SYS_BROWN_OUT)
+        || (rst_reas[1] == RESET_REASON_CPU1_MWDT0 || rst_reas[1] == RESET_REASON_CPU1_SW ||
+            rst_reas[1] == RESET_REASON_CPU1_RTC_WDT || rst_reas[1] == RESET_REASON_CPU1_MWDT1)
 #endif
        ) {
         common_perip_clk = ~READ_PERI_REG(SYSTEM_PERIP_CLK_EN0_REG);
@@ -231,13 +228,13 @@ __attribute__((weak)) void esp_perip_clk_init(void)
     } else {
         common_perip_clk = SYSTEM_WDG_CLK_EN |
                            SYSTEM_I2S0_CLK_EN |
-#if CONFIG_CONSOLE_UART_NUM != 0
+#if CONFIG_ESP_CONSOLE_UART_NUM != 0
                            SYSTEM_UART_CLK_EN |
 #endif
-#if CONFIG_CONSOLE_UART_NUM != 1
+#if CONFIG_ESP_CONSOLE_UART_NUM != 1
                            SYSTEM_UART1_CLK_EN |
 #endif
-#if CONFIG_CONSOLE_UART_NUM != 2
+#if CONFIG_ESP_CONSOLE_UART_NUM != 2
                            SYSTEM_UART2_CLK_EN |
 #endif
                            SYSTEM_USB_CLK_EN |
@@ -271,13 +268,13 @@ __attribute__((weak)) void esp_perip_clk_init(void)
 
     //Reset the communication peripherals like I2C, SPI, UART, I2S and bring them to known state.
     common_perip_clk |= SYSTEM_I2S0_CLK_EN |
-#if CONFIG_CONSOLE_UART_NUM != 0
+#if CONFIG_ESP_CONSOLE_UART_NUM != 0
                         SYSTEM_UART_CLK_EN |
 #endif
-#if CONFIG_CONSOLE_UART_NUM != 1
+#if CONFIG_ESP_CONSOLE_UART_NUM != 1
                         SYSTEM_UART1_CLK_EN |
 #endif
-#if CONFIG_CONSOLE_UART_NUM != 2
+#if CONFIG_ESP_CONSOLE_UART_NUM != 2
                         SYSTEM_UART2_CLK_EN |
 #endif
                         SYSTEM_USB_CLK_EN |

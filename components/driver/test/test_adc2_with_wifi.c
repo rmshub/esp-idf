@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2021-2022 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -7,7 +7,6 @@
  Tests for the adc2 device driver
 */
 #include "esp_system.h"
-#include "driver/adc.h"
 #include "unity.h"
 #include "esp_system.h"
 #include "esp_event.h"
@@ -15,14 +14,13 @@
 #include "esp_log.h"
 #include "nvs_flash.h"
 #include "test_utils.h"
-#include "driver/i2s.h"
 #include "driver/gpio.h"
+#include "driver/adc.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/gpio.h"
 
-
-#if !TEMPORARY_DISABLED_FOR_TARGETS(ESP32C3, ESP32S3)
+#if !TEMPORARY_DISABLED_FOR_TARGETS(ESP32C3, ESP32S3, ESP32C2)
 
 static const char* TAG = "test_adc2";
 
@@ -129,6 +127,11 @@ TEST_CASE("adc2 work with wifi","[adc]")
     esp_netif_create_default_wifi_sta();
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+
+    /* Restrict the number of buffers to allocate to account for limited memory when running large number of tests */
+    cfg.static_rx_buf_num = 2;
+    cfg.static_tx_buf_num = 2;
+
     TEST_ESP_OK(esp_wifi_init(&cfg));
     wifi_config_t wifi_config = {
         .sta = {
@@ -216,6 +219,8 @@ TEST_CASE("adc2 work with wifi","[adc]")
 
 #ifdef CONFIG_IDF_TARGET_ESP32
 
+#include "driver/i2s.h"
+
 #define ADC1_CHANNEL_4_IO      (32)
 #define SAMPLE_RATE            (36000)
 #define SAMPLE_BITS            (16)
@@ -228,8 +233,8 @@ static void i2s_adc_init(void)
         .bits_per_sample = SAMPLE_BITS,
         .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
         .intr_alloc_flags = 0,
-        .dma_buf_count = 2,
-        .dma_buf_len = 1024,
+        .dma_desc_num = 2,
+        .dma_frame_num = 1024,
         .use_apll = 0,
     };
     // install and start I2S driver
@@ -251,7 +256,7 @@ static void i2s_adc_test(void)
             } else {
                 gpio_set_pull_mode(ADC1_CHANNEL_4_IO, GPIO_PULLUP_ONLY);
             }
-            vTaskDelay(200 / portTICK_RATE_MS);
+            vTaskDelay(200 / portTICK_PERIOD_MS);
             // read data from adc, will block until buffer is full
             i2s_read(I2S_NUM_0, (void *)i2sReadBuffer, 1024 * sizeof(uint16_t), &bytesRead, portMAX_DELAY);
 

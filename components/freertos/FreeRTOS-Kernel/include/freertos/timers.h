@@ -1,4 +1,11 @@
 /*
+ * SPDX-FileCopyrightText: 2020 Amazon.com, Inc. or its affiliates
+ *
+ * SPDX-License-Identifier: MIT
+ *
+ * SPDX-FileContributor: 2016-2022 Espressif Systems (Shanghai) CO LTD
+ */
+/*
  * FreeRTOS Kernel V10.4.3
  * Copyright (C) 2020 Amazon.com, Inc. or its affiliates.  All Rights Reserved.
  *
@@ -75,11 +82,8 @@
  * (for example, xTimerStart(), xTimerReset(), etc.).
  */
 struct tmrTimerControl; /* The old naming convention is used to prevent breaking kernel aware debuggers. */
-#ifdef ESP_PLATFORM // IDF-3768
-typedef void* TimerHandle_t;
-#else
 typedef struct tmrTimerControl * TimerHandle_t;
-#endif // ESP_PLATFORM
+
 /*
  * Defines the prototype to which timer callback functions must conform.
  */
@@ -450,12 +454,7 @@ void vTimerSetTimerID( TimerHandle_t xTimer,
 BaseType_t xTimerIsTimerActive( TimerHandle_t xTimer ) PRIVILEGED_FUNCTION;
 
 /**
- * @cond !DOC_EXCLUDE_HEADER_SECTION
  * TaskHandle_t xTimerGetTimerDaemonTaskHandle( void );
- * @endcond
- *
- * xTimerGetTimerDaemonTaskHandle() is only available if
- * INCLUDE_xTimerGetTimerDaemonTaskHandle is set to 1 in FreeRTOSConfig.h.
  *
  * Simply returns the handle of the timer service/daemon task.  It it not valid
  * to call xTimerGetTimerDaemonTaskHandle() before the scheduler has been started.

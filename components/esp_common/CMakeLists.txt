@@ -28,12 +28,12 @@ set(optional_reqs ulp
                     lwip
                     spi_flash
                     wpa_supplicant
-                    tcpip_adapter
                     esp_serial_slave_link
                     esp_netif
                     soc
                     esp-tls
-                    esp_https_ota)
+                    esp_https_ota
+                    esp_hw_support)
 
 idf_build_get_property(build_components BUILD_COMPONENTS)
 foreach(req ${optional_reqs})

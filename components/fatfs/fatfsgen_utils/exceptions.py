@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2021 Espressif Systems (Shanghai) CO LTD
+# SPDX-FileCopyrightText: 2021-2022 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
 
 class WriteDirectoryException(Exception):
@@ -29,5 +29,16 @@ class TooLongNameException(Exception):
     pass
 
 
+class WLNotInitialized(Exception):
+    """
+    Exception is raised when the user tries to write fatfs not initialized with wear levelling
+    """
+    pass
+
+
 class FatalError(Exception):
+    pass
+
+
+class InconsistentFATAttributes(Exception):
     pass

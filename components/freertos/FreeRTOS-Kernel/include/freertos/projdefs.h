@@ -1,4 +1,11 @@
 /*
+ * SPDX-FileCopyrightText: 2020 Amazon.com, Inc. or its affiliates
+ *
+ * SPDX-License-Identifier: MIT
+ *
+ * SPDX-FileContributor: 2016-2022 Espressif Systems (Shanghai) CO LTD
+ */
+/*
  * FreeRTOS Kernel V10.4.3
  * Copyright (C) 2020 Amazon.com, Inc. or its affiliates.  All Rights Reserved.
  *
@@ -41,7 +48,7 @@ typedef void (* TaskFunction_t)( void * );
 #endif
 #ifdef ESP_PLATFORM
 #ifndef pdTICKS_TO_MS
-    #define pdTICKS_TO_MS( xTicks )   ( ( uint32_t ) ( xTicks ) * 1000 / configTICK_RATE_HZ )
+    #define pdTICKS_TO_MS( xTicks )   ( ( TickType_t ) ( ( uint64_t ) ( xTicks ) * 1000 / configTICK_RATE_HZ ) )
 #endif
 #endif // ESP_PLATFORM
 

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2021-2022 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -8,6 +8,11 @@
 
 #include "esp_err.h"
 #include "sdkconfig.h"
+
+#ifndef MAC2STR
+#define MAC2STR(a) (a)[0], (a)[1], (a)[2], (a)[3], (a)[4], (a)[5]
+#define MACSTR "%02x:%02x:%02x:%02x:%02x:%02x"
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -34,8 +39,8 @@ typedef enum {
 #define UNIVERSAL_MAC_ADDR_NUM CONFIG_ESP32C3_UNIVERSAL_MAC_ADDRESSES
 #elif CONFIG_IDF_TARGET_ESP32H2
 #define UNIVERSAL_MAC_ADDR_NUM CONFIG_ESP32H2_UNIVERSAL_MAC_ADDRESSES
-#elif CONFIG_IDF_TARGET_ESP8684
-#define UNIVERSAL_MAC_ADDR_NUM CONFIG_ESP8684_UNIVERSAL_MAC_ADDRESSES
+#elif CONFIG_IDF_TARGET_ESP32C2
+#define UNIVERSAL_MAC_ADDR_NUM CONFIG_ESP32C2_UNIVERSAL_MAC_ADDRESSES
 #endif
 /** @endcond */
 

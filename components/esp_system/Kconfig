@@ -34,11 +34,10 @@ menu "ESP System Settings"
 
         config ESP_SYSTEM_GDBSTUB_RUNTIME
             bool "GDBStub at runtime"
-            select FREERTOS_UNICORE
             select ESP_GDBSTUB_ENABLED
+            depends on !IDF_TARGET_ESP32C2
             help
                 Invoke gdbstub on the serial port, allowing for gdb to attach to it and to do a debug on runtime.
-                This feature will switch system to single core mode.
     endchoice
 
     config ESP_SYSTEM_SINGLE_CORE_MODE
@@ -84,7 +83,7 @@ menu "ESP System Settings"
         default y if IDF_TARGET_ESP32C3
         default y if IDF_TARGET_ESP32S3
         default y if IDF_TARGET_ESP32H2
-        depends on !IDF_TARGET_ESP8684
+        depends on !IDF_TARGET_ESP32C2
 
     config ESP_SYSTEM_ALLOW_RTC_FAST_MEM_AS_HEAP
         bool "Enable RTC fast memory for dynamic allocations"
@@ -267,7 +266,7 @@ menu "ESP System Settings"
 
     config ESP_CONSOLE_MULTIPLE_UART
         bool
-        default y if !IDF_TARGET_ESP32C3 && !IDF_TARGET_ESP32H2 && !IDF_TARGET_ESP8684
+        default y if !IDF_TARGET_ESP32C3 && !IDF_TARGET_ESP32H2 && !IDF_TARGET_ESP32C2
 
     choice ESP_CONSOLE_UART_NUM
         prompt "UART peripheral to use for console output (0-1)"
@@ -482,6 +481,14 @@ menu "ESP System Settings"
             Debug stubs are used by OpenOCD to execute pre-compiled onboard code
             which does some useful debugging stuff, e.g. GCOV data dump.
 
+    config ESP_DEBUG_OCDAWARE
+        bool "Make exception and panic handlers JTAG/OCD aware"
+        default y
+        select FREERTOS_DEBUG_OCDAWARE
+        help
+            The FreeRTOS panic and unhandled exception handers can detect a JTAG OCD debugger and
+            instead of panicking, have the debugger stop on the offending instruction.
+
     choice ESP_SYSTEM_CHECK_INT_LEVEL
         prompt "Interrupt level to use for Interrupt Watchdog and other system checks"
         default ESP_SYSTEM_CHECK_INT_LEVEL_4
@@ -500,6 +507,9 @@ menu "ESP System Settings"
             help
                 Using level 4 interrupt for Interrupt Watchdog and other system checks.
     endchoice
+
+    # Insert chip-specific system config
+    rsource "./port/soc/$IDF_TARGET/Kconfig.system"
 
 endmenu  # ESP System Settings
 

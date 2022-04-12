@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2022 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -15,7 +15,7 @@
 #include "soc/extmem_reg.h"
 #include "regi2c_ulp.h"
 #include "regi2c_ctrl.h"
-#include "soc_log.h"
+#include "esp_hw_log.h"
 #include "esp_efuse.h"
 #include "esp_efuse_table.h"
 
@@ -59,7 +59,7 @@ void rtc_init(rtc_config_t cfg)
     /* Reset RTC bias to default value (needed if waking up from deep sleep) */
     REG_SET_FIELD(RTC_CNTL_REG, RTC_CNTL_DBIAS_WAK, RTC_CNTL_DBIAS_1V10);
     REG_SET_FIELD(RTC_CNTL_REG, RTC_CNTL_DBIAS_SLP, RTC_CNTL_DBIAS_1V10);
-    /* Recover default wait cycle for touch or COCPU after wakeup from deep sleep. */
+    /* Set the wait time to the default value. */
     REG_SET_FIELD(RTC_CNTL_TIMER2_REG, RTC_CNTL_ULPCP_TOUCH_START_WAIT, RTC_CNTL_ULPCP_TOUCH_START_WAIT_DEFAULT);
 
     if (cfg.clkctl_init) {
@@ -182,18 +182,12 @@ rtc_vddsdio_config_t rtc_vddsdio_get_config(void)
         result.force = 0;
     }
 #if 0 // ToDo: re-enable the commented codes
-    uint32_t efuse_reg = REG_READ(EFUSE_RD_REPEAT_DATA1_REG);
-    if (efuse_reg & EFUSE_SDIO_FORCE) {
-        // Get configuration from EFUSE
-        result.enable = (efuse_reg & EFUSE_SDIO_XPD_M) >> EFUSE_SDIO_XPD_S;
-        result.tieh = (efuse_reg & EFUSE_SDIO_TIEH_M) >> EFUSE_SDIO_TIEH_S;
-
-        result.drefm = (efuse_reg & EFUSE_SDIO_DREFM_M) >> EFUSE_SDIO_DREFM_S;
-        result.drefl = (efuse_reg & EFUSE_SDIO_DREFL_M) >> EFUSE_SDIO_DREFL_S;
-
-        efuse_reg = REG_READ(EFUSE_RD_REPEAT_DATA0_REG);
-        result.drefh = (efuse_reg & EFUSE_SDIO_DREFH_M) >> EFUSE_SDIO_DREFH_S;
-
+    if (efuse_ll_get_sdio_force()) {
+        result.enable = efuse_ll_get_sdio_xpd();
+        result.tieh = efuse_ll_get_sdio_tieh();
+        result.drefm = efuse_ll_get_sdio_drefm();
+        result.drefl = efuse_ll_get_sdio_drefl();
+        result.drefh = efuse_ll_get_sdio_drefh();
         return result;
     }
 #endif
@@ -236,6 +230,9 @@ static void set_ocode_by_efuse(int calib_version)
     REGI2C_WRITE_MASK(I2C_ULP, I2C_ULP_IR_FORCE_CODE, 1);
 }
 
+/**
+ * TODO IDF-4141, this seems influence flash,
+ */
 static void calibrate_ocode(void)
 {
     /*
@@ -279,7 +276,7 @@ static void calibrate_ocode(void)
         if (odone_flag && bg_odone_flag)
             break;
         if (cycle1 >= timeout_cycle) {
-            SOC_LOGW(TAG, "o_code calibration fail");
+            ESP_HW_LOGW(TAG, "o_code calibration fail");
             break;
         }
     }

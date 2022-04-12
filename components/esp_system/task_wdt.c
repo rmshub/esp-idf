@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2022 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -158,12 +158,12 @@ static void task_wdt_isr(void *arg)
             if (xTaskGetAffinity(twdttask->task_handle)==tskNO_AFFINITY) {
                 cpu=DRAM_STR("CPU 0/1");
             }
-            ESP_EARLY_LOGE(TAG, " - %s (%s)", pcTaskGetTaskName(twdttask->task_handle), cpu);
+            ESP_EARLY_LOGE(TAG, " - %s (%s)", pcTaskGetName(twdttask->task_handle), cpu);
         }
     }
     ESP_EARLY_LOGE(TAG, "%s", DRAM_STR("Tasks currently running:"));
     for (int x=0; x<portNUM_PROCESSORS; x++) {
-        ESP_EARLY_LOGE(TAG, "CPU %d: %s", x, pcTaskGetTaskName(xTaskGetCurrentTaskHandleForCPU(x)));
+        ESP_EARLY_LOGE(TAG, "CPU %d: %s", x, pcTaskGetName(xTaskGetCurrentTaskHandleForCPU(x)));
     }
 
     esp_task_wdt_isr_user_handler();
@@ -175,7 +175,7 @@ static void task_wdt_isr(void *arg)
         abort();
     } else {
 
-#if !CONFIG_IDF_TARGET_ESP32C3 && !CONFIG_IDF_TARGET_ESP32H2 && !CONFIG_IDF_TARGET_ESP8684 // TODO: ESP32-C3 IDF-2986
+#if !CONFIG_IDF_TARGET_ESP32C3 && !CONFIG_IDF_TARGET_ESP32H2 && !CONFIG_IDF_TARGET_ESP32C2 // TODO: ESP32-C3 IDF-2986
         int current_core = xPortGetCoreID();
         //Print backtrace of current core
         ESP_EARLY_LOGE(TAG, "Print CPU %d (current core) backtrace", current_core);

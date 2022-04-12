@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2010-2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2010-2022 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -8,13 +8,9 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "esp_err.h"
-#ifndef SPI_MOCK
-#include "soc/lldesc.h"
-#include "soc/spi_periph.h"
-#endif
-#include "hal/spi_types.h"
 #include "sdkconfig.h"
+#include "esp_err.h"
+#include "hal/spi_types.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -163,7 +159,7 @@ esp_err_t spi_bus_initialize(spi_host_device_t host_id, const spi_bus_config_t *
  * @param host_id SPI peripheral to free
  * @return
  *         - ESP_ERR_INVALID_ARG   if parameter is invalid
- *         - ESP_ERR_INVALID_STATE if not all devices on the bus are freed
+ *         - ESP_ERR_INVALID_STATE if bus hasn't been initialized before, or not all devices on the bus are freed
  *         - ESP_OK                on success
  */
 esp_err_t spi_bus_free(spi_host_device_t host_id);

@@ -136,6 +136,14 @@ menu "TinyUSB Stack"
                 help
                     Enable TinyUSB CDC feature.
 
+            config TINYUSB_CDC_COUNT
+                int "CDC Channel Count"
+                default 1
+                range 1 2
+                depends on TINYUSB_CDC_ENABLED
+                help
+                    Number of independent serial ports.
+
             config TINYUSB_CDC_RX_BUFSIZE
                 depends on TINYUSB_CDC_ENABLED
                 int "CDC FIFO size of RX channel"

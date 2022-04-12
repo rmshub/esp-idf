@@ -11,7 +11,7 @@ All the configuration can be specified in the ``esp_tls_cfg_t`` data structure. 
     * :cpp:func:`esp_tls_conn_new`: for opening a new TLS connection.
     * :cpp:func:`esp_tls_conn_read`: for reading from the connection.
     * :cpp:func:`esp_tls_conn_write`: for writing into the connection.
-    * :cpp:func:`esp_tls_conn_delete`: for freeing up the connection.
+    * :cpp:func:`esp_tls_conn_destroy`: for freeing up the connection.
 
 Any application layer protocol like HTTP1, HTTP2 etc can be executed on top of this layer.
 
@@ -53,6 +53,8 @@ The ESP-TLS provides multiple options for TLS server verification on the client 
     * **skip server verification**: This is an insecure option provided in the ESP-TLS for testing purpose. The option can be set by enabling :ref:`CONFIG_ESP_TLS_INSECURE` and :ref:`CONFIG_ESP_TLS_SKIP_SERVER_CERT_VERIFY` in the ESP-TLS menuconfig. When this option is enabled the ESP-TLS will skip server verification by default when no other options for server verification are selected in the :cpp:type:`esp_tls_cfg_t` structure.
       *WARNING:Enabling this option comes with a potential risk of establishing a TLS connection with a server which has a fake identity, provided that the server certificate is not provided either through API or other mechanism like ca_store etc.*
 
+.. _esp_tls_wolfssl:
+
 Underlying SSL/TLS Library Options
 ----------------------------------
 The ESP-TLS  component has an option to use mbedtls or wolfssl as their underlying SSL/TLS library. By default only mbedtls is available and is
@@ -60,7 +62,7 @@ used, wolfssl SSL/TLS library is available publicly at https://github.com/espres
 also provides few examples which are useful for understanding the API. Please refer the repository README.md for
 information on licensing and other options. Please see below option for using wolfssl in your project.
 
-.. note::   `As the library options are internal to ESP-TLS, switching the libries will not change ESP-TLS specific code for a project.`
+.. note::   `As the library options are internal to ESP-TLS, switching the libraries will not change ESP-TLS specific code for a project.`
 
 How to use wolfssl with ESP-IDF
 -------------------------------
@@ -173,3 +175,4 @@ API Reference
 -------------
 
 .. include-build-file:: inc/esp_tls.inc
+.. include-build-file:: inc/esp_tls_errors.inc

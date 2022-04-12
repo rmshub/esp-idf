@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2022 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -12,7 +12,7 @@
 #include <sys/unistd.h>
 #include "unity.h"
 #include "esp_log.h"
-#include "esp_system.h"
+#include "esp_random.h"
 #include "esp_vfs.h"
 #include "esp_vfs_fat.h"
 #include "freertos/FreeRTOS.h"
@@ -140,6 +140,13 @@ TEST_CASE("(SD) can truncate", "[fatfs][sd][test_env=UT_T1_SDMODE][timeout=60]")
 {
     test_setup();
     test_fatfs_truncate_file("/sdcard/truncate.txt");
+    test_teardown();
+}
+
+TEST_CASE("(SD) can ftruncate", "[fatfs][sd][test_env=UT_T1_SDMODE][timeout=60]")
+{
+    test_setup();
+    test_fatfs_ftruncate_file("/sdcard/ftrunc.txt");
     test_teardown();
 }
 
@@ -320,7 +327,7 @@ TEST_CASE("(SD) opendir, readdir, rewinddir, seekdir work as expected using UTF-
 #endif  //SDMMC HOST SUPPORTED
 
 
-#if !TEMPORARY_DISABLED_FOR_TARGETS(ESP32S3)
+#if !TEMPORARY_DISABLED_FOR_TARGETS(ESP32S3, ESP32C2)
 //no runners
 static void sdspi_speed_test(void *buf, size_t buf_size, size_t file_size, bool write);
 

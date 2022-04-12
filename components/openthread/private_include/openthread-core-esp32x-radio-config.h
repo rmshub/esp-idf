@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2021-2022 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -63,21 +63,7 @@
 #endif
 #endif
 
-#define    OPENTHREAD_CONFIG_LOG_API 1
-#define    OPENTHREAD_CONFIG_LOG_ARP 1
-#define    OPENTHREAD_CONFIG_LOG_BBR 1
 #define    OPENTHREAD_CONFIG_LOG_CLI 1
-#define    OPENTHREAD_CONFIG_LOG_COAP 1
-#define    OPENTHREAD_CONFIG_LOG_DUA 1
-#define    OPENTHREAD_CONFIG_LOG_ICMP 1
-#define    OPENTHREAD_CONFIG_LOG_IP6 1
-#define    OPENTHREAD_CONFIG_LOG_MAC 1
-#define    OPENTHREAD_CONFIG_LOG_MEM 1
-#define    OPENTHREAD_CONFIG_LOG_MESHCOP 1
-#define    OPENTHREAD_CONFIG_LOG_MLE 1
-#define    OPENTHREAD_CONFIG_LOG_MLR 1
-#define    OPENTHREAD_CONFIG_LOG_NETDATA 1
-#define    OPENTHREAD_CONFIG_LOG_NETDIAG 1
 #define    OPENTHREAD_CONFIG_LOG_PKT_DUMP 1
 #define    OPENTHREAD_CONFIG_LOG_PLATFORM 1
 
@@ -89,70 +75,12 @@
 #define OPENTHREAD_CONFIG_NUM_MESSAGE_BUFFERS 50
 
 /**
- * @def OPENTHREAD_CONFIG_COAP_API_ENABLE
- *
- * Define to 1 to enable the CoAP API.
- *
- */
-#define OPENTHREAD_CONFIG_COAP_API_ENABLE 0
-
-/**
- * @def OPENTHREAD_CONFIG_BORDER_ROUTER_ENABLE
- *
- * Define to 1 to enable Border Router support.
- *
- */
-#ifndef OPENTHREAD_CONFIG_BORDER_ROUTER_ENABLE
-#define OPENTHREAD_CONFIG_BORDER_ROUTER_ENABLE 0
-#endif
-
-/**
  * @def OPENTHREAD_CONFIG_REFERENCE_DEVICE_ENABLE
  *
  * Define to 1 to enable Thread Test Harness reference device support.
  *
  */
 #define OPENTHREAD_CONFIG_REFERENCE_DEVICE_ENABLE 0
-
-/**
- * @def OPENTHREAD_CONFIG_CHILD_SUPERVISION_ENABLE
- *
- * Define to 1 to enable Child Supervision support.
- *
- */
-#ifndef OPENTHREAD_CONFIG_CHILD_SUPERVISION_ENABLE
-#define OPENTHREAD_CONFIG_CHILD_SUPERVISION_ENABLE 0
-#endif
-
-/**
- * @def OPENTHREAD_CONFIG_DHCP6_CLIENT_ENABLE
- *
- * Define to 1 to enable DHCPv6 Client support.
- *
- */
-#ifndef OPENTHREAD_CONFIG_DHCP6_CLIENT_ENABLE
-#define OPENTHREAD_CONFIG_DHCP6_CLIENT_ENABLE 0
-#endif
-
-/**
- * @def OPENTHREAD_CONFIG_DHCP6_SERVER_ENABLE
- *
- * Define to 1 to enable DHCPv6 Server support.
- *
- */
-#ifndef OPENTHREAD_CONFIG_DHCP6_SERVER_ENABLE
-#define OPENTHREAD_CONFIG_DHCP6_SERVER_ENABLE 0
-#endif
-
-/**
- * @def OPENTHREAD_CONFIG_DNS_CLIENT_ENABLE
- *
- * Define to 1 to enable DNS Client support.
- *
- */
-#ifndef OPENTHREAD_CONFIG_DNS_CLIENT_ENABLE
-#define OPENTHREAD_CONFIG_DNS_CLIENT_ENABLE 0
-#endif
 
 /**
  * @def OPENTHREAD_CONFIG_NCP_SPI_ENABLE
@@ -177,22 +105,6 @@
  *
  */
 #define OPENTHREAD_CONFIG_NCP_HDLC_ENABLE 1
-
-/**
- * @def OPENTHREAD_SPINEL_CONFIG_OPENTHREAD_MESSAGE_ENABLE
- *
- * Define 1 to enable feeding an OpenThread message to encoder/decoder.
- *
- */
-#define OPENTHREAD_SPINEL_CONFIG_OPENTHREAD_MESSAGE_ENABLE 0
-
-/**
- * @def OPENTHREAD_CONFIG_TMF_NETDATA_SERVICE_ENABLE
- *
- * Define to 1 to support injecting Service entries into the Thread Network Data.
- *
- */
-#define OPENTHREAD_CONFIG_TMF_NETDATA_SERVICE_ENABLE 0
 
 /**
  * @def PACKAGE_NAME
@@ -220,14 +132,6 @@
  *
  */
 #define OPENTHREAD_CONFIG_ENABLE_BUILTIN_MBEDTLS 0
-
-/**
- * @def OPENTHREAD_CONFIG_IP6_SLAAC_ENABLE
- *
- * Define as 1 to enable support for adding of auto-configured SLAAC addresses by OpenThread.
- *
- */
-#define OPENTHREAD_CONFIG_IP6_SLAAC_ENABLE 0
 
 /**
  * @def OPENTHREAD_CONFIG_MAX_STATECHANGE_HANDLERS
@@ -303,10 +207,4 @@
 #define OPENTHREAD_CONFIG_DIAG_ENABLE 1
 #endif
 
-#if CONFIG_OPENTHREAD_FTD
-#error "Only OPENTHREAD_RADIO is used for RCP"
-#elif CONFIG_OPENTHREAD_MTD
-#error "Only OPENTHREAD_RADIO is used for RCP"
-#elif CONFIG_OPENTHREAD_RADIO
 #define OPENTHREAD_RADIO 1
-#endif

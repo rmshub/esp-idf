@@ -3,6 +3,8 @@ I2C 驱动程序
 
 :link_to_translation:`en:[English]`
 
+{IDF_TARGET_I2C_NUM:default="2", esp32c3="1", esp32h2="1", esp32c2="1"}
+
 概述
 ---------
 
@@ -10,13 +12,7 @@ I2C 是一种串行同步半双工通信协议，总线上可以同时挂载多�
 
 I2C 具有简单且制造成本低廉等优点，主要用于低速外围设备的短距离通信（一英尺以内）。
 
-.. only:: esp32c3
-
-    {IDF_TARGET_NAME} 只有一个 I2C 控制器（也称为端口），负责处理在 I2C 总线上的通信。每个控制器都可以设置为主机或从机。
-
-.. only:: not esp32c3
-
-    {IDF_TARGET_NAME} 有两个 I2C 控制器（也称为端口），负责处理在 I2C 两根总线上的通信。每个控制器都可以设置为主机或从机。例如，可以同时让一个控制器用作主机，另一个用作从机。
+{IDF_TARGET_NAME} 有{IDF_TARGET_I2C_NUM}个 I2C 控制器（也称为端口），负责处理在 I2C 总线上的通信。每个控制器都可以设置为主机或从机。
 
 驱动程序的功能
 ---------------
@@ -307,9 +303,7 @@ API 为从机提供以下功能：
 中断处理
 ^^^^^^^^^^^
 
-安装驱动程序时，默认情况下会安装中断处理程序。但是，您可以通过调用函数 :cpp:func:`i2c_isr_register` 来注册自己的而不是默认的中断处理程序。在运行自己的中断处理程序时，可以参考 *{IDF_TARGET_NAME} 技术参考手册* > *I2C 控制器 (I2C)* > *中断* [`PDF <{IDF_TARGET_TRM_CN_URL}#i2c>`__]，以获取有关 I2C 控制器触发的中断描述。
-
-调用函数 :cpp:func:`i2c_isr_free` 删除中断处理程序。
+安装驱动程序时，默认情况下会安装中断处理程序。
 
 .. _i2c-api-customized-configuration:
 
@@ -318,7 +312,7 @@ API 为从机提供以下功能：
 
 如本节末尾所述 :ref:`i2c-api-configure-driver`，函数 :cpp:func:`i2c_param_config` 在初始化 I2C 端口的驱动程序配置时，也会将几个 I2C 通信参数设置为 `I2C 总线协议规范 <https://www.nxp.com/docs/en/user-guide/UM10204.pdf>`_ 规定的默认值。 其他一些相关参数已在 I2C 控制器的寄存器中预先配置。
 
-通过调用下表中提供的专用函数，可以将所有这些参数更改为用户自定义值。请注意，时序值是在 APB 时钟周期中定义。APB 的频率在 :cpp:type:`I2C_APB_CLK_FREQ` 中指定。
+通过调用下表中提供的专用函数，可以将所有这些参数更改为用户自定义值。请注意，时序值是在 APB 时钟周期中定义。APB 的频率在 :c:macro:`I2C_APB_CLK_FREQ` 中指定。
 
 .. list-table:: 其他可配置的 I2C 通信参数
    :widths: 65 35

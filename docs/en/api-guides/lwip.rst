@@ -368,11 +368,6 @@ The following API functions are supported. For full details see :component_file:
 - ``sys_timeouts_init()``
 - ``sys_timeouts_deinit()``
 
-Abort TCP connections when IP changes
-+++++++++++++++++++++++++++++++++++++
-
-:ref:`CONFIG_LWIP_TCP_KEEP_CONNECTION_WHEN_IP_CHANGES` is disabled by default. This disables the default lwIP behaviour of keeping TCP connections open if an interface IP changes, in case the interface IP changes back (for example, if an interface connection goes down and comes back up). Enable this option to keep TCP connections open in this case, until they time out normally. This may increase the number of sockets in use if a network interface goes down temporarily.
-
 Additional Socket Options
 +++++++++++++++++++++++++
 
@@ -395,7 +390,7 @@ Calling ``send()`` or ``sendto()`` repeatedly on a UDP socket may eventually fai
 
     Increasing the number of TX buffers in the :ref:`Wi-Fi <CONFIG_ESP32_WIFI_TX_BUFFER>` or :ref:`Ethernet <CONFIG_ETH_DMA_TX_BUFFER_NUM>` project configuration (as applicable) may also help.
 
-.. only:: not esp32
+.. only:: not esp32 and SOC_WIFI_SUPPORTED
 
     Increasing the number of TX buffers in the :ref:`Wi-Fi <CONFIG_ESP32_WIFI_TX_BUFFER>` project configuration may also help.
 
@@ -417,11 +412,13 @@ The :example_file:`wifi/iperf/sdkconfig.defaults` file for the iperf example con
 
 - If a lot of tasks are competing for CPU time on the system, consider that the lwIP task has configurable CPU affinity (:ref:`CONFIG_LWIP_TCPIP_TASK_AFFINITY`) and runs at fixed priority ``ESP_TASK_TCPIP_PRIO`` (18). Configure competing tasks to be pinned to a different core, or to run at a lower priority. See also :ref:`built-in-task-priorities`.
 
-- If using ``select()`` function with socket arguments only, setting :ref:`CONFIG_LWIP_USE_ONLY_LWIP_SELECT` will make ``select()`` calls faster.
+- If using ``select()`` function with socket arguments only, disabling :ref:`CONFIG_VFS_SUPPORT_SELECT` will make ``select()`` calls faster.
 
 - If there is enough free IRAM, select :ref:`CONFIG_LWIP_IRAM_OPTIMIZATION` to improve TX/RX throughput
 
-If using a Wi-Fi network interface, please also refer to :ref:`wifi-buffer-usage`.
+.. only:: SOC_WIFI_SUPPORTED
+
+    If using a Wi-Fi network interface, please also refer to :ref:`wifi-buffer-usage`.
 
 Minimum latency
 ^^^^^^^^^^^^^^^
@@ -441,7 +438,10 @@ Most lwIP RAM usage is on-demand, as RAM is allocated from the heap as needed. T
 - Reducing :ref:`CONFIG_LWIP_TCPIP_RECVMBOX_SIZE`, :ref:`CONFIG_LWIP_TCP_RECVMBOX_SIZE` and :ref:`CONFIG_LWIP_UDP_RECVMBOX_SIZE` reduce memory usage at the expense of throughput, depending on usage.
 - Disable  :ref:`CONFIG_LWIP_IPV6` can save about 39 KB for firmware size and 2KB RAM when system power up and 7KB RAM when TCPIP stack running. If there is no requirement for supporting IPV6 then it can be disabled to save flash and RAM footprint.
 
-If using Wi-Fi, please also refer to :ref:`wifi-buffer-usage`.
+.. only:: SOC_WIFI_SUPPORTED
+
+    If using Wi-Fi, please also refer to :ref:`wifi-buffer-usage`.
+
 
 Peak Buffer Usage
 +++++++++++++++++

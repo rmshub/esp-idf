@@ -1,25 +1,20 @@
-// Copyright 2015-2016 Espressif Systems (Shanghai) PTE LTD
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+/*
+ * SPDX-FileCopyrightText: 2015-2022 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 #ifndef _ESP32_COMPAT_H_
 #define _ESP32_COMPAT_H_
 
 // Skip these include files
 #define ESP_MDNS_NETWORKING_H_
-#define _TCPIP_ADAPTER_H_
+#define INC_FREERTOS_H
+#define QUEUE_H
+#define SEMAPHORE_H
 #define _ESP_TASK_H_
 
 #ifdef USE_BSD_STRING
+#include <features.h>
 #include <bsd/string.h>
 #endif
 #include <stdint.h>
@@ -56,11 +51,11 @@
 #define ESP_LOGV(a,b,c,d)
 
 #define LWIP_HDR_PBUF_H
-#define __ESP_SYSTEM_H__
+#define __ESP_RANDOM_H__
 #define INC_TASK_H
 
 #define pdMS_TO_TICKS(a) a
-#define portTICK_RATE_MS 10
+#define portTICK_PERIOD_MS 10
 #define xSemaphoreTake(s,d)        true
 #define xTaskDelete(a)
 #define vTaskDelete(a)             free(a)
@@ -80,32 +75,21 @@
 #define ESP_TASK_PRIO_MAX 25
 #define ESP_TASKD_EVENT_PRIO 5
 #define _mdns_udp_pcb_write(tcpip_if, ip_protocol, ip, port, data, len) len
-#define xTaskHandle TaskHandle_t
+#define TaskHandle_t TaskHandle_t
 
 
 typedef int32_t esp_err_t;
 
-typedef void * xSemaphoreHandle;
 typedef void * SemaphoreHandle_t;
-typedef void * xQueueHandle;
 typedef void * QueueHandle_t;
 typedef void * TaskHandle_t;
 typedef int    BaseType_t;
 typedef uint32_t TickType_t;
-typedef uint32_t portTickType;
 
 
 extern const char * WIFI_EVENT;
 extern const char * IP_EVENT;
 extern const char * ETH_EVENT;
-
-/* status of DHCP client or DHCP server */
-typedef enum {
-    TCPIP_ADAPTER_DHCP_INIT = 0,    /**< DHCP client/server in initial state */
-    TCPIP_ADAPTER_DHCP_STARTED,     /**< DHCP client/server already been started */
-    TCPIP_ADAPTER_DHCP_STOPPED,     /**< DHCP client/server already been stopped */
-    TCPIP_ADAPTER_DHCP_STATUS_MAX
-} tcpip_adapter_dhcp_status_t;
 
 struct udp_pcb {
     uint8_t dummy;
@@ -120,23 +104,6 @@ struct ip6_addr {
   uint32_t addr[4];
 };
 typedef struct ip6_addr ip6_addr_t;
-
-typedef struct {
-    ip4_addr_t ip;
-    ip4_addr_t netmask;
-    ip4_addr_t gw;
-} tcpip_adapter_ip_info_t;
-
-typedef enum {
-    TCPIP_ADAPTER_IF_STA = 0,     /**< ESP32 station interface */
-    TCPIP_ADAPTER_IF_AP,          /**< ESP32 soft-AP interface */
-    TCPIP_ADAPTER_IF_ETH,         /**< ESP32 ethernet interface */
-    TCPIP_ADAPTER_IF_MAX
-} tcpip_adapter_if_t;
-
-typedef struct {
-    ip6_addr_t ip;
-} tcpip_adapter_ip6_info_t;
 
 typedef void* system_event_t;
 

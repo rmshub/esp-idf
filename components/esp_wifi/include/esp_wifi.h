@@ -34,7 +34,7 @@
  *
  * The event task is a daemon task, which receives events from WiFi driver or from other subsystem, such
  * as TCPIP stack, event task will call the default callback function on receiving the event. For example,
- * on receiving event SYSTEM_EVENT_STA_CONNECTED, it will call tcpip_adapter_start() to start the DHCP
+ * on receiving event WIFI_EVENT_STA_CONNECTED, it will call esp_netif API to start the DHCP
  * client in it's default handler.
  *
  * Application can register it's own event callback function by API esp_event_init, then the application callback
@@ -87,7 +87,6 @@ extern "C" {
  * @brief WiFi stack configuration parameters passed to esp_wifi_init call.
  */
 typedef struct {
-    system_event_handler_t event_handler;          /**< WiFi event handler */
     wifi_osi_funcs_t*      osi_funcs;              /**< WiFi OS functions */
     wpa_crypto_funcs_t     wpa_crypto_funcs;       /**< WiFi station crypto functions when connect */
     int                    static_rx_buf_num;      /**< WiFi static RX buffer number */
@@ -206,7 +205,6 @@ extern uint64_t g_wifi_feature_caps;
 #define CONFIG_FEATURE_FTM_RESPONDER_BIT (1<<3)
 
 #define WIFI_INIT_CONFIG_DEFAULT() { \
-    .event_handler = &esp_event_send_internal, \
     .osi_funcs = &g_wifi_osi_funcs, \
     .wpa_crypto_funcs = g_wifi_default_wpa_crypto_funcs, \
     .static_rx_buf_num = CONFIG_ESP32_WIFI_STATIC_RX_BUFFER_NUM,\
@@ -228,21 +226,21 @@ extern uint64_t g_wifi_feature_caps;
     .feature_caps = g_wifi_feature_caps, \
     .sta_disconnected_pm = WIFI_STA_DISCONNECTED_PM_ENABLED,  \
     .magic = WIFI_INIT_CONFIG_MAGIC\
-};
+}
 
 /**
-  * @brief  Init WiFi
-  *         Alloc resource for WiFi driver, such as WiFi control structure, RX/TX buffer,
-  *         WiFi NVS structure etc, this WiFi also start WiFi task
+  * @brief  Initialize WiFi
+  *         Allocate resource for WiFi driver, such as WiFi control structure, RX/TX buffer,
+  *         WiFi NVS structure etc. This WiFi also starts WiFi task
   *
   * @attention 1. This API must be called before all other WiFi API can be called
-  * @attention 2. Always use WIFI_INIT_CONFIG_DEFAULT macro to init the config to default values, this can
-  *               guarantee all the fields got correct value when more fields are added into wifi_init_config_t
-  *               in future release. If you want to set your owner initial values, overwrite the default values
-  *               which are set by WIFI_INIT_CONFIG_DEFAULT, please be notified that the field 'magic' of
+  * @attention 2. Always use WIFI_INIT_CONFIG_DEFAULT macro to initialize the configuration to default values, this can
+  *               guarantee all the fields get correct value when more fields are added into wifi_init_config_t
+  *               in future release. If you want to set your own initial values, overwrite the default values
+  *               which are set by WIFI_INIT_CONFIG_DEFAULT. Please be notified that the field 'magic' of
   *               wifi_init_config_t should always be WIFI_INIT_CONFIG_MAGIC!
   *
-  * @param  config pointer to WiFi init configuration structure; can point to a temporary variable.
+  * @param  config pointer to WiFi initialized configuration structure; can point to a temporary variable.
   *
   * @return
   *    - ESP_OK: succeed

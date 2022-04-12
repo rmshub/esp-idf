@@ -7,7 +7,6 @@
 #include "freertos/queue.h"
 #include "esp_intr_alloc.h"
 #include "unity.h"
-#include "soc/cpu.h"
 #include "test_utils.h"
 #if CONFIG_IDF_TARGET_ARCH_XTENSA
 #include "xtensa/hal.h"
@@ -20,7 +19,7 @@
 #define TEST_CLR_INT_MASK(mask) esprv_intc_int_disable(mask)
 #endif
 
-#if !TEMPORARY_DISABLED_FOR_TARGETS(ESP32C3)
+#ifndef __riscv // TODO: IDF-4416
 
 #define SW_ISR_LEVEL_1  7
 
@@ -113,4 +112,4 @@ TEST_CASE("isr latency test vport-yield-from-isr with parameter", "[freertos][ig
     esp_intr_free(handle);
 }
 
-#endif // #if !TEMPORARY_DISABLED_FOR_TARGETS(ESP32C3)
+#endif // __riscv

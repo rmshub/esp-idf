@@ -35,8 +35,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "esp_zb_switch.h"
 #include "esp_log.h"
+#include "esp_zb_switch.h"
 
 /**
  * @note Make sure set idf.py menuconfig in zigbee component as zigbee end device!
@@ -231,7 +231,7 @@ static void bdb_start_top_level_commissioning_cb(zb_uint8_t mode_mask)
  *
  * @param bufid   Zigbee zboss stack buffer id used to pass signal.
  */
-void zboss_signal_handler(zb_uint8_t bufid)
+void zboss_signal_handler(zb_bufid_t bufid)
 {
     zb_zdo_app_signal_hdr_t       *p_sg_p = NULL;
     zb_zdo_app_signal_type_t       sig    = zb_get_app_signal(bufid, &p_sg_p);
@@ -281,15 +281,17 @@ void zboss_signal_handler(zb_uint8_t bufid)
     }
 }
 
-void app_main()
+void app_main(void)
 {
     zb_ret_t    zb_err_code;
-    zb_ieee_addr_t g_ieee_addr;
+    zb_esp_platform_config_t config = {
+        .radio_config = ZB_ESP_DEFAULT_RADIO_CONFIG(),
+        .host_config = ZB_ESP_DEFAULT_HOST_CONFIG(),
+    };
 
-    /* initialize Zigbee stack */
+    ESP_ERROR_CHECK(zb_esp_platform_config(&config));
+    /* initialize Zigbee stack. */
     ZB_INIT("light_switch");
-    esp_read_mac(g_ieee_addr, ESP_MAC_IEEE802154);
-    zb_set_long_address(g_ieee_addr);
     zb_set_network_ed_role(IEEE_CHANNEL_MASK);
     zb_set_nvram_erase_at_start(ERASE_PERSISTENT_CONFIG);
     zb_set_ed_timeout(ED_AGING_TIMEOUT_64MIN);

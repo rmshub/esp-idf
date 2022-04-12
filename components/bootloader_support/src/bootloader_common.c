@@ -9,19 +9,7 @@
 #include "sdkconfig.h"
 #include "esp_err.h"
 #include "esp_log.h"
-#if CONFIG_IDF_TARGET_ESP32
-#include "esp32/rom/spi_flash.h"
-#elif CONFIG_IDF_TARGET_ESP32S2
-#include "esp32s2/rom/spi_flash.h"
-#elif CONFIG_IDF_TARGET_ESP32S3
-#include "esp32s3/rom/spi_flash.h"
-#elif CONFIG_IDF_TARGET_ESP32C3
-#include "esp32c3/rom/spi_flash.h"
-#elif CONFIG_IDF_TARGET_ESP32H2
-#include "esp32h2/rom/spi_flash.h"
-#elif CONFIG_IDF_TARGET_ESP8684
-#include "esp8684/rom/spi_flash.h"
-#endif
+#include "esp_rom_spiflash.h"
 #include "esp_rom_crc.h"
 #include "esp_rom_gpio.h"
 #include "esp_rom_sys.h"
@@ -170,6 +158,12 @@ esp_err_t bootloader_common_get_sha256_of_partition (uint32_t address, uint32_t 
         }
         if (data.image.hash_appended) {
             memcpy(out_sha_256, data.image_digest, ESP_PARTITION_HASH_LEN);
+            uint8_t calc_sha256[ESP_PARTITION_HASH_LEN];
+            // The hash is verified before returning, if app content is invalid then the function returns ESP_ERR_IMAGE_INVALID.
+            esp_err_t error = bootloader_sha256_flash_contents(address, data.image_len - ESP_PARTITION_HASH_LEN, calc_sha256);
+            if (error || memcmp(data.image_digest, calc_sha256, ESP_PARTITION_HASH_LEN) != 0) {
+                return ESP_ERR_IMAGE_INVALID;
+            }
             return ESP_OK;
         }
         // If image doesn't have a appended hash then hash calculates for entire image.

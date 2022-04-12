@@ -106,7 +106,7 @@ static void bdb_start_top_level_commissioning_cb(zb_uint8_t mode_mask)
  *
  * @param bufid   Zigbee zboss stack buffer id used to pass signal.
  */
-void zboss_signal_handler(zb_uint8_t bufid)
+void zboss_signal_handler(zb_bufid_t bufid)
 {
     zb_uint8_t status = ZB_GET_APP_SIGNAL_STATUS(bufid);
     zb_zdo_app_signal_type_t sig = zb_get_app_signal(bufid, NULL);
@@ -212,15 +212,17 @@ static void esp_zb_light_cb(zb_bufid_t bufid)
     }
 }
 
-void app_main()
+void app_main(void)
 {
     zb_ret_t       zb_err_code;
-    zb_ieee_addr_t g_ieee_addr;
+    zb_esp_platform_config_t config = {
+        .radio_config = ZB_ESP_DEFAULT_RADIO_CONFIG(),
+        .host_config = ZB_ESP_DEFAULT_HOST_CONFIG(),
+    };
 
+    ESP_ERROR_CHECK(zb_esp_platform_config(&config));
     /* initialize Zigbee stack */
     ZB_INIT("light_bulb");
-    esp_read_mac(g_ieee_addr, ESP_MAC_IEEE802154);
-    zb_set_long_address(g_ieee_addr);
     zb_set_network_router_role(IEEE_CHANNEL_MASK);
     zb_set_max_children(MAX_CHILDREN);
     zb_set_nvram_erase_at_start(ERASE_PERSISTENT_CONFIG);

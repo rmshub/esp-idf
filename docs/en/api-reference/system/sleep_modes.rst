@@ -78,7 +78,7 @@ This wakeup mode doesn't require RTC peripherals or RTC memories to be powered o
 
     RTC IO module contains logic to trigger wakeup when one of RTC GPIOs is set to a predefined logic level. RTC IO is part of RTC peripherals power domain, so RTC peripherals will be kept powered on during deep sleep if this wakeup source is requested.
 
-    Because RTC IO module is enabled in this mode, internal pullup or pulldown resistors can also be used. They need to be configured by the application using :cpp:func:`rtc_gpio_pullup_en` and :cpp:func:`rtc_gpio_pulldown_en` functions, before calling :cpp:func:`esp_sleep_start`.
+    Because RTC IO module is enabled in this mode, internal pullup or pulldown resistors can also be used. They need to be configured by the application using :cpp:func:`rtc_gpio_pullup_en` and :cpp:func:`rtc_gpio_pulldown_en` functions, before calling :cpp:func:`esp_deep_sleep_start`.
 
     .. only:: esp32
 
@@ -136,7 +136,7 @@ This wakeup mode doesn't require RTC peripherals or RTC memories to be powered o
 
     .. warning::
         Before entering light sleep mode, check if any GPIO pin to be driven is part of the {IDF_TARGET_SPI_POWER_DOMAIN} power domain. If so, this power domain must be configured to remain ON during sleep.
-        
+
         For example, on ESP32-WROOM-32 board, GPIO16 and GPIO17 are linked to {IDF_TARGET_SPI_POWER_DOMAIN} power domain. If they are configured to remain high during
         light sleep, the power domain should be configured to remain powered ON. This can be done with :cpp:func:`esp_sleep_pd_config()`::
 
@@ -183,13 +183,22 @@ Configuring IOs
 
 Some {IDF_TARGET_NAME} IOs have internal pullups or pulldowns, which are enabled by default. If an external circuit drives this pin in deep sleep mode, current consumption may increase due to current flowing through these pullups and pulldowns.
 
-To isolate a pin, preventing extra current draw, call :cpp:func:`rtc_gpio_isolate` function.
+.. only:: not esp32c3
 
-For example, on ESP32-WROVER module, GPIO12 is pulled up externally. GPIO12 also has an internal pulldown in the ESP32 chip. This means that in deep sleep, some current will flow through these external and internal resistors, increasing deep sleep current above the minimal possible value.
-Add the following code before :cpp:func:`esp_deep_sleep_start` to remove this extra current::
+    To isolate a pin, preventing extra current draw, call :cpp:func:`rtc_gpio_isolate` function.
+
+    For example, on ESP32-WROVER module, GPIO12 is pulled up externally. GPIO12 also has an internal pulldown in the ESP32 chip. This means that in deep sleep, some current will flow through these external and internal resistors, increasing deep sleep current above the minimal possible value.
+    Add the following code before :cpp:func:`esp_deep_sleep_start` to remove this extra current::
 
 	rtc_gpio_isolate(GPIO_NUM_12);
 
+.. only:: esp32c3
+
+    In deep sleep mode:
+        - digital GPIOs (GPIO6 ~ 21) are in a high impedance state.
+        - RTC GPIOs (GPIO0 ~ 5) can be in the following states, depending on their hold function enabled or not:
+            - if the hold function is not enabled, RTC GPIOs will be in a high impedance state.
+            - if the hold function is enabled, RTC GPIOs will retain the pin state latched at that hold moment.
 
 UART output handling
 --------------------
@@ -220,16 +229,16 @@ Previously configured wakeup source can be disabled later using :cpp:func:`esp_s
 Application Example
 -------------------
 
-Implementation of basic functionality of deep sleep is shown in :example:`protocols/sntp` example, where ESP module is periodically waken up to retrieve time from NTP server.
-
+- :example:`protocols/sntp`: the implementation of basic functionality of deep sleep, where ESP module is periodically waken up to retrieve time from NTP server.
+- :example:`wifi/power_save`: the implementation of modem sleep example.
 
 .. only:: SOC_ULP_SUPPORTED
 
-    More extensive example in :example:`system/deep_sleep` illustrates usage of various deep sleep wakeup triggers and ULP coprocessor programming.
+    - :example:`system/deep_sleep`: the usage of various deep sleep wakeup triggers and ULP coprocessor programming.
 
 .. only:: esp32c3
 
-    An example in :example:`system/deep_sleep` illustrates usage of deep sleep wakeup triggered by timer.
+    - :example:`system/deep_sleep`: the usage of deep sleep wakeup triggered by timer.
 
 API Reference
 -------------

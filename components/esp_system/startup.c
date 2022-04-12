@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2022 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -12,7 +12,6 @@
 
 #include "esp_system.h"
 #include "esp_log.h"
-#include "esp_ota_ops.h"
 
 #include "sdkconfig.h"
 
@@ -35,43 +34,45 @@
 #include "esp_sleep.h"
 #include "esp_xt_wdt.h"
 
+#if __has_include("esp_ota_ops.h")
+#include "esp_ota_ops.h"
+#define HAS_ESP_OTA 1
+#endif
+
 /***********************************************/
 // Headers for other components init functions
-#include "nvs_flash.h"
-
 #include "esp_coexist_internal.h"
 
 #if CONFIG_ESP_COREDUMP_ENABLE
 #include "esp_core_dump.h"
 #endif
 
+#if CONFIG_APPTRACE_ENABLE
 #include "esp_app_trace.h"
+#endif
+
 #include "esp_private/dbg_stubs.h"
+
+#if CONFIG_PM_ENABLE
 #include "esp_pm.h"
 #include "esp_private/pm_impl.h"
+#endif
+
 #include "esp_pthread.h"
 #include "esp_vfs_console.h"
+#include "esp_private/esp_clk.h"
 
-#include "brownout.h"
+#include "esp_private/brownout.h"
 
 #include "esp_rom_sys.h"
 
 // [refactor-todo] make this file completely target-independent
 #if CONFIG_IDF_TARGET_ESP32
-#include "esp32/clk.h"
 #include "esp32/spiram.h"
 #elif CONFIG_IDF_TARGET_ESP32S2
-#include "esp32s2/clk.h"
 #include "esp32s2/spiram.h"
 #elif CONFIG_IDF_TARGET_ESP32S3
-#include "esp32s3/clk.h"
 #include "esp32s3/spiram.h"
-#elif CONFIG_IDF_TARGET_ESP32C3
-#include "esp32c3/clk.h"
-#elif CONFIG_IDF_TARGET_ESP32H2
-#include "esp32h2/clk.h"
-#elif CONFIG_IDF_TARGET_ESP8684
-#include "esp_private/esp_clk.h"
 #endif
 /***********************************************/
 
@@ -237,6 +238,12 @@ static void do_core_init(void)
        app CPU, and when that is not up yet, the memory will be inaccessible and heap_caps_init may
        fail initializing it properly. */
     heap_caps_init();
+
+    // When apptrace module is enabled, there will be SEGGER_SYSVIEW calls in the newlib init.
+    // SEGGER_SYSVIEW relies on apptrace module
+    // apptrace module uses esp_timer_get_time to determine timeout conditions.
+    // esp_timer early initialization is required for esp_timer_get_time to work.
+    esp_timer_early_init();
     esp_newlib_init();
 
     if (g_spiram_ok) {
@@ -252,21 +259,12 @@ static void do_core_init(void)
 #endif
     }
 
-#if CONFIG_ESP32_BROWNOUT_DET   || \
-    CONFIG_ESP32S2_BROWNOUT_DET || \
-    CONFIG_ESP32S3_BROWNOUT_DET || \
-    CONFIG_ESP32C3_BROWNOUT_DET || \
-    CONFIG_ESP32H2_BROWNOUT_DET || \
-    CONFIG_ESP8684_BROWNOUT_DET
+#if CONFIG_ESP_BROWNOUT_DET
     // [refactor-todo] leads to call chain rtc_is_register (driver) -> esp_intr_alloc (esp32/esp32s2) ->
     // malloc (newlib) -> heap_caps_malloc (heap), so heap must be at least initialized
     esp_brownout_init();
 #endif
 
-    // esp_timer early initialization is required for esp_timer_get_time to work.
-    // This needs to happen before VFS initialization, since some USB_SERIAL_JTAG VFS driver uses
-    // esp_timer_get_time to determine timeout conditions.
-    esp_timer_early_init();
     esp_newlib_time_init();
 
 #if CONFIG_VFS_SUPPORT_IO
@@ -376,6 +374,7 @@ static void start_cpu0_default(void)
     int cpu_freq = esp_clk_cpu_freq();
     ESP_EARLY_LOGI(TAG, "cpu freq: %d Hz", cpu_freq);
 
+#if HAS_ESP_OTA // [refactor-todo] find a better way to handle this.
     // Display information about the current running image.
     if (LOG_LOCAL_LEVEL >= ESP_LOG_INFO) {
         const esp_app_desc_t *app_desc = esp_ota_get_app_description();
@@ -397,6 +396,7 @@ static void start_cpu0_default(void)
         ESP_EARLY_LOGI(TAG, "ELF file SHA256:  %s...", buf);
         ESP_EARLY_LOGI(TAG, "ESP-IDF:          %s", app_desc->idf_ver);
     }
+#endif //HAS_ESP_OTA
 
     // Initialize core components and services.
     do_core_init();

@@ -88,6 +88,8 @@ macro(__component_set_properties)
     __component_set_property(${component_target} EMBED_FILES "${__EMBED_FILES}")
     __component_set_property(${component_target} EMBED_TXTFILES "${__EMBED_TXTFILES}")
     __component_set_property(${component_target} REQUIRED_IDF_TARGETS "${__REQUIRED_IDF_TARGETS}")
+
+    __component_set_property(${component_target} WHOLE_ARCHIVE ${__WHOLE_ARCHIVE})
 endmacro()
 
 #
@@ -417,8 +419,9 @@ endfunction()
 # @param[in, optional] EMBED_TXTFILES (multivalue) list of text files to embed with the component
 # @param[in, optional] KCONFIG (single value) override the default Kconfig
 # @param[in, optional] KCONFIG_PROJBUILD (single value) override the default Kconfig
+# @param[in, optional] WHOLE_ARCHIVE (option) link the component as --whole-archive
 function(idf_component_register)
-    set(options)
+    set(options WHOLE_ARCHIVE)
     set(single_value KCONFIG KCONFIG_PROJBUILD)
     set(multi_value SRCS SRC_DIRS EXCLUDE_SRCS
                     INCLUDE_DIRS PRIV_INCLUDE_DIRS LDFRAGMENTS REQUIRES
@@ -446,12 +449,14 @@ function(idf_component_register)
     idf_build_get_property(compile_options COMPILE_OPTIONS GENERATOR_EXPRESSION)
     idf_build_get_property(c_compile_options C_COMPILE_OPTIONS GENERATOR_EXPRESSION)
     idf_build_get_property(cxx_compile_options CXX_COMPILE_OPTIONS GENERATOR_EXPRESSION)
+    idf_build_get_property(asm_compile_options ASM_COMPILE_OPTIONS GENERATOR_EXPRESSION)
     idf_build_get_property(common_reqs ___COMPONENT_REQUIRES_COMMON)
 
     include_directories("${include_directories}")
     add_compile_options("${compile_options}")
     add_c_compile_options("${c_compile_options}")
     add_cxx_compile_options("${cxx_compile_options}")
+    add_asm_compile_options("${asm_compile_options}")
 
     # Unfortunately add_definitions() does not support generator expressions. A new command
     # add_compile_definition() does but is only available on CMake 3.12 or newer. This uses
@@ -572,6 +577,28 @@ function(idf_component_mock)
             -o${CMAKE_CURRENT_SOURCE_DIR}/mock/mock_config.yaml
             ${__MOCK_HEADER_FILES}
       )
+endfunction()
+
+# idf_component_optional_requires
+#
+# @brief Add a dependency on a given component only if it is included in the build.
+#
+# Calling idf_component_optional_requires(PRIVATE dependency_name) has the similar effect to
+# target_link_libraries(${COMPONENT_LIB} PRIVATE idf::dependency_name), only if 'dependency_name'
+# component is part of the build. Otherwise, no dependency gets added. Multiple names may be given.
+#
+# @param[in]  type of the dependency, one of: PRIVATE, PUBLIC, INTERFACE
+# @param[in, multivalue] list of component names which should be added as dependencies
+#
+function(idf_component_optional_requires req_type)
+    set(optional_reqs ${ARGN})
+    idf_build_get_property(build_components BUILD_COMPONENTS)
+    foreach(req ${optional_reqs})
+        if(req IN_LIST build_components)
+            idf_component_get_property(req_lib ${req} COMPONENT_LIB)
+            target_link_libraries(${COMPONENT_LIB} ${req_type} ${req_lib})
+        endif()
+    endforeach()
 endfunction()
 
 #

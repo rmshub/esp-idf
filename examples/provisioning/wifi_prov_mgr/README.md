@@ -1,6 +1,3 @@
-| Supported Targets | ESP32 | ESP32-S2 | ESP32-C3 |
-| ----------------- | ----- | -------- | -------- |
-
 # Wi-Fi Provisioning Manager Example
 
 (See the README.md file in the upper level 'examples' directory for more information about examples.)
@@ -95,7 +92,7 @@ I (39725) app: Received Wi-Fi credentials
 .
 .
 .
-I (45335) tcpip_adapter: sta ip: 192.168.43.243, mask: 255.255.255.0, gw: 192.168.43.1
+I (45335) esp_netif_handlers: sta ip: 192.168.43.243, mask: 255.255.255.0, gw: 192.168.43.1
 I (45345) app: Provisioning successful
 I (45345) app: Connected with IP Address:192.168.43.243
 I (46355) app: Hello World!

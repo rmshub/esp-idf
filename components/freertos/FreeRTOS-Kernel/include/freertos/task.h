@@ -1,4 +1,11 @@
 /*
+ * SPDX-FileCopyrightText: 2020 Amazon.com, Inc. or its affiliates
+ *
+ * SPDX-License-Identifier: MIT
+ *
+ * SPDX-FileContributor: 2016-2022 Espressif Systems (Shanghai) CO LTD
+ */
+/*
  * FreeRTOS Kernel V10.4.3
  * Copyright (C) 2020 Amazon.com, Inc. or its affiliates.  All Rights Reserved.
  *
@@ -33,9 +40,6 @@
 #endif
 
 #include "list.h"
-#ifdef ESP_PLATFORM // IDF-3793
-#include "freertos/portmacro.h"
-#endif // ESP_PLATFORM
 
 /* *INDENT-OFF* */
 #ifdef __cplusplus
@@ -82,12 +86,9 @@
  * \ingroup Tasks
  */
 struct tskTaskControlBlock;     /* The old naming convention is used to prevent breaking kernel aware debuggers. */
-#ifdef ESP_PLATFORM // IDF-3769
-typedef void* TaskHandle_t;
-#else
-typedef struct tskTaskControlBlock* TaskHandle_t;
-#endif // ESP_PLATFORM
-/**
+typedef struct tskTaskControlBlock * TaskHandle_t;
+
+/*
  * Defines the prototype to which the application task hook function must
  * conform.
  */
@@ -3498,10 +3499,6 @@ TaskHandle_t pvTaskIncrementMutexHeldCount( void ) PRIVILEGED_FUNCTION;
  */
 void vTaskInternalSetTimeOutState( TimeOut_t * const pxTimeOut ) PRIVILEGED_FUNCTION;
 
-#ifdef ESP_PLATFORM
-/* TODO: IDF-3683 */
-#include "freertos/task_snapshot.h"
-#endif // ESP_PLATFORM
 
 /** @endcond */
 

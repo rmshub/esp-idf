@@ -63,6 +63,38 @@ function(__project_get_revision var)
     set(${var} "${PROJECT_VER}" PARENT_SCOPE)
 endfunction()
 
+
+# paths_with_spaces_to_list
+#
+# Replacement for spaces2list in cases where it was previously used on
+# directory lists.
+#
+# If the variable doesn't contain spaces, (e.g. is already a CMake list)
+# then the variable is unchanged. Otherwise an external Python script is called
+# to try to split the paths, and the variable is updated with the result.
+#
+# This feature is added only for compatibility. Please do not introduce new
+# space separated path lists.
+#
+function(paths_with_spaces_to_list variable_name)
+    if("${${variable_name}}" MATCHES "[ \t]")
+        idf_build_get_property(python PYTHON)
+        idf_build_get_property(idf_path IDF_PATH)
+        execute_process(
+            COMMAND ${python}
+                "${idf_path}/tools/split_paths_by_spaces.py"
+                "--var-name=${variable_name}"
+                "${${variable_name}}"
+            WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
+            OUTPUT_VARIABLE result
+            RESULT_VARIABLE ret)
+        if(NOT ret EQUAL 0)
+            message(FATAL_ERROR "Failed to parse ${variable_name}, see diagnostics above")
+        endif()
+        set("${variable_name}" "${result}" PARENT_SCOPE)
+    endif()
+endfunction()
+
 #
 # Output the built components to the user. Generates files for invoking idf_monitor.py
 # that doubles as an overview of some of the more important build properties.
@@ -119,6 +151,9 @@ function(__project_info test_components)
     make_json_list("${build_component_paths};${test_component_paths}" build_component_paths_json)
     configure_file("${idf_path}/tools/cmake/project_description.json.in"
         "${build_dir}/project_description.json")
+
+    # Generate component dependency graph
+    depgraph_generate("${build_dir}/component_deps.dot")
 
     # We now have the following component-related variables:
     #
@@ -179,9 +214,13 @@ function(__project_init components_var test_components_var)
     # extra directories, etc. passed from the root CMakeLists.txt.
     if(COMPONENT_DIRS)
         # User wants to fully override where components are pulled from.
-        spaces2list(COMPONENT_DIRS)
+        paths_with_spaces_to_list(COMPONENT_DIRS)
         idf_build_set_property(__COMPONENT_TARGETS "")
         foreach(component_dir ${COMPONENT_DIRS})
+            get_filename_component(component_abs_path ${component_dir} ABSOLUTE)
+            if(NOT EXISTS ${component_abs_path})
+                message(FATAL_ERROR "Directory specified in COMPONENT_DIRS doesn't exist: ${component_abs_path}")
+            endif()
             __project_component_dir(${component_dir})
         endforeach()
     else()
@@ -189,8 +228,12 @@ function(__project_init components_var test_components_var)
             __project_component_dir("${CMAKE_CURRENT_LIST_DIR}/main")
         endif()
 
-        spaces2list(EXTRA_COMPONENT_DIRS)
+        paths_with_spaces_to_list(EXTRA_COMPONENT_DIRS)
         foreach(component_dir ${EXTRA_COMPONENT_DIRS})
+            get_filename_component(component_abs_path ${component_dir} ABSOLUTE)
+            if(NOT EXISTS ${component_abs_path})
+                message(FATAL_ERROR "Directory specified in EXTRA_COMPONENT_DIRS doesn't exist: ${component_abs_path}")
+            endif()
             __project_component_dir("${component_dir}")
         endforeach()
 
@@ -441,7 +484,18 @@ macro(project project_name)
     if(test_components)
         list(REMOVE_ITEM build_components ${test_components})
     endif()
-    target_link_libraries(${project_elf} ${build_components})
+
+    foreach(build_component ${build_components})
+        __component_get_target(build_component_target ${build_component})
+        __component_get_property(whole_archive ${build_component_target} WHOLE_ARCHIVE)
+        if(whole_archive)
+            message(STATUS "Component ${build_component} will be linked with -Wl,--whole-archive")
+            target_link_libraries(${project_elf} "-Wl,--whole-archive" ${build_component} "-Wl,--no-whole-archive")
+        else()
+            target_link_libraries(${project_elf} ${build_component})
+        endif()
+    endforeach()
+
 
     if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
         set(mapfile "${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}.map")

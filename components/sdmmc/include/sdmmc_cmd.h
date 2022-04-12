@@ -81,6 +81,84 @@ esp_err_t sdmmc_read_sectors(sdmmc_card_t* card, void* dst,
         size_t start_sector, size_t sector_count);
 
 /**
+ * Erase given number of sectors from the SD/MMC card
+ *
+ * @note When sdmmc_erase_sectors used with cards in SDSPI mode, it was
+ * observed that card requires re-init after erase operation.
+ *
+ * @param card  pointer to card information structure previously initialized
+ *              using sdmmc_card_init
+ * @param start_sector  sector where to start erase
+ * @param sector_count  number of sectors to erase
+ * @param arg  erase command (CMD38) argument
+ * @return
+ *      - ESP_OK on success
+ *      - One of the error codes from SDMMC host controller
+ */
+esp_err_t sdmmc_erase_sectors(sdmmc_card_t* card, size_t start_sector,
+        size_t sector_count, sdmmc_erase_arg_t arg);
+
+/**
+ * Check if SD/MMC card supports discard
+ *
+ * @param card  pointer to card information structure previously initialized
+ *              using sdmmc_card_init
+ * @return
+ *      - ESP_OK if supported by the card/device
+ *      - ESP_FAIL if not supported by the card/device
+ */
+esp_err_t sdmmc_can_discard(sdmmc_card_t* card);
+
+/**
+ * Check if SD/MMC card supports trim
+ *
+ * @param card  pointer to card information structure previously initialized
+ *              using sdmmc_card_init
+ * @return
+ *      - ESP_OK if supported by the card/device
+ *      - ESP_FAIL if not supported by the card/device
+ */
+esp_err_t sdmmc_can_trim(sdmmc_card_t* card);
+
+/**
+ * Check if SD/MMC card supports sanitize
+ *
+ * @param card  pointer to card information structure previously initialized
+ *              using sdmmc_card_init
+ * @return
+ *      - ESP_OK if supported by the card/device
+ *      - ESP_FAIL if not supported by the card/device
+ */
+esp_err_t sdmmc_mmc_can_sanitize(sdmmc_card_t* card);
+
+/**
+ * Sanitize the data that was unmapped by a Discard command
+ *
+ * @note  Discard command has to precede sanitize operation. To discard, use
+ *        MMC_DICARD_ARG with sdmmc_erase_sectors argument
+ *
+ * @param card  pointer to card information structure previously initialized
+ *              using sdmmc_card_init
+ * @param timeout_ms timeout value in milliseconds required to sanitize the
+ *                   selected range of sectors.
+ * @return
+ *      - ESP_OK on success
+ *      - One of the error codes from SDMMC host controller
+ */
+esp_err_t sdmmc_mmc_sanitize(sdmmc_card_t* card, uint32_t timeout_ms);
+
+/**
+ * Erase complete SD/MMC card
+ *
+ * @param card  pointer to card information structure previously initialized
+ *              using sdmmc_card_init
+ * @return
+ *      - ESP_OK on success
+ *      - One of the error codes from SDMMC host controller
+ */
+esp_err_t sdmmc_full_erase(sdmmc_card_t* card);
+
+/**
  * Read one byte from an SDIO card using IO_RW_DIRECT (CMD52)
  *
  * @param card  pointer to card information structure previously initialized
@@ -224,10 +302,10 @@ esp_err_t sdmmc_io_enable_int(sdmmc_card_t* card);
 esp_err_t sdmmc_io_wait_int(sdmmc_card_t* card, TickType_t timeout_ticks);
 
 /**
- * Get the data of CIS region of a SDIO card.
+ * Get the data of CIS region of an SDIO card.
  *
  * You may provide a buffer not sufficient to store all the CIS data. In this
- * case, this functions store as much data into your buffer as possible. Also,
+ * case, this function stores as much data into your buffer as possible. Also,
  * this function will try to get and return the size required for you.
  *
  * @param card  pointer to card information structure previously initialized
@@ -253,7 +331,7 @@ esp_err_t sdmmc_io_wait_int(sdmmc_card_t* card, TickType_t timeout_ticks);
 esp_err_t sdmmc_io_get_cis_data(sdmmc_card_t* card, uint8_t* out_buffer, size_t buffer_size, size_t* inout_cis_size);
 
 /**
- * Parse and print the CIS information of a SDIO card.
+ * Parse and print the CIS information of an SDIO card.
  *
  * @note Not all the CIS codes and all kinds of tuples are supported. If you
  * see some unresolved code, you can add the parsing of these code in

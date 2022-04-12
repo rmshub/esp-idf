@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2020-2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2020-2022 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -23,7 +23,7 @@
 
 struct wpa_supplicant g_wpa_supp;
 
-static void *s_supplicant_task_hdl = NULL;
+static TaskHandle_t s_supplicant_task_hdl = NULL;
 static void *s_supplicant_evt_queue = NULL;
 static void *s_supplicant_api_lock = NULL;
 
@@ -218,6 +218,7 @@ static void supplicant_sta_disconn_handler(void* arg, esp_event_base_t event_bas
 	if (wpa_s->current_bss) {
 		wpa_s->current_bss = NULL;
 	}
+	clear_bssid_flag(wpa_s);
 }
 
 static int ieee80211_handle_rx_frm(u8 type, u8 *frame, size_t len, u8 *sender,
@@ -257,17 +258,30 @@ static bool bss_profile_match(u8 *sender)
 }
 #endif
 
-void esp_supplicant_common_init(struct wpa_funcs *wpa_cb)
+int esp_supplicant_common_init(struct wpa_funcs *wpa_cb)
 {
 	struct wpa_supplicant *wpa_s = &g_wpa_supp;
-
-	s_supplicant_evt_queue = xQueueCreate(3, sizeof(supplicant_event_t));
-	xTaskCreate(btm_rrm_task, "btm_rrm_t", SUPPLICANT_TASK_STACK_SIZE, NULL, 2, s_supplicant_task_hdl);
+	int ret;
 
 	s_supplicant_api_lock = xSemaphoreCreateRecursiveMutex();
 	if (!s_supplicant_api_lock) {
-		wpa_printf(MSG_ERROR, "esp_supplicant_common_init: failed to create Supplicant API lock");
-		return;
+		wpa_printf(MSG_ERROR, "%s: failed to create Supplicant API lock", __func__);
+		ret = -1;
+		goto err;
+	}
+
+	s_supplicant_evt_queue = xQueueCreate(3, sizeof(supplicant_event_t));
+
+	if (!s_supplicant_evt_queue) {
+		wpa_printf(MSG_ERROR, "%s: failed to create Supplicant event queue", __func__);
+		ret = -1;
+		goto err;
+	}
+	ret = xTaskCreate(btm_rrm_task, "btm_rrm_t", SUPPLICANT_TASK_STACK_SIZE, NULL, 2, &s_supplicant_task_hdl);
+	if (ret != pdPASS) {
+		wpa_printf(MSG_ERROR, "btm: failed to create task");
+		ret = -1;
+		goto err;
 	}
 
 	esp_scan_init(wpa_s);
@@ -291,15 +305,16 @@ void esp_supplicant_common_init(struct wpa_funcs *wpa_cb)
 #else
 	wpa_cb->wpa_sta_profile_match = NULL;
 #endif
+	return 0;
+err:
+	esp_supplicant_common_deinit();
+	return ret;
 }
 
 void esp_supplicant_common_deinit(void)
 {
 	struct wpa_supplicant *wpa_s = &g_wpa_supp;
 
-	if (esp_supplicant_post_evt(SIG_SUPPLICANT_DEL_TASK, 0) != 0) {
-		wpa_printf(MSG_ERROR, "failed to send task delete event");
-	}
 	esp_scan_deinit(wpa_s);
 	wpas_rrm_reset(wpa_s);
 	wpas_clear_beacon_rep_data(wpa_s);
@@ -307,6 +322,21 @@ void esp_supplicant_common_deinit(void)
 			&supplicant_sta_conn_handler);
 	esp_event_handler_unregister(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED,
 			&supplicant_sta_disconn_handler);
+	if (wpa_s->type) {
+		wpa_s->type = 0;
+		esp_wifi_register_mgmt_frame_internal(wpa_s->type, wpa_s->subtype);
+	}
+	if (!s_supplicant_task_hdl && esp_supplicant_post_evt(SIG_SUPPLICANT_DEL_TASK, 0) != 0) {
+		if (s_supplicant_evt_queue) {
+			vQueueDelete(s_supplicant_evt_queue);
+			s_supplicant_evt_queue = NULL;
+		}
+		if (s_supplicant_api_lock) {
+			vSemaphoreDelete(s_supplicant_api_lock);
+			s_supplicant_api_lock = NULL;
+		}
+		wpa_printf(MSG_ERROR, "failed to send task delete event");
+	}
 }
 
 int esp_rrm_send_neighbor_rep_request(neighbor_rep_request_cb cb,
@@ -580,12 +610,20 @@ int esp_supplicant_post_evt(uint32_t evt_id, uint32_t data)
 	evt->id = evt_id;
 	evt->data = data;
 
-	SUPPLICANT_API_LOCK();
+	/* Make sure lock exists before taking it */
+	if (s_supplicant_api_lock) {
+		SUPPLICANT_API_LOCK();
+	} else {
+		os_free(evt);
+		return -1;
+	}
 	if (xQueueSend(s_supplicant_evt_queue, &evt, 10 / portTICK_PERIOD_MS ) != pdPASS) {
 		SUPPLICANT_API_UNLOCK();
 		os_free(evt);
 		return -1;
 	}
-	SUPPLICANT_API_UNLOCK();
+	if (evt_id != SIG_SUPPLICANT_DEL_TASK) {
+	    SUPPLICANT_API_UNLOCK();
+	}
 	return 0;
 }

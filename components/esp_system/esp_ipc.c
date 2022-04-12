@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2022 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -10,7 +10,7 @@
 #include <assert.h>
 #include "esp_err.h"
 #include "esp_ipc.h"
-#include "esp_ipc_isr.h"
+#include "esp_private/esp_ipc_isr.h"
 #include "esp_attr.h"
 
 #include "freertos/FreeRTOS.h"
@@ -18,6 +18,10 @@
 #include "freertos/semphr.h"
 
 #if !defined(CONFIG_FREERTOS_UNICORE) || defined(CONFIG_APPTRACE_GCOV_ENABLE)
+
+static DRAM_ATTR StaticSemaphore_t s_ipc_mutex_buffer[portNUM_PROCESSORS];
+static DRAM_ATTR StaticSemaphore_t s_ipc_sem_buffer[portNUM_PROCESSORS];
+static DRAM_ATTR StaticSemaphore_t s_ipc_ack_buffer[portNUM_PROCESSORS];
 
 static TaskHandle_t s_ipc_task_handle[portNUM_PROCESSORS];
 static SemaphoreHandle_t s_ipc_mutex[portNUM_PROCESSORS];    // This mutex is used as a global lock for esp_ipc_* APIs
@@ -44,6 +48,9 @@ static void IRAM_ATTR ipc_task(void* arg)
 {
     const int cpuid = (int) arg;
     assert(cpuid == xPortGetCoreID());
+#ifdef CONFIG_ESP_IPC_ISR_ENABLE
+    esp_ipc_isr_init();
+#endif
     while (true) {
         // Wait for IPC to be initiated.
         // This will be indicated by giving the semaphore corresponding to
@@ -62,14 +69,17 @@ static void IRAM_ATTR ipc_task(void* arg)
         }
 #endif
         if (s_func[cpuid]) {
+            // we need to cache s_func, s_func_arg and s_ipc_wait variables locally because they can be changed by a subsequent IPC call.
             esp_ipc_func_t func = s_func[cpuid];
+            s_func[cpuid] = NULL;
             void* arg = s_func_arg[cpuid];
+            esp_ipc_wait_t ipc_wait = s_ipc_wait[cpuid];
 
-            if (s_ipc_wait[cpuid] == IPC_WAIT_FOR_START) {
+            if (ipc_wait == IPC_WAIT_FOR_START) {
                 xSemaphoreGive(s_ipc_ack[cpuid]);
             }
             (*func)(arg);
-            if (s_ipc_wait[cpuid] == IPC_WAIT_FOR_END) {
+            if (ipc_wait == IPC_WAIT_FOR_END) {
                 xSemaphoreGive(s_ipc_ack[cpuid]);
             }
         }
@@ -97,16 +107,13 @@ static void esp_ipc_init(void) __attribute__((constructor));
 
 static void esp_ipc_init(void)
 {
-#ifdef CONFIG_ESP_IPC_ISR_ENABLE
-	esp_ipc_isr_init();
-#endif
     char task_name[15];
 
     for (int i = 0; i < portNUM_PROCESSORS; ++i) {
         snprintf(task_name, sizeof(task_name), "ipc%d", i);
-        s_ipc_mutex[i] = xSemaphoreCreateMutex();
-        s_ipc_ack[i] = xSemaphoreCreateBinary();
-        s_ipc_sem[i] = xSemaphoreCreateBinary();
+        s_ipc_mutex[i] = xSemaphoreCreateMutexStatic(&s_ipc_mutex_buffer[i]);
+        s_ipc_ack[i] = xSemaphoreCreateBinaryStatic(&s_ipc_ack_buffer[i]);
+        s_ipc_sem[i] = xSemaphoreCreateBinaryStatic(&s_ipc_sem_buffer[i]);
         portBASE_TYPE res = xTaskCreatePinnedToCore(ipc_task, task_name, CONFIG_ESP_IPC_TASK_STACK_SIZE, (void*) i,
                                                     configMAX_PRIORITIES - 1, &s_ipc_task_handle[i], i);
         assert(res == pdTRUE);
@@ -142,7 +149,6 @@ static esp_err_t esp_ipc_call_and_wait(uint32_t cpu_id, esp_ipc_func_t func, voi
     s_ipc_wait[cpu_id] = wait_for;
     xSemaphoreGive(s_ipc_sem[cpu_id]);
     xSemaphoreTake(s_ipc_ack[cpu_id], portMAX_DELAY);
-    s_func[cpu_id] = NULL;
 #ifdef CONFIG_ESP_IPC_USES_CALLERS_PRIORITY
     xSemaphoreGive(s_ipc_mutex[cpu_id]);
 #else

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2022 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -35,6 +35,7 @@ typedef enum {
     HTTP_EVENT_ON_DATA,         /*!< Occurs when receiving data from the server, possibly multiple portions of the packet */
     HTTP_EVENT_ON_FINISH,       /*!< Occurs when finish a HTTP session */
     HTTP_EVENT_DISCONNECTED,    /*!< The connection has been disconnected */
+    HTTP_EVENT_REDIRECT,        /*!< Intercepting HTTP redirects to handle them manually */
 } esp_http_client_event_id_t;
 
 /**
@@ -149,7 +150,9 @@ typedef enum {
     HttpStatus_MultipleChoices   = 300,
     HttpStatus_MovedPermanently  = 301,
     HttpStatus_Found             = 302,
+    HttpStatus_SeeOther          = 303,
     HttpStatus_TemporaryRedirect = 307,
+    HttpStatus_PermanentRedirect = 308,
 
     /* 4xx - Client Error */
     HttpStatus_BadRequest        = 400,

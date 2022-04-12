@@ -1,3 +1,8 @@
+/*
+ * SPDX-FileCopyrightText: 2021-2022 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Unlicense OR CC0-1.0
+ */
 
 #include "esp_log.h"
 #include "esp_hidd_api.h"
@@ -21,7 +26,7 @@ typedef struct
     esp_hidd_qos_param_t both_qos;
     uint8_t protocol_mode;
     SemaphoreHandle_t mouse_mutex;
-    xTaskHandle mouse_task_hdl;
+    TaskHandle_t mouse_task_hdl;
     uint8_t buffer[4];
     int8_t x_dir;
 } local_param_t;

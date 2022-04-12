@@ -111,13 +111,10 @@ function(__build_set_default_build_specifications)
 
     list(APPEND cxx_compile_options "-std=gnu++11")
 
-    list(APPEND link_options "-Wl,--gc-sections")
-
     idf_build_set_property(COMPILE_DEFINITIONS "${compile_definitions}" APPEND)
     idf_build_set_property(COMPILE_OPTIONS "${compile_options}" APPEND)
     idf_build_set_property(C_COMPILE_OPTIONS "${c_compile_options}" APPEND)
     idf_build_set_property(CXX_COMPILE_OPTIONS "${cxx_compile_options}" APPEND)
-    idf_build_set_property(LINK_OPTIONS "${link_options}" APPEND)
 endfunction()
 
 #
@@ -221,13 +218,16 @@ function(__build_expand_requirements component_target)
 
     get_property(reqs TARGET ${component_target} PROPERTY REQUIRES)
     get_property(priv_reqs TARGET ${component_target} PROPERTY PRIV_REQUIRES)
+    __component_get_property(component_name ${component_target} COMPONENT_NAME)
 
     foreach(req ${reqs})
+        depgraph_add_edge(${component_name} ${req} REQUIRES)
         __build_resolve_and_add_req(_component_target ${component_target} ${req} __REQUIRES)
         __build_expand_requirements(${_component_target})
     endforeach()
 
     foreach(req ${priv_reqs})
+        depgraph_add_edge(${component_name} ${req} PRIV_REQUIRES)
         __build_resolve_and_add_req(_component_target ${component_target} ${req} __PRIV_REQUIRES)
         __build_expand_requirements(${_component_target})
     endforeach()
@@ -279,7 +279,7 @@ function(__build_check_python)
         idf_build_get_property(python PYTHON)
         idf_build_get_property(idf_path IDF_PATH)
         message(STATUS "Checking Python dependencies...")
-        execute_process(COMMAND "${python}" "${idf_path}/tools/check_python_dependencies.py"
+        execute_process(COMMAND "${python}" "${idf_path}/tools/idf_tools.py" "check-python-dependencies"
             RESULT_VARIABLE result)
         if(result EQUAL 1)
             # check_python_dependencies returns error code 1 on failure

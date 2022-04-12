@@ -18,12 +18,6 @@ This is the documentation for Espressif IoT Development Framework (`esp-idf <htt
 
     This document describes using ESP-IDF with the {IDF_TARGET_NAME} SoC.
 
-.. only:: esp32s3
-
-    .. warning::
-
-        Not all documents are updated for ESP32-S3 yet.
-
 ==================  ==================  ==================
 |Get Started|_      |API Reference|_    |H/W Reference|_
 ------------------  ------------------  ------------------
@@ -58,20 +52,17 @@ This is the documentation for Espressif IoT Development Framework (`esp-idf <htt
 .. toctree::
    :hidden:
 
-   Get Started <get-started/index>
-   API Reference <api-reference/index>
-   H/W Reference <hw-reference/index>
-   API Guides <api-guides/index>
-   ESP-IDF 5.0 Migration Guides <migration-guides/index>
-   Libraries and Frameworks <libraries-and-frameworks/index>
-   Contribute <contribute/index>
-   Versions <versions>
-   Resources <resources>
-   Copyrights <COPYRIGHT>
-   About <about>
-   语言/Languages <languages>
+   get-started/index
+   api-reference/index
+   hw-reference/index
+   api-guides/index
+   migration-guides/index
+   libraries-and-frameworks/index
+   contribute/index
+   versions
+   resources
+   COPYRIGHT
+   about
+   languages
 
 * :ref:`genindex`
-
-
-

@@ -1,16 +1,8 @@
-// Copyright 2017-2019 Espressif Systems (Shanghai) PTE LTD
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+/*
+ * SPDX-FileCopyrightText: 2017-2021 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 #include <stdio.h>
 #include <string.h>
@@ -19,15 +11,10 @@
 #include "esp_vfs_dev.h"
 #include "nvs.h"
 #include "nvs_flash.h"
-
 #include "esp_vfs_fat.h"
-
 #include "esp_console.h"
-
 #include "ble_mesh_console_decl.h"
 #include "ble_mesh_example_init.h"
-
-#define TAG "ble_mesh_test"
 
 #if CONFIG_STORE_HISTORY
 
@@ -70,7 +57,18 @@ void app_main(void)
     initialize_filesystem();
     repl_config.history_save_path = HISTORY_PATH;
 #endif
+
+#if CONFIG_IDF_TARGET_ESP32C3
+    repl_config.prompt = "esp32c3>";
+#elif CONFIG_IDF_TARGET_ESP32S3
+    repl_config.prompt = "esp32s3>";
+#elif CONFIG_IDF_TARGET_ESP32H2
+    repl_config.prompt = "esp32h2>";
+#else
     repl_config.prompt = "esp32>";
+#endif
+    printf("!!!ready!!!\n");
+
     // init console REPL environment
     ESP_ERROR_CHECK(esp_console_new_repl_uart(&uart_config, &repl_config, &repl));
 

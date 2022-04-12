@@ -18,7 +18,7 @@ Tests are added in a function in the C file as follows:
 
 .. code-block:: c
 
-    TEST_CASE("test name", "[module name]"
+    TEST_CASE("test name", "[module name]")
     {
             // Add test here
     }
@@ -300,12 +300,9 @@ Refer to :component_file:`cmock/CMock/docs/CMock_Summary.md` for more details on
 
 Requirements
 ^^^^^^^^^^^^
-The following requirements are necessary to generate the mocks: 
+The Linux target is the only target where mocking currently works. The following requirements are necessary to generate the mocks:
 
-.. list::
-    - Installed ESP-IDF with all its requirements
-    - ``ruby``
-    - On the Linux target, which is the only target where mocking currently works, ``libbsd`` is required, too
+.. include:: inc/linux-host-requirements.rst
 
 Mock a Component
 ^^^^^^^^^^^^^^^^
@@ -316,7 +313,7 @@ In the component mock, the following parts are specified:
 
 .. list::
     - The headers providing the functions to generate mocks for
-    - Include paths of the aforementioned headers 
+    - Include paths of the aforementioned headers
     - Dependencies of the mock component (this is necessary e.g. if the headers include files from other components)
 
 All these parts have to be specified using the IDF build system function ``idf_component_mock``. You can use the IDF build system function ``idf_component_get_property`` with the tag ``COMPONENT_OVERRIDEN_DIR`` to access the component directory of the original component and then register the mock component parts using ``idf_component_mock``:

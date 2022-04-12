@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2022 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -20,21 +20,7 @@
 #include "esp_flash_internal.h"
 #include "esp_rom_gpio.h"
 #include "esp_private/spi_flash_os.h"
-#if CONFIG_IDF_TARGET_ESP32
-#include "esp32/rom/spi_flash.h"
-#elif CONFIG_IDF_TARGET_ESP32S2
-#include "esp32s2/rom/spi_flash.h"
-#elif CONFIG_IDF_TARGET_ESP32S3
-#include "esp32s3/rom/spi_flash.h"
-#elif CONFIG_IDF_TARGET_ESP32C3
-#include "esp32c3/rom/efuse.h"
-#include "esp32c3/rom/spi_flash.h"
-#elif CONFIG_IDF_TARGET_ESP32H2
-#include "esp32h2/rom/spi_flash.h"
-#elif CONFIG_IDF_TARGET_ESP8684
-#include "esp8684/rom/efuse.h"
-#include "esp8684/rom/spi_flash.h"
-#endif
+#include "esp_rom_spiflash.h"
 
 __attribute__((unused)) static const char TAG[] = "spi_flash";
 
@@ -104,7 +90,7 @@ esp_flash_t *esp_flash_default_chip = NULL;
     .input_delay_ns = 0,\
     .cs_setup = 1,\
 }
-#elif CONFIG_IDF_TARGET_ESP32C3 || CONFIG_IDF_TARGET_ESP8684
+#elif CONFIG_IDF_TARGET_ESP32C3 || CONFIG_IDF_TARGET_ESP32C2
 #if !CONFIG_SPI_FLASH_AUTO_SUSPEND
 #define ESP_FLASH_HOST_CONFIG_DEFAULT()  (memspi_host_config_t){ \
     .host_id = SPI1_HOST,\
@@ -158,6 +144,9 @@ static IRAM_ATTR NOINLINE_ATTR void cs_initialize(esp_flash_t *chip, const esp_f
     int spics_out = spi_periph_signal[config->host_id].spics_out[cs_id];
     int spics_func = spi_periph_signal[config->host_id].func;
     uint32_t iomux_reg = GPIO_PIN_MUX_REG[cs_io_num];
+    gpio_hal_context_t gpio_hal = {
+        .dev = GPIO_HAL_GET_HW(GPIO_PORT_0)
+    };
 
     //To avoid the panic caused by flash data line conflicts during cs line
     //initialization, disable the cache temporarily
@@ -166,16 +155,8 @@ static IRAM_ATTR NOINLINE_ATTR void cs_initialize(esp_flash_t *chip, const esp_f
     if (use_iomux) {
         gpio_hal_iomux_func_sel(iomux_reg, spics_func);
     } else {
-#if SOC_GPIO_PIN_COUNT <= 32
-        GPIO.enable_w1ts.val = (0x1 << cs_io_num);
-#else
-        if (cs_io_num < 32) {
-            GPIO.enable_w1ts = (0x1 << cs_io_num);
-        } else {
-            GPIO.enable1_w1ts.data = (0x1 << (cs_io_num - 32));
-        }
-#endif
-        GPIO.pin[cs_io_num].pad_driver = 0;
+        gpio_hal_output_enable(&gpio_hal, cs_io_num);
+        gpio_hal_od_disable(&gpio_hal, cs_io_num);
         esp_rom_gpio_connect_out_signal(cs_io_num, spics_out, false, false);
         if (cs_id == 0) {
             esp_rom_gpio_connect_in_signal(cs_io_num, spics_in, false);
@@ -287,7 +268,7 @@ esp_err_t esp_flash_init_default_chip(void)
     const esp_rom_spiflash_chip_t *legacy_chip = &g_rom_flashchip;
     memspi_host_config_t cfg = ESP_FLASH_HOST_CONFIG_DEFAULT();
 
-    #if !CONFIG_IDF_TARGET_ESP32 && !CONFIG_IDF_TARGET_ESP8684
+    #if !CONFIG_IDF_TARGET_ESP32 && !CONFIG_IDF_TARGET_ESP32C2
     // For esp32s2 spi IOs are configured as from IO MUX by default
     cfg.iomux = esp_rom_efuse_get_flash_gpio_info() == 0 ?  true : false;
     #endif

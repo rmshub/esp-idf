@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2022 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -8,7 +8,6 @@
 #include <stdlib.h>
 #include <sys/reent.h>
 #include "esp_attr.h"
-#include "soc/cpu.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
@@ -18,7 +17,7 @@
 /* Notes on our newlib lock implementation:
  *
  * - Use FreeRTOS mutex semaphores as locks.
- * - lock_t is int, but we store an xSemaphoreHandle there.
+ * - lock_t is int, but we store an SemaphoreHandle_t there.
  * - Locks are no-ops until the FreeRTOS scheduler is running.
  * - Due to this, locks need to be lazily initialised the first time
  *   they are acquired. Initialisation/deinitialisation of locks is
@@ -62,7 +61,7 @@ static void IRAM_ATTR lock_init_generic(_lock_t *lock, uint8_t mutex_type) {
            without writing wrappers. Doing it this way seems much less
            spaghetti-like.
         */
-        xSemaphoreHandle new_sem = xQueueCreateMutex(mutex_type);
+        SemaphoreHandle_t new_sem = xQueueCreateMutex(mutex_type);
         if (!new_sem) {
             abort(); /* No more semaphores available or OOM */
         }
@@ -94,7 +93,7 @@ void IRAM_ATTR _lock_init_recursive(_lock_t *lock) {
 void IRAM_ATTR _lock_close(_lock_t *lock) {
     portENTER_CRITICAL(&lock_init_spinlock);
     if (*lock) {
-        xSemaphoreHandle h = (xSemaphoreHandle)(*lock);
+        SemaphoreHandle_t h = (SemaphoreHandle_t)(*lock);
 #if (INCLUDE_xSemaphoreGetMutexHolder == 1)
         configASSERT(xSemaphoreGetMutexHolder(h) == NULL); /* mutex should not be held */
 #endif
@@ -110,14 +109,14 @@ void _lock_close_recursive(_lock_t *lock) __attribute__((alias("_lock_close")));
    mutex_type is queueQUEUE_TYPE_RECURSIVE_MUTEX or queueQUEUE_TYPE_MUTEX
 */
 static int IRAM_ATTR lock_acquire_generic(_lock_t *lock, uint32_t delay, uint8_t mutex_type) {
-    xSemaphoreHandle h = (xSemaphoreHandle)(*lock);
+    SemaphoreHandle_t h = (SemaphoreHandle_t)(*lock);
     if (!h) {
         if (xTaskGetSchedulerState() == taskSCHEDULER_NOT_STARTED) {
             return 0; /* locking is a no-op before scheduler is up, so this "succeeds" */
         }
         /* lazy initialise lock - might have had a static initializer (that we don't use) */
         lock_init_generic(lock, mutex_type);
-        h = (xSemaphoreHandle)(*lock);
+        h = (SemaphoreHandle_t)(*lock);
         configASSERT(h != NULL);
     }
 
@@ -174,7 +173,7 @@ static void IRAM_ATTR lock_release_generic(_lock_t *lock, uint8_t mutex_type) {
     if (xTaskGetSchedulerState() == taskSCHEDULER_NOT_STARTED) {
         return; /* locking is a no-op before scheduler is up */
     }
-    xSemaphoreHandle h = (xSemaphoreHandle)(*lock);
+    SemaphoreHandle_t h = (SemaphoreHandle_t)(*lock);
     assert(h);
 
     if (!xPortCanYield()) {
@@ -385,7 +384,7 @@ void esp_newlib_locks_init(void)
     __sinit_recursive_mutex = (_lock_t) &s_common_recursive_mutex;
     extern _lock_t __sfp_recursive_mutex;
     __sfp_recursive_mutex = (_lock_t) &s_common_recursive_mutex;
-#elif defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32H2) || defined(CONFIG_IDF_TARGET_ESP8684)
+#elif defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32H2) || defined(CONFIG_IDF_TARGET_ESP32C2)
     /* Newlib 3.3.0 is used in ROM, built with _RETARGETABLE_LOCKING.
      * No access to lock variables for the purpose of ECO forward compatibility,
      * however we have an API to initialize lock variables used in the ROM.

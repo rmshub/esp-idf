@@ -155,7 +155,7 @@
 #include "soc/sensitive_reg.h"
 #endif
 #include "eri.h"
-#include "trax.h"
+#include "esp_private/trax.h"
 #include "esp_log.h"
 #include "esp_app_trace_membufs_proto.h"
 #include "esp_app_trace_port.h"
@@ -209,12 +209,6 @@ static uint8_t * const s_trax_blocks[] = {
     (uint8_t *)TRACEMEM_BLK0_ADDR,
     (uint8_t *)TRACEMEM_BLK1_ADDR
 };
-
-
-esp_apptrace_hw_t *esp_apptrace_uart_hw_get(int num, void **data)
-{
-    return NULL;
-}
 
 esp_apptrace_hw_t *esp_apptrace_jtag_hw_get(void **data)
 {

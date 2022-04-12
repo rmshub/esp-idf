@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2016-2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2016-2022 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -10,7 +10,6 @@
 // Public interface header for slave
 #include <stdint.h>                 // for standard int types definition
 #include <stddef.h>                 // for NULL and std defines
-#include "soc/soc.h"                // for BITN definitions
 #include "freertos/FreeRTOS.h"      // for task creation and queues access
 #include "freertos/event_groups.h"  // for event groups
 #include "esp_modbus_common.h"      // for common types
@@ -18,6 +17,12 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#define MB_SLAVE_CHECK(a, err_code, format, ...) MB_RETURN_ON_FALSE(a, err_code, TAG, format __VA_OPT__(,) __VA_ARGS__)
+
+#define MB_SLAVE_ASSERT(con) do { \
+        if (!(con)) { ESP_LOGE(TAG, "assert errno:%d, errno_str: !(%s)", errno, strerror(errno)); assert(0 && #con); } \
+    } while (0)
 
 /**
  * @brief Parameter access event information type

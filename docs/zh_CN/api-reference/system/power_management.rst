@@ -100,9 +100,11 @@ ESP-IDF 中集成的电源管理算法可以根据应用程序组件的需求，
 
 以下外设不受 APB 频率变更的影响：
 
-- **UART**：如果 REF_TICK 用作时钟源，则 UART 不受 APB 频率变更影响。请查看 :cpp:class:`uart_config_t` 中的 `use_ref_tick`。
+- **UART**：如果 REF_TICK 用作时钟源，则 UART 不受 APB 频率变更影响。请查看 :cpp:member:`uart_config_t::use_ref_tick`。
 - **LEDC**：如果 REF_TICK 用作时钟源，则 LEDC 不受 APB 频率变更影响。请查看 :cpp:func:`ledc_timer_config` 函数。
-- **RMT**：如果 REF_TICK 或者 XTAL 被用作时钟源，则 RMT 不受 APB 频率变更影响。请查看 :cpp:class:`rmt_config_t` 结构体中的 `flags` 成员以及 `RMT_CHANNEL_FLAGS_AWARE_DFS` 宏。
+- **RMT**：如果 REF_TICK 或者 XTAL 被用作时钟源，则 RMT 不受 APB 频率变更影响。请查看 :cpp:member:`rmt_config_t::flags` 以及 `RMT_CHANNEL_FLAGS_AWARE_DFS` 宏。
+- **GPTimer**：如果 XTAL 用作时钟源，则 GPTimer 不受 APB 频率变更影响。请查看 :cpp:member:`gptimer_config_t::clk_src`。
+- **TSENS**：XTAL 或 RTC_8M 用作时钟源，因此不受 APB 频率变化影响。
 
 目前以下外设驱动程序可感知动态调频，并在调频期间使用 ``ESP_PM_APB_FREQ_MAX`` 锁：
 
@@ -120,7 +122,7 @@ ESP-IDF 中集成的电源管理算法可以根据应用程序组件的需求，
     - **WiFi**：从调用 :cpp:func:`esp_wifi_start` 至 :cpp:func:`esp_wifi_stop` 期间。如果启用了调制解调器睡眠模式，广播关闭时将释放此管理锁。
     - **TWAI**：从调用 :cpp:func:`twai_driver_install` 至 :cpp:func:`twai_driver_uninstall` 期间。
     :SOC_BT_SUPPORTED and esp32: - **Bluetooth**：从调用 :cpp:func:`esp_bt_controller_enable` 至 :cpp:func:`esp_bt_controller_disable` 期间。如果启用了蓝牙调制解调器，广播关闭时将释放此管理锁。但依然占用 ``ESP_PM_NO_LIGHT_SLEEP`` 锁，除非将 :ref:`CONFIG_BTDM_CTRL_LOW_POWER_CLOCK` 选项设置为 “外部 32 kHz 晶振”。
-    :SOC_BT_SUPPORTED and esp32c3: - **Bluetooth**：从调用 :cpp:func:`esp_bt_controller_enable` 至 :cpp:func:`esp_bt_controller_disable` 期间。如果启用了蓝牙调制解调器，广播关闭时将释放此管理锁。但依然占用 ``ESP_PM_NO_LIGHT_SLEEP`` 锁。
+    :SOC_BT_SUPPORTED and not esp32: - **Bluetooth**：从调用 :cpp:func:`esp_bt_controller_enable` 至 :cpp:func:`esp_bt_controller_disable` 期间。如果启用了蓝牙调制解调器，广播关闭时将释放此管理锁。但依然占用 ``ESP_PM_NO_LIGHT_SLEEP`` 锁。
 
 以下外设驱动程序无法感知动态调频，应用程序需自己获取/释放管理锁：
 
@@ -128,8 +130,8 @@ ESP-IDF 中集成的电源管理算法可以根据应用程序组件的需求，
 
     - PCNT
     - Sigma-delta
-    - Timer group
-    :esp32: - MCPWM
+    - 旧版定时器驱动（Timer Group)
+    :SOC_MCPWM_SUPPORTED: - MCPWM
 
 API 参考
 -------------

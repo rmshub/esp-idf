@@ -37,7 +37,9 @@ set(COMPONENTS
 # Make EXTRA_COMPONENT_DIRS variable to point to the bootloader_components directory
 # of the project being compiled
 set(PROJECT_EXTRA_COMPONENTS "${PROJECT_SOURCE_DIR}/bootloader_components")
-list(APPEND EXTRA_COMPONENT_DIRS "${PROJECT_EXTRA_COMPONENTS}")
+if(EXISTS ${PROJECT_EXTRA_COMPONENTS})
+    list(APPEND EXTRA_COMPONENT_DIRS "${PROJECT_EXTRA_COMPONENTS}")
+endif()
 
 # Consider each directory in project's bootloader_components as a component to be compiled
 file(GLOB proj_components RELATIVE ${PROJECT_EXTRA_COMPONENTS} ${PROJECT_EXTRA_COMPONENTS}/*)
@@ -50,10 +52,7 @@ endforeach()
 
 set(BOOTLOADER_BUILD 1)
 include("${IDF_PATH}/tools/cmake/project.cmake")
-set(common_req log esp_rom esp_common esp_hw_support hal newlib)
-if(LEGACY_INCLUDE_COMMON_HEADERS)
-    list(APPEND common_req soc hal)
-endif()
+set(common_req log esp_rom esp_common esp_hw_support newlib)
 idf_build_set_property(__COMPONENT_REQUIRES_COMMON "${common_req}")
 idf_build_set_property(__OUTPUT_SDKCONFIG 0)
 project(bootloader)

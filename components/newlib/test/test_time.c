@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 #include <math.h>
 #include "unity.h"
 #include "driver/adc.h"
@@ -21,30 +22,25 @@
 #include "../priv_include/esp_time_impl.h"
 
 #include "esp_private/system_internal.h"
+#include "esp_private/esp_clk.h"
 
 #if CONFIG_IDF_TARGET_ESP32
-#include "esp32/clk.h"
 #include "esp32/rtc.h"
 #define TARGET_DEFAULT_CPU_FREQ_MHZ CONFIG_ESP32_DEFAULT_CPU_FREQ_MHZ
 #elif CONFIG_IDF_TARGET_ESP32S2
-#include "esp32s2/clk.h"
 #include "esp32s2/rtc.h"
 #define TARGET_DEFAULT_CPU_FREQ_MHZ CONFIG_ESP32S2_DEFAULT_CPU_FREQ_MHZ
 #elif CONFIG_IDF_TARGET_ESP32S3
-#include "esp32s3/clk.h"
 #include "esp32s3/rtc.h"
 #define TARGET_DEFAULT_CPU_FREQ_MHZ CONFIG_ESP32S3_DEFAULT_CPU_FREQ_MHZ
 #elif CONFIG_IDF_TARGET_ESP32C3
-#include "esp32c3/clk.h"
 #include "esp32c3/rtc.h"
 #define TARGET_DEFAULT_CPU_FREQ_MHZ CONFIG_ESP32C3_DEFAULT_CPU_FREQ_MHZ
 #elif CONFIG_IDF_TARGET_ESP32H2
-#include "esp32h2/clk.h"
 #include "esp32h2/rtc.h"
 #define TARGET_DEFAULT_CPU_FREQ_MHZ CONFIG_ESP32H2_DEFAULT_CPU_FREQ_MHZ
-#elif CONFIG_IDF_TARGET_ESP8684
-#include "esp_private/esp_clk.h"
-#define TARGET_DEFAULT_CPU_FREQ_MHZ CONFIG_ESP8684_DEFAULT_CPU_FREQ_MHZ
+#elif CONFIG_IDF_TARGET_ESP32C2
+#define TARGET_DEFAULT_CPU_FREQ_MHZ CONFIG_ESP32C2_DEFAULT_CPU_FREQ_MHZ
 #endif
 
 #if portNUM_PROCESSORS == 2
@@ -83,7 +79,7 @@ TEST_CASE("Reading RTC registers on APP CPU doesn't affect clock", "[newlib]")
         printf("(0) time taken: %f sec\n", time_sec);
         TEST_ASSERT_TRUE(fabs(time_sec - 1.0f) < 0.1);
     }
-    TEST_ASSERT_TRUE(xSemaphoreTake(done, 5000 / portTICK_RATE_MS));
+    TEST_ASSERT_TRUE(xSemaphoreTake(done, 5000 / portTICK_PERIOD_MS));
 }
 
 #endif // portNUM_PROCESSORS == 2
@@ -175,7 +171,7 @@ static volatile bool exit_flag;
 
 static void adjtimeTask2(void *pvParameters)
 {
-    xSemaphoreHandle *sema = (xSemaphoreHandle *) pvParameters;
+    SemaphoreHandle_t *sema = (SemaphoreHandle_t *) pvParameters;
     struct timeval delta = {.tv_sec = 0, .tv_usec = 0};
     struct timeval outdelta;
 
@@ -192,7 +188,7 @@ static void adjtimeTask2(void *pvParameters)
 
 static void timeTask(void *pvParameters)
 {
-    xSemaphoreHandle *sema = (xSemaphoreHandle *) pvParameters;
+    SemaphoreHandle_t *sema = (SemaphoreHandle_t *) pvParameters;
     struct timeval tv_time = { .tv_sec = 1520000000, .tv_usec = 900000 };
 
     // although exit flag is set in another task, checking (exit_flag == false) is safe
@@ -213,7 +209,7 @@ TEST_CASE("test for no interlocking adjtime, gettimeofday and settimeofday funct
     TEST_ASSERT_EQUAL(settimeofday(&tv_time, NULL), 0);
 
     const int max_tasks = 2;
-    xSemaphoreHandle exit_sema[max_tasks];
+    SemaphoreHandle_t exit_sema[max_tasks];
 
     for (int i = 0; i < max_tasks; ++i) {
         exit_sema[i] = xSemaphoreCreateBinary();
@@ -249,7 +245,7 @@ static int64_t result_adjtime_correction_us[2];
 
 static void get_time_task(void *pvParameters)
 {
-    xSemaphoreHandle *sema = (xSemaphoreHandle *) pvParameters;
+    SemaphoreHandle_t *sema = (SemaphoreHandle_t *) pvParameters;
     struct timeval tv_time;
     // although exit flag is set in another task, checking (exit_flag == false) is safe
     while (exit_flag == false) {
@@ -286,7 +282,7 @@ static int64_t calc_correction(const char* tag, int64_t* sys_time, int64_t* real
 
 static void measure_time_task(void *pvParameters)
 {
-    xSemaphoreHandle *sema = (xSemaphoreHandle *) pvParameters;
+    SemaphoreHandle_t *sema = (SemaphoreHandle_t *) pvParameters;
     int64_t main_real_time_us[2];
     int64_t main_sys_time_us[2];
     struct timeval tv_time = {.tv_sec = 1550000000, .tv_usec = 0};
@@ -326,7 +322,7 @@ TEST_CASE("test time adjustment happens linearly", "[newlib][timeout=15]")
 {
     exit_flag = false;
 
-    xSemaphoreHandle exit_sema[2];
+    SemaphoreHandle_t exit_sema[2];
     for (int i = 0; i < 2; ++i) {
         exit_sema[i] = xSemaphoreCreateBinary();
         result_adjtime_correction_us[i] = 0;
@@ -451,8 +447,7 @@ TEST_CASE("test posix_timers clock_... functions", "[newlib]")
     test_posix_timers_clock();
 }
 
-#ifdef CONFIG_SDK_TOOLCHAIN_SUPPORTS_TIME_WIDE_64_BITS
-#include <string.h>
+#ifndef _USE_LONG_TIME_T
 
 static struct timeval get_time(const char *desc, char *buffer)
 {
@@ -538,7 +533,7 @@ TEST_CASE("test time functions wide 64 bits", "[newlib]")
     }
 }
 
-#endif // CONFIG_SDK_TOOLCHAIN_SUPPORTS_TIME_WIDE_64_BITS
+#endif // !_USE_LONG_TIME_T
 
 #if defined( CONFIG_ESP_TIME_FUNCS_USE_ESP_TIMER ) && defined( CONFIG_ESP_TIME_FUNCS_USE_RTC_TIMER )
 
@@ -554,14 +549,14 @@ typedef enum {
 
 static void print_counters(void)
 {
-    int64_t frc = esp_system_get_time();
+    int64_t high_res_time = esp_system_get_time();
     int64_t rtc = esp_rtc_get_time_us();
     uint64_t boot_time = esp_time_impl_get_boot_time();
-    printf("\tFRC %lld (us)\n", frc);
+    printf("\tHigh-res time %lld (us)\n", high_res_time);
     printf("\tRTC %lld (us)\n", rtc);
     printf("\tBOOT %lld (us)\n", boot_time);
     printf("\ts_microseconds_offset %lld (us)\n", s_microseconds_offset);
-    printf("delta RTC - FRC counters %lld (us)\n", rtc - frc);
+    printf("delta RTC - high-res time counters %lld (us)\n", rtc - high_res_time);
 }
 
 static void set_initial_condition(type_reboot_t type_reboot, int error_time)
@@ -576,11 +571,11 @@ static void set_initial_condition(type_reboot_t type_reboot, int error_time)
 
     int delay_s = abs(error_time) * 2;
     printf("Waiting for %d (s) ...\n", delay_s);
-    vTaskDelay(delay_s * 1000 / portTICK_RATE_MS);
+    vTaskDelay(delay_s * 1000 / portTICK_PERIOD_MS);
 
     print_counters();
 
-    printf("FRC counter increased to %d (s)\n", error_time);
+    printf("High res counter increased to %d (s)\n", error_time);
     esp_timer_private_advance(error_time * 1000000ULL);
 
     print_counters();
@@ -595,7 +590,7 @@ static void set_initial_condition(type_reboot_t type_reboot, int error_time)
 
     if (type_reboot == TYPE_REBOOT_ABORT) {
         printf("Update boot time based on diff\n");
-        esp_sync_counters_rtc_and_frc();
+        esp_sync_timekeeping_timers();
         print_counters();
         printf("reboot as abort\n");
         abort();
@@ -626,14 +621,14 @@ static void check_time(void)
     int latency_before_run_ut = 1 + (esp_rtc_get_time_us() - s_time_in_reboot) / 1000000;
     struct timeval tv;
     gettimeofday(&tv, NULL);
-    printf("timestamp %ld (s)\n", tv.tv_sec);
+    printf("timestamp %jd (s)\n", (intmax_t)tv.tv_sec);
     int dt = tv.tv_sec - s_saved_time;
     printf("delta timestamp = %d (s)\n", dt);
     TEST_ASSERT_GREATER_OR_EQUAL(0, dt);
     TEST_ASSERT_LESS_OR_EQUAL(latency_before_run_ut, dt);
 }
 
-TEST_CASE_MULTIPLE_STAGES("Timestamp after abort is correct in case RTC & FRC have + big error", "[newlib][reset=abort,SW_CPU_RESET]", set_timestamp1, check_time);
-TEST_CASE_MULTIPLE_STAGES("Timestamp after restart is correct in case RTC & FRC have + big error", "[newlib][reset=SW_CPU_RESET]", set_timestamp2, check_time);
-TEST_CASE_MULTIPLE_STAGES("Timestamp after restart is correct in case RTC & FRC have - big error", "[newlib][reset=SW_CPU_RESET]", set_timestamp3, check_time);
+TEST_CASE_MULTIPLE_STAGES("Timestamp after abort is correct in case RTC & High-res timer have + big error", "[newlib][reset=abort,SW_CPU_RESET]", set_timestamp1, check_time);
+TEST_CASE_MULTIPLE_STAGES("Timestamp after restart is correct in case RTC & High-res timer have + big error", "[newlib][reset=SW_CPU_RESET]", set_timestamp2, check_time);
+TEST_CASE_MULTIPLE_STAGES("Timestamp after restart is correct in case RTC & High-res timer have - big error", "[newlib][reset=SW_CPU_RESET]", set_timestamp3, check_time);
 #endif // CONFIG_ESP_TIME_FUNCS_USE_ESP_TIMER && CONFIG_ESP_TIME_FUNCS_USE_RTC_TIMER

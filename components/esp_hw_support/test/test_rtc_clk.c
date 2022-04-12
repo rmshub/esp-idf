@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2021-2022 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -26,26 +26,22 @@
 
 #include "esp_sleep.h"
 #include "esp_system.h"
+#include "esp_private/esp_clk.h"
 
 #if CONFIG_IDF_TARGET_ESP32
 #include "esp32/rtc.h"
-#include "esp32/clk.h"
 #include "esp32/rom/rtc.h"
 #elif CONFIG_IDF_TARGET_ESP32S2
 #include "esp32s2/rtc.h"
-#include "esp32s2/clk.h"
 #include "esp32s2/rom/rtc.h"
 #elif CONFIG_IDF_TARGET_ESP32S3
 #include "esp32s3/rtc.h"
-#include "esp32s3/clk.h"
 #include "esp32s3/rom/rtc.h"
 #elif CONFIG_IDF_TARGET_ESP32C3
 #include "esp32c3/rtc.h"
-#include "esp32c3/clk.h"
 #include "esp32c3/rom/rtc.h"
 #elif CONFIG_IDF_TARGET_ESP32H2
 #include "esp32h2/rtc.h"
-#include "esp32h2/clk.h"
 #include "esp32h2/rom/rtc.h"
 #endif
 
@@ -372,7 +368,7 @@ static void trigger_deepsleep(void)
     // Save start time. Deep sleep.
     start = esp_rtc_get_time_us();
     esp_sleep_enable_timer_wakeup(1000);
-    // In function esp_deep_sleep_start() uses function esp_sync_counters_rtc_and_frc()
+    // In function esp_deep_sleep_start() uses function esp_sync_timekeeping_timers()
     // to prevent a negative time after wake up.
     esp_deep_sleep_start();
 }
@@ -392,7 +388,7 @@ static void check_time_deepsleep_1(void)
     start = esp_rtc_get_time_us();
 
     esp_sleep_enable_timer_wakeup(1000);
-    // In function esp_deep_sleep_start() uses function esp_sync_counters_rtc_and_frc()
+    // In function esp_deep_sleep_start() uses function esp_sync_timekeeping_timers()
     // to prevent a negative time after wake up.
     esp_deep_sleep_start();
 }

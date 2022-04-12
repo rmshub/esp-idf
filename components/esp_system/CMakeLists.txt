@@ -26,7 +26,7 @@ else()
             "xt_wdt.c"
             "debug_stubs.c")
 
-    if(NOT (${target} STREQUAL "esp8684"))
+    if(NOT (${target} STREQUAL "esp32c2"))
         list(APPEND srcs "debug_stubs.c")
     endif()
 
@@ -40,8 +40,10 @@ else()
                                     # [refactor-todo] requirements due to init code,
                                     # should be removable once using component init functions
                                     # link-time registration is used.
-                                    esp_pm app_update nvs_flash pthread app_trace esp_gdbstub
-                                    espcoredump esp_phy efuse
+                                    # [refactor-todo] requires "driver" for headers:
+                                    # - rtc_cntl.h
+                                    # - spi_common_internal.h
+                                    pthread bootloader_support efuse driver
                         LDFRAGMENTS "linker.lf" "app.lf")
     add_subdirectory(port)
 
@@ -72,3 +74,24 @@ endif()
 # Force linking UBSAN hooks. If UBSAN is not enabled, the hooks will ultimately be removed
 # due to -ffunction-sections -Wl,--gc-sections options.
 target_link_libraries(${COMPONENT_LIB} INTERFACE "-u __ubsan_include")
+
+
+# [refactor-todo] requirements due to init code, should be removable
+# once link-time registration of component init functions is used.
+if(CONFIG_APPTRACE_ENABLE)
+    idf_component_optional_requires(PRIVATE app_trace)
+endif()
+
+if(CONFIG_ESP_COREDUMP_ENABLE)
+    idf_component_optional_requires(PRIVATE espcoredump)
+endif()
+
+# [refactor-todo] requirement from the panic handler,
+# need to introduce panic "event" concept to remove this dependency (IDF-2194)
+idf_component_optional_requires(PRIVATE esp_gdbstub)
+
+idf_component_optional_requires(PRIVATE app_update)
+
+if(CONFIG_PM_ENABLE)
+    idf_component_optional_requires(PRIVATE pm)
+endif()

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2020-2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2020-2022 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -20,7 +20,7 @@
 #include "soc/syscon_reg.h"
 #include "hal/cpu_hal.h"
 #include "regi2c_ctrl.h"
-#include "soc_log.h"
+#include "esp_hw_log.h"
 #include "sdkconfig.h"
 #include "rtc_clk_common.h"
 #include "esp_rom_uart.h"
@@ -43,7 +43,11 @@ void rtc_clk_init(rtc_clk_config_t cfg)
      * - CK8M_DFREQ value controls tuning of 8M clock.
      *   CLK_8M_DFREQ constant gives the best temperature characteristics.
      */
+#if CONFIG_IDF_TARGET_ESP32H2_BETA_VERSION_2
+    REG_SET_FIELD(RTC_CNTL_REGULATOR_REG, RTC_CNTL_SCK_DCAP, cfg.slow_clk_dcap);
+#elif CONFIG_IDF_TARGET_ESP32H2_BETA_VERSION_1
     REG_SET_FIELD(RTC_CNTL_REG, RTC_CNTL_SCK_DCAP, cfg.slow_clk_dcap);
+#endif
     REG_SET_FIELD(RTC_CNTL_CLK_CONF_REG, RTC_CNTL_CK8M_DFREQ, cfg.clk_8m_dfreq);
 
     /* enable modem clk */
@@ -58,7 +62,7 @@ void rtc_clk_init(rtc_clk_config_t cfg)
     rtc_xtal_freq_t xtal_freq = cfg.xtal_freq;
     esp_rom_uart_tx_wait_idle(0);
     rtc_clk_xtal_freq_update(xtal_freq);
-    rtc_clk_apb_freq_update(rtc_clk_apb_freq_get() * MHZ);
+    rtc_clk_apb_freq_update(rtc_clk_apb_freq_get());
 
     /* Set CPU frequency */
     rtc_clk_cpu_freq_get_config(&old_config);
@@ -67,7 +71,7 @@ void rtc_clk_init(rtc_clk_config_t cfg)
     root_clk_slt(cfg.root_clk_slt);
     bool res = rtc_clk_cpu_freq_mhz_to_config(cfg.cpu_freq_mhz, &new_config);
     if (!res) {
-        SOC_LOGE(TAG, "invalid CPU frequency value");
+        ESP_HW_LOGE(TAG, "invalid CPU frequency value");
         abort();
     }
     rtc_clk_cpu_freq_set_config(&new_config);

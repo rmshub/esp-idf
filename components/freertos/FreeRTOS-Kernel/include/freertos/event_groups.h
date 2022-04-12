@@ -1,4 +1,11 @@
 /*
+ * SPDX-FileCopyrightText: 2020 Amazon.com, Inc. or its affiliates
+ *
+ * SPDX-License-Identifier: MIT
+ *
+ * SPDX-FileContributor: 2016-2022 Espressif Systems (Shanghai) CO LTD
+ */
+/*
  * FreeRTOS Kernel V10.4.3
  * Copyright (C) 2020 Amazon.com, Inc. or its affiliates.  All Rights Reserved.
  *
@@ -84,11 +91,8 @@
  * \ingroup EventGroup
  */
 struct EventGroupDef_t;
-#ifdef ESP_PLATFORM // IDF-3770
-typedef void * EventGroupHandle_t;
-#else
-typedef struct EventGroupDef_t * EventGroupHandle_t;
-#endif // ESP_PLATFORM
+typedef struct EventGroupDef_t   * EventGroupHandle_t;
+
 /*
  * The type that holds event bits always matches TickType_t - therefore the
  * number of bits it holds is set by configUSE_16_BIT_TICKS (16 bits if set to 1,

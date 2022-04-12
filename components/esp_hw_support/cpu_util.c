@@ -1,11 +1,11 @@
 /*
- * SPDX-FileCopyrightText: 2020-2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2020-2022 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
 #include "esp_attr.h"
-#include "soc/cpu.h"
+#include "esp_cpu.h"
 #include "soc/soc.h"
 #include "soc/rtc_periph.h"
 #include "sdkconfig.h"
@@ -46,13 +46,13 @@ esp_err_t IRAM_ATTR esp_cpu_set_watchpoint(int no, void *adr, int size, int flag
 
     switch (flags)
     {
-    case ESP_WATCHPOINT_LOAD:
+    case ESP_CPU_WATCHPOINT_LOAD:
         trigger = WATCHPOINT_TRIGGER_ON_RO;
         break;
-    case ESP_WATCHPOINT_STORE:
+    case ESP_CPU_WATCHPOINT_STORE:
         trigger = WATCHPOINT_TRIGGER_ON_WO;
         break;
-    case ESP_WATCHPOINT_ACCESS:
+    case ESP_CPU_WATCHPOINT_ACCESS:
         trigger = WATCHPOINT_TRIGGER_ON_RW;
         break;
     default:
@@ -70,12 +70,7 @@ void IRAM_ATTR esp_cpu_clear_watchpoint(int no)
 
 bool IRAM_ATTR esp_cpu_in_ocd_debug_mode(void)
 {
-#if CONFIG_ESP32_DEBUG_OCDAWARE || \
-    CONFIG_ESP32S2_DEBUG_OCDAWARE || \
-    CONFIG_ESP32S3_DEBUG_OCDAWARE || \
-    CONFIG_ESP32C3_DEBUG_OCDAWARE || \
-    CONFIG_ESP32H2_DEBUG_OCDAWARE || \
-    CONFIG_ESP8684_DEBUG_OCDAWARE
+#if CONFIG_ESP_DEBUG_OCDAWARE
     return cpu_ll_is_debugger_attached();
 #else
     return false; // Always return false if "OCD aware" is disabled

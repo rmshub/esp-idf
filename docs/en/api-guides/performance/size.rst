@@ -98,7 +98,6 @@ The summary output provided by ``idf.py size`` does not give enough detail to fi
              libesp_system.a        245    206       0   3078        0       5990     3817   13336
                 libesp-tls.a          0      4       0      0        0       5637     3524    9165
     [... removed some lines here ...]
-          libtcpip_adapter.a          0     17       0      0        0        216        0     233
                 libesp_rom.a          0      0       0    112        0          0        0     112
                     libcxx.a          0      0       0      0        0         47        0      47
                        (exe)          0      0       0      3        0          3       12      18
@@ -364,6 +363,8 @@ Enabling Nano formatting also reduces the stack usage of each function that call
 
 .. _Newlib README file: https://sourceware.org/newlib/README
 
+.. _minimizing_binary_mbedtls:
+
 mbedTLS features
 @@@@@@@@@@@@@@@@
 
@@ -374,16 +375,15 @@ These include:
 - :ref:`CONFIG_MBEDTLS_HAVE_TIME`
 - :ref:`CONFIG_MBEDTLS_ECDSA_DETERMINISTIC`
 - :ref:`CONFIG_MBEDTLS_SHA512_C`
-- :ref:`CONFIG_MBEDTLS_SSL_PROTO_TLS1`
-- :ref:`CONFIG_MBEDTLS_SSL_PROTO_TLS1_1`
 - :ref:`CONFIG_MBEDTLS_CLIENT_SSL_SESSION_TICKETS`
 - :ref:`CONFIG_MBEDTLS_SERVER_SSL_SESSION_TICKETS`
+- :ref:`CONFIG_MBEDTLS_SSL_CONTEXT_SERIALIZATION`
 - :ref:`CONFIG_MBEDTLS_SSL_ALPN`
+- :ref:`CONFIG_MBEDTLS_SSL_RENEGOTIATION`
 - :ref:`CONFIG_MBEDTLS_CCM_C`
 - :ref:`CONFIG_MBEDTLS_GCM_C`
 - :ref:`CONFIG_MBEDTLS_ECP_C` (Alternatively: Leave this option enabled but disable some of the elliptic curves listed in the sub-menu.)
-- :ref:`CONFIG_MBEDTLS_SSL_RENEGOTIATION`
-- Change :ref:`CONFIG_MBEDTLS_TLS_MODE` if both Server & Client are not needed
+- Change :ref:`CONFIG_MBEDTLS_TLS_MODE` if both server & client functionalities are not needed
 - Consider disabling some ciphersuites listed in the "TLS Key Exchange Methods" sub-menu (i.e. :ref:`CONFIG_MBEDTLS_KEY_EXCHANGE_RSA`)
 
 The help text for each option has some more information.
@@ -414,7 +414,7 @@ VFS
 * :ref:`CONFIG_VFS_SUPPORT_TERMIOS` — can be disabled if the application doesn't use ``termios`` family of functions. Currently, these functions are implemented only for UART VFS driver. Most applications can disable this option. Disabling this option reduces the code size by about 1.8 kB.
 * :ref:`CONFIG_VFS_SUPPORT_SELECT` — can be disabled if the application doesn't use ``select`` function with file descriptors. Currently, only the UART and eventfd VFS drivers implement ``select`` support. Note that when this option is disabled, ``select`` can still be used for socket file descriptors. Disabling this option reduces the code size by about 2.7 kB.
 * :ref:`CONFIG_VFS_SUPPORT_DIR` — can be disabled if the application doesn't use directory related functions, such as ``readdir`` (see the description of this option for the complete list). Applications which only open, read and write specific files and don't need to enumerate or create directories can disable this option, reducing the code size by 0.5 kB or more, depending on the filesystem drivers in use.
-* :ref:`CONFIG_VFS_SUPPORT_IO` — can be disabled if the application doesn't use filesystems or file-like peripheral drivers. This disables all VFS functionality, including the three options mentioned above. When this option is disabled, :doc:`console </api-reference/system/console>` can't be used. Note that the application can still use standard I/O functions with socket file descriptors when this option is disabled. Compared to the default configuration, disabling this option reduces code size by about 9.4 kB. 
+* :ref:`CONFIG_VFS_SUPPORT_IO` — can be disabled if the application doesn't use filesystems or file-like peripheral drivers. This disables all VFS functionality, including the three options mentioned above. When this option is disabled, :doc:`console </api-reference/system/console>` can't be used. Note that the application can still use standard I/O functions with socket file descriptors when this option is disabled. Compared to the default configuration, disabling this option reduces code size by about 9.4 kB.
 
 Bootloader Size
 ---------------

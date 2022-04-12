@@ -217,7 +217,8 @@ def action_extensions(base_actions, project_path):
             process = subprocess.Popen(args, stdout=gdbgui_out, stderr=subprocess.STDOUT, bufsize=1, env=env)
         except Exception as e:
             print(e)
-            raise FatalError('Error starting gdbgui. Please make sure gdbgui can be started', ctx)
+            raise FatalError('Error starting gdbgui. Please make sure gdbgui has been installed with '
+                             '"install.{sh,bat,ps1,fish} --enable-gdbgui" and can be started.', ctx)
 
         processes['gdbgui'] = process
         processes['gdbgui_outfile'] = gdbgui_out
@@ -388,8 +389,10 @@ def action_extensions(base_actions, project_path):
             'post_debug': {
                 'callback': post_debug,
                 'deprecated': {
+                    'since': 'v4.4',
                     'removed': 'v5.0',
-                    'message': 'Please use "post-debug" instead.',
+                    'exit_with_error': True,
+                    'message': 'Have you wanted to run "post-debug" instead?',
                 },
                 'hidden': True,
                 'help': 'Utility target to read the output of async debug action and stop them.',

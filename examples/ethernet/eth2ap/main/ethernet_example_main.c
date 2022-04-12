@@ -25,7 +25,7 @@
 
 static const char *TAG = "eth_example";
 static esp_eth_handle_t s_eth_handle = NULL;
-static xQueueHandle flow_control_queue = NULL;
+static QueueHandle_t flow_control_queue = NULL;
 static bool s_sta_is_connected = false;
 static bool s_ethernet_is_connected = false;
 static uint8_t s_eth_mac[6];
@@ -158,9 +158,10 @@ static void initialize_ethernet(void)
     phy_config.phy_addr = CONFIG_EXAMPLE_ETH_PHY_ADDR;
     phy_config.reset_gpio_num = CONFIG_EXAMPLE_ETH_PHY_RST_GPIO;
 #if CONFIG_EXAMPLE_USE_INTERNAL_ETHERNET
-    mac_config.smi_mdc_gpio_num = CONFIG_EXAMPLE_ETH_MDC_GPIO;
-    mac_config.smi_mdio_gpio_num = CONFIG_EXAMPLE_ETH_MDIO_GPIO;
-    esp_eth_mac_t *mac = esp_eth_mac_new_esp32(&mac_config);
+    eth_esp32_emac_config_t esp32_emac_config = ETH_ESP32_EMAC_DEFAULT_CONFIG();
+    esp32_emac_config.smi_mdc_gpio_num = CONFIG_EXAMPLE_ETH_MDC_GPIO;
+    esp32_emac_config.smi_mdio_gpio_num = CONFIG_EXAMPLE_ETH_MDIO_GPIO;
+    esp_eth_mac_t *mac = esp_eth_mac_new_esp32(&esp32_emac_config, &mac_config);
 #if CONFIG_EXAMPLE_ETH_PHY_IP101
     esp_eth_phy_t *phy = esp_eth_phy_new_ip101(&phy_config);
 #elif CONFIG_EXAMPLE_ETH_PHY_RTL8201
@@ -169,10 +170,8 @@ static void initialize_ethernet(void)
     esp_eth_phy_t *phy = esp_eth_phy_new_lan87xx(&phy_config);
 #elif CONFIG_EXAMPLE_ETH_PHY_DP83848
     esp_eth_phy_t *phy = esp_eth_phy_new_dp83848(&phy_config);
-#elif CONFIG_EXAMPLE_ETH_PHY_KSZ8041
-    esp_eth_phy_t *phy = esp_eth_phy_new_ksz8041(&phy_config);
-#elif CONFIG_EXAMPLE_ETH_PHY_KSZ8081
-    esp_eth_phy_t *phy = esp_eth_phy_new_ksz8081(&phy_config);
+#elif CONFIG_EXAMPLE_ETH_PHY_KSZ80XX
+    esp_eth_phy_t *phy = esp_eth_phy_new_ksz80xx(&phy_config);
 #endif
 #elif CONFIG_ETH_USE_SPI_ETHERNET
     gpio_install_isr_service(0);

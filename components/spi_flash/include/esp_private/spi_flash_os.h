@@ -22,18 +22,11 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "sdkconfig.h"
+#include "esp_rom_spiflash.h"
 #include "esp_err.h"
-#if CONFIG_IDF_TARGET_ESP32
-#include "esp32/rom/spi_flash.h"
-#elif CONFIG_IDF_TARGET_ESP32S2
-#include "esp32s2/rom/spi_flash.h"
-#elif CONFIG_IDF_TARGET_ESP32C3
-#include "esp32c3/rom/spi_flash.h"
-#elif CONFIG_IDF_TARGET_ESP32S3
-#include "esp32s3/rom/spi_flash.h"
-#endif
 #include "esp_flash.h"
 #include "hal/spi_flash_hal.h"
+#include "spi_flash_override.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -108,6 +101,21 @@ bool spi_timing_is_tuned(void);
  */
 void spi_flash_set_vendor_required_regs(void);
 
+/**
+ * @brief Enable SPI flash high performance mode.
+ *
+ * @return ESP_OK if success.
+ */
+esp_err_t spi_flash_enable_high_performance_mode(void);
+
+/**
+ * @brief Get the flash dummy through this function
+ *        This can be used when one flash has several dummy configurations to enable the high performance mode.
+ * @note Don't forget to subtract one when assign to the register of mspi e.g. if the value you get is 4, (4-1=3) should be assigned to the register.
+ *
+ * @return Pointer to bootlaoder_flash_dummy_conf_t.
+ */
+const spi_flash_hpm_dummy_conf_t *spi_flash_get_dummy(void);
 
 #ifdef __cplusplus
 }

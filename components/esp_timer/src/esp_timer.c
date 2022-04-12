@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2017-2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2017-2022 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -15,7 +15,6 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
-#include "soc/spinlock.h"
 #include "esp_timer.h"
 #include "esp_timer_impl.h"
 
@@ -33,8 +32,8 @@
 #include "esp32c3/rtc.h"
 #elif CONFIG_IDF_TARGET_ESP32H2
 #include "esp32h2/rtc.h"
-#elif CONFIG_IDF_TARGET_ESP8684
-#include "esp8684/rtc.h"
+#elif CONFIG_IDF_TARGET_ESP32C2
+#include "esp32c2/rtc.h"
 #endif
 
 #include "sdkconfig.h"
@@ -123,7 +122,7 @@ esp_err_t esp_timer_create(const esp_timer_create_args_t* args,
         args->dispatch_method < 0 || args->dispatch_method >= ESP_TIMER_MAX) {
         return ESP_ERR_INVALID_ARG;
     }
-    esp_timer_handle_t result = (esp_timer_handle_t) calloc(1, sizeof(*result));
+    esp_timer_handle_t result = (esp_timer_handle_t) heap_caps_calloc(1, sizeof(*result), MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL);
     if (result == NULL) {
         return ESP_ERR_NO_MEM;
     }
@@ -605,11 +604,8 @@ int64_t IRAM_ATTR esp_timer_get_next_alarm_for_wake_up(void)
     int64_t next_alarm = INT64_MAX;
     for (esp_timer_dispatch_t dispatch_method = ESP_TIMER_TASK; dispatch_method < ESP_TIMER_MAX; ++dispatch_method) {
         timer_list_lock(dispatch_method);
-        esp_timer_handle_t it;
+        esp_timer_handle_t it = NULL;
         LIST_FOREACH(it, &s_timers[dispatch_method], list_entry) {
-            if (it == NULL) {
-                break;
-            }
             // timers with the SKIP_UNHANDLED_EVENTS flag do not want to wake up CPU from a sleep mode.
             if ((it->flags & FL_SKIP_UNHANDLED_EVENTS) == 0) {
                 if (next_alarm > it->alarm) {

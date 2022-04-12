@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2022 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -20,6 +20,11 @@
 #include "esp_vfs.h"
 #include "esp_vfs_private.h"
 #include "sdkconfig.h"
+
+// Warn about using deprecated option
+#ifdef CONFIG_LWIP_USE_ONLY_LWIP_SELECT
+#warning CONFIG_LWIP_USE_ONLY_LWIP_SELECT is deprecated: Please use CONFIG_VFS_SUPPORT_SELECT instead
+#endif
 
 #ifdef CONFIG_VFS_SUPPRESS_SELECT_DEBUG_OUTPUT
 #define LOG_LOCAL_LEVEL ESP_LOG_NONE
@@ -127,8 +132,8 @@ esp_err_t esp_vfs_register_fd_range(const esp_vfs_t *vfs, void *ctx, int min_fd,
         _lock_acquire(&s_fd_table_lock);
         for (int i = min_fd; i < max_fd; ++i) {
             if (s_fd_table[i].vfs_index != -1) {
-                free(s_vfs[i]);
-                s_vfs[i] = NULL;
+                free(s_vfs[index]);
+                s_vfs[index] = NULL;
                 for (int j = min_fd; j < i; ++j) {
                     if (s_fd_table[j].vfs_index == index) {
                         s_fd_table[j] = FD_TABLE_ENTRY_UNUSED;
@@ -143,9 +148,9 @@ esp_err_t esp_vfs_register_fd_range(const esp_vfs_t *vfs, void *ctx, int min_fd,
             s_fd_table[i].local_fd = i;
         }
         _lock_release(&s_fd_table_lock);
-    }
 
-    ESP_LOGD(TAG, "esp_vfs_register_fd_range is successful for range <%d; %d) and VFS ID %d", min_fd, max_fd, index);
+        ESP_LOGW(TAG, "esp_vfs_register_fd_range is successful for range <%d; %d) and VFS ID %d", min_fd, max_fd, index);
+    }
 
     return ret;
 }
@@ -415,7 +420,7 @@ int esp_vfs_open(struct _reent *r, const char * path, int flags, int mode)
         __errno_r(r) = ENOMEM;
         return -1;
     }
-    __errno_r(r) = ENOENT;
+    __errno_r(r) = errno;
     return -1;
 }
 
@@ -787,6 +792,20 @@ int esp_vfs_truncate(const char *path, off_t length)
     return ret;
 }
 
+int esp_vfs_ftruncate(int fd, off_t length)
+{
+    const vfs_entry_t* vfs = get_vfs_for_fd(fd);
+    int local_fd = get_local_fd(vfs, fd);
+    struct _reent* r = __getreent();
+    if (vfs == NULL || local_fd < 0) {
+        __errno_r(r) = EBADF;
+        return -1;
+    }
+    int ret;
+    CHECK_AND_CALL(ret, r, vfs, ftruncate, local_fd, length);
+    return ret;
+}
+
 #endif // CONFIG_VFS_SUPPORT_DIR
 
 #ifdef CONFIG_VFS_SUPPORT_SELECT
@@ -1043,13 +1062,13 @@ int esp_vfs_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *errorfds
         vSemaphoreDelete(sel_sem.sem);
         sel_sem.sem = NULL;
     }
+    _lock_acquire(&s_fd_table_lock);
     for (int fd = 0; fd < nfds; ++fd) {
-        _lock_acquire(&s_fd_table_lock);
         if (s_fd_table[fd].has_pending_close) {
             s_fd_table[fd] = FD_TABLE_ENTRY_UNUSED;
         }
-        _lock_release(&s_fd_table_lock);
     }
+    _lock_release(&s_fd_table_lock);
     free(vfs_fds_triple);
     free(driver_args);
 
@@ -1251,6 +1270,8 @@ int _rename_r(struct _reent *r, const char *src, const char *dst)
     __attribute__((alias("esp_vfs_rename")));
 int truncate(const char *path, off_t length)
     __attribute__((alias("esp_vfs_truncate")));
+int ftruncate(int fd, off_t length)
+    __attribute__((alias("esp_vfs_ftruncate")));
 int access(const char *path, int amode)
     __attribute__((alias("esp_vfs_access")));
 int utime(const char *path, const struct utimbuf *times)

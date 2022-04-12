@@ -25,17 +25,13 @@ we add more types of external RAM memory, this can be made into a more intellige
 #include "esp_heap_caps_init.h"
 #include "soc/soc_memory_layout.h"
 #include "soc/dport_reg.h"
-#include "esp32/himem.h"
+#include "esp_himem.h"
 #include "esp32/rom/cache.h"
 
 #if CONFIG_FREERTOS_UNICORE
 #define PSRAM_MODE PSRAM_VADDR_MODE_NORMAL
 #else
-#if CONFIG_MEMMAP_SPIRAM_CACHE_EVENODD
-#define PSRAM_MODE PSRAM_VADDR_MODE_EVENODD
-#else
 #define PSRAM_MODE PSRAM_VADDR_MODE_LOWHIGH
-#endif
 #endif
 
 #if CONFIG_SPIRAM

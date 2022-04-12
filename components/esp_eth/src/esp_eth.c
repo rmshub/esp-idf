@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2019-2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2019-2022 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -219,12 +219,6 @@ esp_err_t esp_eth_driver_install(const esp_eth_config_t *config, esp_eth_handle_
     ESP_LOGD(TAG, "new ethernet driver @%p", eth_driver);
     *out_hdl = eth_driver;
 
-    // for backward compatible to 4.0, and will get removed in 5.0
-#if CONFIG_ESP_NETIF_TCPIP_ADAPTER_COMPATIBLE_LAYER
-    extern esp_err_t tcpip_adapter_compat_start_eth(void *eth_driver);
-    tcpip_adapter_compat_start_eth(eth_driver);
-#endif
-
     return ESP_OK;
 err:
     if (eth_driver) {
@@ -265,7 +259,6 @@ esp_err_t esp_eth_start(esp_eth_handle_t hdl)
     esp_eth_driver_t *eth_driver = (esp_eth_driver_t *)hdl;
     ESP_GOTO_ON_FALSE(eth_driver, ESP_ERR_INVALID_ARG, err, TAG, "ethernet driver handle can't be null");
     esp_eth_phy_t *phy = eth_driver->phy;
-    esp_eth_mac_t *mac = eth_driver->mac;
     // check if driver has stopped
     esp_eth_fsm_t expected_fsm = ESP_ETH_FSM_STOP;
     ESP_GOTO_ON_FALSE(atomic_compare_exchange_strong(&eth_driver->fsm, &expected_fsm, ESP_ETH_FSM_START),
@@ -274,7 +267,6 @@ esp_err_t esp_eth_start(esp_eth_handle_t hdl)
     if (eth_driver->auto_nego_en == true) {
         ESP_GOTO_ON_ERROR(phy->autonego_ctrl(phy, ESP_ETH_PHY_AUTONEGO_RESTART, &eth_driver->auto_nego_en), err, TAG, "phy negotiation failed");
     }
-    ESP_GOTO_ON_ERROR(mac->start(mac), err, TAG, "start mac failed");
     ESP_GOTO_ON_ERROR(esp_event_post(ETH_EVENT, ETHERNET_EVENT_START, &eth_driver, sizeof(esp_eth_driver_t *), 0),
                       err, TAG, "send ETHERNET_EVENT_START event failed");
     ESP_GOTO_ON_ERROR(phy->get_link(phy), err, TAG, "phy get link status failed");
@@ -321,6 +313,13 @@ esp_err_t esp_eth_transmit(esp_eth_handle_t hdl, void *buf, size_t length)
 {
     esp_err_t ret = ESP_OK;
     esp_eth_driver_t *eth_driver = (esp_eth_driver_t *)hdl;
+
+    if (atomic_load(&eth_driver->fsm) != ESP_ETH_FSM_START) {
+        ret = ESP_ERR_INVALID_STATE;
+        ESP_LOGD(TAG, "Ethernet is not started");
+        goto err;
+    }
+
     ESP_GOTO_ON_FALSE(buf, ESP_ERR_INVALID_ARG, err, TAG, "can't set buf to null");
     ESP_GOTO_ON_FALSE(length, ESP_ERR_INVALID_ARG, err, TAG, "buf length can't be zero");
     ESP_GOTO_ON_FALSE(eth_driver, ESP_ERR_INVALID_ARG, err, TAG, "ethernet driver handle can't be null");

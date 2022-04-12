@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2017-2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2017-2022 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -27,8 +27,8 @@
 #include "esp32c3/rtc.h"
 #elif CONFIG_IDF_TARGET_ESP32H2
 #include "esp32h2/rtc.h"
-#elif CONFIG_IDF_TARGET_ESP8684
-#include "esp8684/rtc.h"
+#elif CONFIG_IDF_TARGET_ESP32C2
+#include "esp32c2/rtc.h"
 #endif
 
 __attribute__((unused)) static const char* TAG = "system_time";
@@ -41,7 +41,7 @@ void esp_timer_impl_init_system_time(void)
 {
     s_correction_us = esp_rtc_get_time_us() - g_startup_time - esp_timer_impl_get_time();
 #if defined(CONFIG_ESP_TIME_FUNCS_USE_ESP_TIMER) && defined(CONFIG_ESP_TIME_FUNCS_USE_RTC_TIMER)
-    esp_err_t err = esp_register_shutdown_handler(esp_sync_counters_rtc_and_frc);
+    esp_err_t err = esp_register_shutdown_handler(esp_sync_timekeeping_timers);
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "Register shutdown handler failed, err = 0x%x", err);
     }

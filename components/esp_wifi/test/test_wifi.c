@@ -1,16 +1,25 @@
 /*
- Tests for the Wi-Fi
-*/
+ * SPDX-FileCopyrightText: 2021-2022 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Unlicense OR CC0-1.0
+ *
+ * This test code is in the Public Domain (or CC0 licensed, at your option.)
+ *
+ * Unless required by applicable law or agreed to in writing, this
+ * software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+ * CONDITIONS OF ANY KIND, either express or implied.
+ */
+
 #include "string.h"
-#include "esp_system.h"
 #include "unity.h"
-#include "esp_system.h"
+#include "esp_mac.h"
 #include "esp_event.h"
 #include "esp_wifi.h"
 #include "esp_wifi_types.h"
 #include "esp_log.h"
 #include "nvs_flash.h"
 #include "test_utils.h"
+#include "memory_checks.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
 
@@ -190,7 +199,7 @@ static void start_wifi_as_softap(void)
     event_init();
 
     // can't deinit event loop, need to reset leak check
-    unity_reset_leak_checks();
+    test_utils_record_free_mem();
 
     if (wifi_events == NULL) {
         wifi_events = xEventGroupCreate();
@@ -212,7 +221,7 @@ static void start_wifi_as_sta(void)
     event_init();
 
     // can't deinit event loop, need to reset leak check
-    unity_reset_leak_checks();
+    test_utils_record_free_mem();
 
     if (wifi_events == NULL) {
         wifi_events = xEventGroupCreate();
@@ -290,7 +299,7 @@ static void wifi_connect_by_bssid(uint8_t *bssid)
     TEST_ESP_OK(esp_wifi_set_config(WIFI_IF_STA, &w_config));
     TEST_ESP_OK(esp_wifi_connect());
     ESP_LOGI(TAG, "called esp_wifi_connect()");
-    bits = xEventGroupWaitBits(wifi_events, GOT_IP_EVENT, 1, 0, 7000/portTICK_RATE_MS);
+    bits = xEventGroupWaitBits(wifi_events, GOT_IP_EVENT, 1, 0, 7000/portTICK_PERIOD_MS);
     TEST_ASSERT(bits == GOT_IP_EVENT);
 }
 
@@ -312,7 +321,7 @@ static void test_wifi_connection_sta(void)
 
     unity_send_signal("STA connected");
 
-    bits = xEventGroupWaitBits(wifi_events, DISCONNECT_EVENT, 1, 0, 60000 / portTICK_RATE_MS);
+    bits = xEventGroupWaitBits(wifi_events, DISCONNECT_EVENT, 1, 0, 60000 / portTICK_PERIOD_MS);
     // disconnect event not triggered
     printf("wait finish\n");
     TEST_ASSERT(bits == 0);
