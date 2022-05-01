@@ -17,10 +17,6 @@
 #include "driver/gpio.h"
 #include "test_i80_board.h"
 
-void test_app_include_i80_lcd(void)
-{
-}
-
 #if SOC_I2S_LCD_I80_VARIANT
 #include "driver/i2s.h"
 
@@ -30,6 +26,7 @@ TEST_CASE("i80_and_i2s_driver_co-existence", "[lcd][i2s]")
     esp_lcd_i80_bus_config_t bus_config = {
         .dc_gpio_num = TEST_LCD_DC_GPIO,
         .wr_gpio_num = TEST_LCD_PCLK_GPIO,
+        .clk_src = LCD_CLK_SRC_DEFAULT,
         .data_gpio_nums = {
             TEST_LCD_DATA0_GPIO,
             TEST_LCD_DATA1_GPIO,
@@ -67,6 +64,7 @@ TEST_CASE("lcd_i80_device_swap_color_bytes", "[lcd]")
     esp_lcd_i80_bus_config_t bus_config = {
         .dc_gpio_num = TEST_LCD_DC_GPIO,
         .wr_gpio_num = TEST_LCD_PCLK_GPIO,
+        .clk_src = LCD_CLK_SRC_DEFAULT,
         .data_gpio_nums = {
             TEST_LCD_DATA0_GPIO,
             TEST_LCD_DATA1_GPIO,
@@ -129,6 +127,7 @@ TEST_CASE("lcd_i80_device_clock_mode", "[lcd]")
     esp_lcd_i80_bus_config_t bus_config = {
         .dc_gpio_num = TEST_LCD_DC_GPIO,
         .wr_gpio_num = TEST_LCD_PCLK_GPIO,
+        .clk_src = LCD_CLK_SRC_DEFAULT,
         .data_gpio_nums = {
             TEST_LCD_DATA0_GPIO,
             TEST_LCD_DATA1_GPIO,
@@ -188,6 +187,7 @@ TEST_CASE("lcd_i80_bus_and_device_allocation", "[lcd]")
     esp_lcd_i80_bus_config_t bus_config = {
         .dc_gpio_num = TEST_LCD_DC_GPIO,
         .wr_gpio_num = TEST_LCD_PCLK_GPIO,
+        .clk_src = LCD_CLK_SRC_DEFAULT,
         .data_gpio_nums = {
             TEST_LCD_DATA0_GPIO,
             TEST_LCD_DATA1_GPIO,
@@ -232,6 +232,7 @@ TEST_CASE("lcd_i80_bus_exclusively_owned_by_one_device", "[lcd]")
     esp_lcd_i80_bus_config_t bus_config = {
         .dc_gpio_num = TEST_LCD_DC_GPIO,
         .wr_gpio_num = TEST_LCD_PCLK_GPIO,
+        .clk_src = LCD_CLK_SRC_DEFAULT,
         .data_gpio_nums = {
             TEST_LCD_DATA0_GPIO,
             TEST_LCD_DATA1_GPIO,
@@ -267,6 +268,7 @@ TEST_CASE("lcd_panel_i80_io_test", "[lcd]")
     esp_lcd_i80_bus_config_t bus_config = {
         .dc_gpio_num = TEST_LCD_DC_GPIO,
         .wr_gpio_num = TEST_LCD_PCLK_GPIO,
+        .clk_src = LCD_CLK_SRC_DEFAULT,
         .data_gpio_nums = {
             TEST_LCD_DATA0_GPIO,
             TEST_LCD_DATA1_GPIO,
@@ -389,6 +391,7 @@ TEST_CASE("lcd_panel_with_i80_interface_(st7789, 8bits)", "[lcd]")
     esp_lcd_i80_bus_config_t bus_config = {
         .dc_gpio_num = TEST_LCD_DC_GPIO,
         .wr_gpio_num = TEST_LCD_PCLK_GPIO,
+        .clk_src = LCD_CLK_SRC_DEFAULT,
         .data_gpio_nums = {
             TEST_LCD_DATA0_GPIO,
             TEST_LCD_DATA1_GPIO,
@@ -434,6 +437,8 @@ TEST_CASE("lcd_panel_with_i80_interface_(st7789, 8bits)", "[lcd]")
     esp_lcd_panel_invert_color(panel_handle, true);
     // the gap is LCD panel specific, even panels with the same driver IC, can have different gap value
     esp_lcd_panel_set_gap(panel_handle, 0, 20);
+    // turn on display
+    esp_lcd_panel_disp_on_off(panel_handle, true);
     // turn on backlight
     gpio_set_level(TEST_LCD_BK_LIGHT_GPIO, 1);
 
@@ -444,7 +449,8 @@ TEST_CASE("lcd_panel_with_i80_interface_(st7789, 8bits)", "[lcd]")
         memset(img, color_byte, TEST_IMG_SIZE);
         esp_lcd_panel_draw_bitmap(panel_handle, x_start, y_start, x_start + 100, y_start + 100, img);
     }
-    esp_lcd_panel_disp_off(panel_handle, true); // turn off screen
+    // turn off screen
+    esp_lcd_panel_disp_on_off(panel_handle, false);
 
     TEST_ESP_OK(esp_lcd_panel_del(panel_handle));
     TEST_ESP_OK(esp_lcd_panel_io_del(io_handle));

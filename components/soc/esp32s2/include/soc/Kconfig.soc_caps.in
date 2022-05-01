@@ -359,6 +359,10 @@ config SOC_LEDC_HAS_TIMER_SPECIFIC_MUX
     bool
     default y
 
+config SOC_LEDC_SUPPORT_APB_CLOCK
+    bool
+    default y
+
 config SOC_LEDC_SUPPORT_REF_TICK
     bool
     default y
@@ -456,6 +460,10 @@ config SOC_RMT_SUPPORT_TX_CARRIER_ALWAYS_ON
     default y
 
 config SOC_RMT_SUPPORT_REF_TICK
+    bool
+    default y
+
+config SOC_RMT_SUPPORT_APB
     bool
     default y
 
@@ -568,6 +576,10 @@ config SOC_TIMER_GROUP_COUNTER_BIT_WIDTH
     default 64
 
 config SOC_TIMER_GROUP_SUPPORT_XTAL
+    bool
+    default y
+
+config SOC_TIMER_GROUP_SUPPORT_APB
     bool
     default y
 

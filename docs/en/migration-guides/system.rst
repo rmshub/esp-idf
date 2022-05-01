@@ -41,9 +41,20 @@ ESP HW Support
 - The header file ``esp_intr.h`` has been deleted. Please include ``esp_intr_alloc.h`` to allocate and manipulate interrupts.
 - The header file ``esp_panic.h`` has been deleted. ESP-IDF developers should include ``esp_private/panic_reason.h`` to get supported panic reasons. And should include ``esp_debug_helpers.h`` to use any debug related helper functions, e.g. print backtrace.
 - The header file ``soc_log.h`` is now renamed to ``esp_hw_log.h`` and all logging macros have been updated from ``SOC_LOGx`` to ``ESP_HW_LOGx``. ESP-IDF users must use the later form.
-- The header file ``esp_spiram.h`` file is deleted. Users should use the ``<target>/spiram.h`` file instead.
-- The header file ``esp32/himem.h`` file is deleted. Users should use the esp_himem.h file instead.
 - The header files ``spinlock.h``, ``clk_ctrl_os.h`` and ``rtc_wdt.h`` must now be included without the ``soc`` prefix. Eg:- ``#include "spinlock.h"``.
+
+PSRAM
+^^^^^
+
+- The header file ``esp_spiram.h`` file has been deleted. Users should use the ``<target>/spiram.h`` file instead.
+- The header file ``esp32/himem.h`` file has been deleted. Users should use the esp_himem.h file instead.
+- `esp_spiram_get_chip_size` has been deleted.
+- `esp_spiram_get_size` has been moved to `esp_private/spiram_private.h`
+
+ESP Common
+----------
+
+- `EXT_RAM_ATTR` is deprecated. Use this new macro `EXT_RAM_BSS_ATTR` to put .bss on PSRAM.
 
 ESP System
 ----------
@@ -55,6 +66,7 @@ SOC dependency
 
 - Public API headers who are listed in the Doxyfiles won't expose unstable and unnecessary soc header files like ``soc/soc.h``, ``soc/rtc.h``. That means, the user has to explicitly include them in their code if these "missing" header files are still wanted.
 - Kconfig option ``LEGACY_INCLUDE_COMMON_HEADERS`` is also removed.
+- The header file ``soc/soc_memory_types.h`` has been deprecated. Users should use the ``esp_memory_utils.h`` instead. Including `soc/soc_memory_types.h` will bring a build warning like `soc_memory_types.h is deprecated, please migrate to esp_memory_utils.h`
 
 APP Trace
 ---------
@@ -65,4 +77,3 @@ ESP Timer
 ---------
 
 Removed the FRC2 based legacy implementation of esp_timer available on ESP32. The simpler and more efficient implementation based on the LAC timer is now the only option.
-

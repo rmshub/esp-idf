@@ -23,17 +23,13 @@
 
 #define TEST_IMG_SIZE (100 * 100 * sizeof(uint16_t))
 
-void test_app_include_rgb_lcd(void)
-{
-}
-
 static esp_lcd_panel_handle_t test_rgb_panel_initialization(bool stream_mode, esp_lcd_rgb_panel_frame_trans_done_cb_t cb, void *user_data)
 {
     esp_lcd_panel_handle_t panel_handle = NULL;
     esp_lcd_rgb_panel_config_t panel_config = {
         .data_width = 16,
         .psram_trans_align = 64,
-        .clk_src = LCD_CLK_SRC_PLL160M,
+        .clk_src = LCD_CLK_SRC_DEFAULT,
         .disp_gpio_num = TEST_LCD_DISP_EN_GPIO,
         .pclk_gpio_num = TEST_LCD_PCLK_GPIO,
         .vsync_gpio_num = TEST_LCD_VSYNC_GPIO,

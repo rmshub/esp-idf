@@ -68,7 +68,7 @@
 #define SOC_MCPWM_SUPPORTED         1
 #define SOC_SDMMC_HOST_SUPPORTED    1
 #define SOC_BT_SUPPORTED            1
-#define SOC_BLUEDROID_SUPPORTED	    1
+#define SOC_BLUEDROID_SUPPORTED     1
 #define SOC_CLASSIC_BT_SUPPORTED    1
 #define SOC_PCNT_SUPPORTED          1
 #define SOC_WIFI_SUPPORTED          1
@@ -198,10 +198,11 @@
 
 /*-------------------------- LEDC CAPS ---------------------------------------*/
 #define SOC_LEDC_HAS_TIMER_SPECIFIC_MUX  (1)
-#define SOC_LEDC_SUPPORT_REF_TICK    (1)
-#define SOC_LEDC_SUPPORT_HS_MODE     (1)
-#define SOC_LEDC_CHANNEL_NUM         (8)
-#define SOC_LEDC_TIMER_BIT_WIDE_NUM  (20)
+#define SOC_LEDC_SUPPORT_APB_CLOCK       (1)
+#define SOC_LEDC_SUPPORT_REF_TICK        (1)
+#define SOC_LEDC_SUPPORT_HS_MODE         (1)
+#define SOC_LEDC_CHANNEL_NUM             (8)
+#define SOC_LEDC_TIMER_BIT_WIDE_NUM      (20)
 
 /*-------------------------- MCPWM CAPS --------------------------------------*/
 #define SOC_MCPWM_GROUPS                     (2)    ///< 2 MCPWM groups on the chip (i.e., the number of independent MCPWM peripherals)
@@ -237,6 +238,7 @@
 #define SOC_RMT_CHANNELS_PER_GROUP      8  /*!< Total 8 channels */
 #define SOC_RMT_MEM_WORDS_PER_CHANNEL   64 /*!< Each channel owns 64 words memory */
 #define SOC_RMT_SUPPORT_REF_TICK        1  /*!< Support set REF_TICK as the RMT clock source */
+#define SOC_RMT_SUPPORT_APB             1  /*!< Support set APB as the RMT clock source */
 #define SOC_RMT_CHANNEL_CLK_INDEPENDENT 1  /*!< Can select different source clock for each channel */
 
 /*-------------------------- RTCIO CAPS --------------------------------------*/
@@ -270,6 +272,7 @@
 #define SOC_TIMER_GROUP_TIMERS_PER_GROUP  (2)
 #define SOC_TIMER_GROUP_COUNTER_BIT_WIDTH (64)
 #define SOC_TIMER_GROUP_TOTAL_TIMERS      (4)
+#define SOC_TIMER_GROUP_SUPPORT_APB       (1)
 
 /*-------------------------- TOUCH SENSOR CAPS -------------------------------*/
 #define SOC_TOUCH_VERSION_1                 (1)     /*!<Hardware version of touch sensor */

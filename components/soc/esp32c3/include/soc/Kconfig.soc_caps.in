@@ -335,6 +335,10 @@ config SOC_I2S_SUPPORTS_TDM
     bool
     default y
 
+config SOC_LEDC_SUPPORT_APB_CLOCK
+    bool
+    default y
+
 config SOC_LEDC_SUPPORT_XTAL_CLOCK
     bool
     default y
@@ -416,6 +420,14 @@ config SOC_RMT_SUPPORT_TX_CARRIER_ALWAYS_ON
     default y
 
 config SOC_RMT_SUPPORT_XTAL
+    bool
+    default y
+
+config SOC_RMT_SUPPORT_APB
+    bool
+    default y
+
+config SOC_RMT_SUPPORT_RC_FAST
     bool
     default y
 
@@ -576,6 +588,10 @@ config SOC_TIMER_GROUP_COUNTER_BIT_WIDTH
     default 54
 
 config SOC_TIMER_GROUP_SUPPORT_XTAL
+    bool
+    default y
+
+config SOC_TIMER_GROUP_SUPPORT_APB
     bool
     default y
 

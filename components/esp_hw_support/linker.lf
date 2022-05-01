@@ -2,6 +2,7 @@
 archive: libesp_hw_support.a
 entries:
     cpu_util (noflash_text)
+    esp_memory_utils (noflash)
     rtc_clk (noflash)
     rtc_init:rtc_vddsdio_set_config (noflash)
     rtc_pm (noflash_text)
@@ -14,7 +15,7 @@ entries:
             spiram_psram (noflash)
         if SPIRAM_MODE_OCT = y:
             opiram_psram (noflash)
-    if IDF_TARGET_ESP32S2 = y:
+    if IDF_TARGET_ESP32S2 = y && SPIRAM:
         mmu_psram (noflash)
     if PERIPH_CTRL_FUNC_IN_IRAM = y:
         periph_ctrl: periph_module_reset (noflash)

@@ -125,10 +125,11 @@
 #define SOC_I2C_SUPPORT_RTC         (1)
 
 /*-------------------------- LEDC CAPS ---------------------------------------*/
-#define SOC_LEDC_SUPPORT_XTAL_CLOCK  (1)
-#define SOC_LEDC_CHANNEL_NUM         (6)
-#define SOC_LEDC_TIMER_BIT_WIDE_NUM  (14)
-#define SOC_LEDC_SUPPORT_FADE_STOP   (1)
+#define SOC_LEDC_SUPPORT_PLL_DIV_CLOCK  (1)
+#define SOC_LEDC_SUPPORT_XTAL_CLOCK     (1)
+#define SOC_LEDC_CHANNEL_NUM            (6)
+#define SOC_LEDC_TIMER_BIT_WIDE_NUM     (14)
+#define SOC_LEDC_SUPPORT_FADE_STOP      (1)
 
 /*-------------------------- MPU CAPS ----------------------------------------*/
 #define SOC_MPU_CONFIGURABLE_REGIONS_SUPPORTED    0
@@ -218,6 +219,7 @@
 #define SOC_TIMER_GROUP_TIMERS_PER_GROUP  (1U)
 #define SOC_TIMER_GROUP_COUNTER_BIT_WIDTH (54)
 #define SOC_TIMER_GROUP_SUPPORT_XTAL      (1)
+#define SOC_TIMER_GROUP_SUPPORT_PLL_F40M  (1)
 #define SOC_TIMER_GROUP_TOTAL_TIMERS      (1U)
 
 /*-------------------------- TOUCH SENSOR CAPS -------------------------------*/

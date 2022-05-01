@@ -228,16 +228,9 @@ void esp_startup_start_app_common(void)
     esp_gdbstub_init();
 #endif // CONFIG_ESP_SYSTEM_GDBSTUB_RUNTIME
 
-    TaskHandle_t main_task_hdl;
-    portDISABLE_INTERRUPTS();
     portBASE_TYPE res = xTaskCreatePinnedToCore(main_task, "main",
                                                 ESP_TASK_MAIN_STACK, NULL,
-                                                ESP_TASK_MAIN_PRIO, &main_task_hdl, ESP_TASK_MAIN_CORE);
-#if ( configUSE_CORE_AFFINITY == 1 && configNUM_CORES > 1 )
-    //We only need to set affinity when using dual core with affinities supported
-    vTaskCoreAffinitySet(main_task_hdl, 1 << 1);
-#endif
-    portENABLE_INTERRUPTS();
+                                                ESP_TASK_MAIN_PRIO, NULL, ESP_TASK_MAIN_CORE);
     assert(res == pdTRUE);
     (void)res;
 }
@@ -444,17 +437,19 @@ static void vPortTaskWrapper(TaskFunction_t pxCode, void *pvParameters)
 }
 #endif
 
+const DRAM_ATTR uint32_t offset_pxEndOfStack = offsetof(StaticTask_t, pxDummy8);
+const DRAM_ATTR uint32_t offset_uxCoreAffinityMask = offsetof(StaticTask_t, uxDummy25);
+const DRAM_ATTR uint32_t offset_cpsa = XT_CP_SIZE;
+
 #if ( portHAS_STACK_OVERFLOW_CHECKING == 1 )
 StackType_t * pxPortInitialiseStack( StackType_t * pxTopOfStack,
-                                        StackType_t * pxEndOfStack,
-                                        TaskFunction_t pxCode,
-                                        void * pvParameters,
-                                        BaseType_t xRunPrivileged )
+                                     StackType_t * pxEndOfStack,
+                                     TaskFunction_t pxCode,
+                                     void * pvParameters )
 #else
 StackType_t * pxPortInitialiseStack( StackType_t * pxTopOfStack,
                                      TaskFunction_t pxCode,
-                                     void * pvParameters,
-                                     BaseType_t xRunPrivileged )
+                                     void * pvParameters )
 #endif
 {
     StackType_t *sp, *tp;
@@ -559,6 +554,31 @@ StackType_t * pxPortInitialiseStack( StackType_t * pxTopOfStack,
     return sp;
 }
 
+// -------------------- Co-Processor -----------------------
+#if XCHAL_CP_NUM > 0
+
+void _xt_coproc_release(volatile void *coproc_sa_base, BaseType_t xCoreID);
+
+void vPortCleanUpCoprocArea( void * pxTCB )
+{
+    StackType_t * coproc_area;
+    BaseType_t xCoreID;
+
+    /* Calculate the coproc save area in the stack from the TCB base */
+    coproc_area = ( StackType_t * ) ( ( uint32_t ) ( pxTCB + offset_pxEndOfStack ));
+    coproc_area = ( StackType_t * ) ( ( ( portPOINTER_SIZE_TYPE ) coproc_area ) & ( ~( ( portPOINTER_SIZE_TYPE ) portBYTE_ALIGNMENT_MASK ) ) );
+    coproc_area = ( StackType_t * ) ( ( ( uint32_t ) coproc_area - XT_CP_SIZE ) & ~0xf );
+
+    /* Extract core ID from the affinity mask */
+    xCoreID = __builtin_ffs( * ( UBaseType_t * ) ( pxTCB + offset_uxCoreAffinityMask ) );
+    assert( xCoreID >= 1 );
+    xCoreID -= 1;
+
+    /* If task has live floating point registers somewhere, release them */
+    _xt_coproc_release( coproc_area, xCoreID );
+}
+#endif /* XCHAL_CP_NUM > 0 */
+
 // -------------------- Tick Handler -----------------------
 
 extern void esp_vApplicationIdleHook(void);
@@ -632,33 +652,16 @@ void vApplicationMinimalIdleHook( void )
 }
 #endif // CONFIG_FREERTOS_USE_MINIMAL_IDLE_HOOK
 
-/* ---------------------------------------------- Misc Implementations -------------------------------------------------
- *
- * ------------------------------------------------------------------------------------------------------------------ */
-
-// -------------------- Co-Processor -----------------------
-
 /*
- * Used to set coprocessor area in stack. Current hack is to reuse MPU pointer for coprocessor area.
+ * Hook function called during prvDeleteTCB() to cleanup any
+ * user defined static memory areas in the TCB.
+ * Currently, this hook function is used by the port to cleanup
+ * the Co-processor save area for targets that support co-processors.
  */
-#if portUSING_MPU_WRAPPERS
-void vPortStoreTaskMPUSettings( xMPU_SETTINGS *xMPUSettings, const struct xMEMORY_REGION *const xRegions, StackType_t *pxBottomOfStack, uint32_t usStackDepth )
+void vPortCleanUpTCB ( void *pxTCB )
 {
 #if XCHAL_CP_NUM > 0
-    xMPUSettings->coproc_area = ( StackType_t * ) ( ( uint32_t ) ( pxBottomOfStack + usStackDepth - 1 ));
-    xMPUSettings->coproc_area = ( StackType_t * ) ( ( ( portPOINTER_SIZE_TYPE ) xMPUSettings->coproc_area ) & ( ~( ( portPOINTER_SIZE_TYPE ) portBYTE_ALIGNMENT_MASK ) ) );
-    xMPUSettings->coproc_area = ( StackType_t * ) ( ( ( uint32_t ) xMPUSettings->coproc_area - XT_CP_SIZE ) & ~0xf );
-
-
-    /* NOTE: we cannot initialize the coprocessor save area here because FreeRTOS is going to
-     * clear the stack area after we return. This is done in pxPortInitialiseStack().
-     */
-#endif
+    /* Cleanup coproc save area */
+    vPortCleanUpCoprocArea( pxTCB );
+#endif /* XCHAL_CP_NUM > 0 */
 }
-
-void vPortReleaseTaskMPUSettings( xMPU_SETTINGS *xMPUSettings )
-{
-    /* If task has live floating point registers somewhere, release them */
-    _xt_coproc_release( xMPUSettings->coproc_area );
-}
-#endif /* portUSING_MPU_WRAPPERS */

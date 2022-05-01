@@ -183,11 +183,12 @@
 
 /*-------------------------- LEDC CAPS ---------------------------------------*/
 #define SOC_LEDC_HAS_TIMER_SPECIFIC_MUX  (1)
-#define SOC_LEDC_SUPPORT_REF_TICK    (1)
-#define SOC_LEDC_SUPPORT_XTAL_CLOCK  (1)
-#define SOC_LEDC_CHANNEL_NUM         (8)
-#define SOC_LEDC_TIMER_BIT_WIDE_NUM  (14)
-#define SOC_LEDC_SUPPORT_FADE_STOP   (1)
+#define SOC_LEDC_SUPPORT_APB_CLOCK       (1)
+#define SOC_LEDC_SUPPORT_REF_TICK        (1)
+#define SOC_LEDC_SUPPORT_XTAL_CLOCK      (1)
+#define SOC_LEDC_CHANNEL_NUM             (8)
+#define SOC_LEDC_TIMER_BIT_WIDE_NUM      (14)
+#define SOC_LEDC_SUPPORT_FADE_STOP       (1)
 
 /*-------------------------- MPU CAPS ----------------------------------------*/
 //TODO: correct the caller and remove unsupported lines
@@ -215,6 +216,7 @@
 #define SOC_RMT_SUPPORT_TX_SYNCHRO            1  /*!< Support coordinate a group of TX channels to start simultaneously */
 #define SOC_RMT_SUPPORT_TX_CARRIER_ALWAYS_ON  1  /*!< TX carrier can be modulated all the time */
 #define SOC_RMT_SUPPORT_REF_TICK              1  /*!< Support set REF_TICK as the RMT clock source */
+#define SOC_RMT_SUPPORT_APB                   1  /*!< Support set APB as the RMT clock source */
 #define SOC_RMT_CHANNEL_CLK_INDEPENDENT       1  /*!< Can select different source clock for each channel */
 
 /*-------------------------- RTCIO CAPS --------------------------------------*/
@@ -266,6 +268,7 @@
 #define SOC_TIMER_GROUP_TIMERS_PER_GROUP  (2)
 #define SOC_TIMER_GROUP_COUNTER_BIT_WIDTH (64)
 #define SOC_TIMER_GROUP_SUPPORT_XTAL      (1)
+#define SOC_TIMER_GROUP_SUPPORT_APB       (1)
 #define SOC_TIMER_GROUP_TOTAL_TIMERS      (4)
 
 /*-------------------------- TOUCH SENSOR CAPS -------------------------------*/

@@ -71,7 +71,7 @@
 #include "hal/efuse_ll.h"
 #include "soc/periph_defs.h"
 #include "esp_cpu.h"
-#include "soc/rtc.h"
+#include "esp_private/esp_clk.h"
 
 #if CONFIG_ESP32_TRAX || CONFIG_ESP32S2_TRAX || CONFIG_ESP32S3_TRAX
 #include "esp_private/trax.h"
@@ -389,11 +389,9 @@ void IRAM_ATTR call_start_cpu0(void)
     bootloader_init_mem();
 #if CONFIG_SPIRAM_BOOT_INIT
     if (esp_spiram_init() != ESP_OK) {
-#if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S2
 #if CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY
         ESP_EARLY_LOGE(TAG, "Failed to init external RAM, needed for external .bss segment");
         abort();
-#endif
 #endif
 
 #if CONFIG_SPIRAM_IGNORE_NOTFOUND
@@ -405,11 +403,11 @@ void IRAM_ATTR call_start_cpu0(void)
 #endif
     }
     //TODO: IDF-4382
-#if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S3
+#if CONFIG_IDF_TARGET_ESP32
     if (g_spiram_ok) {
         esp_spiram_init_cache();
     }
-#endif  //#if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S3, //TODO: IDF-4382
+#endif  //#if CONFIG_IDF_TARGET_ESP32, //TODO: IDF-4382
 #endif
 
 #if !CONFIG_ESP_SYSTEM_SINGLE_CORE_MODE
@@ -439,7 +437,7 @@ void IRAM_ATTR call_start_cpu0(void)
 
 #if CONFIG_SPIRAM_MEMTEST
     //TODO: IDF-4382
-#if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S3
+#if CONFIG_IDF_TARGET_ESP32
     if (g_spiram_ok) {
         bool ext_ram_ok = esp_spiram_test();
         if (!ext_ram_ok) {
@@ -447,7 +445,7 @@ void IRAM_ATTR call_start_cpu0(void)
             abort();
         }
     }
-#endif  //CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S3, //TODO: IDF-4382
+#endif  //CONFIG_IDF_TARGET_ESP32, //TODO: IDF-4382
 #endif  //CONFIG_SPIRAM_MEMTEST
 
     //TODO: IDF-4382
@@ -544,7 +542,7 @@ void IRAM_ATTR call_start_cpu0(void)
 
 #ifndef CONFIG_IDF_ENV_FPGA // TODO: on FPGA it should be possible to configure this, not currently working with APB_CLK_FREQ changed
 #ifdef CONFIG_ESP_CONSOLE_UART
-    uint32_t clock_hz = rtc_clk_apb_freq_get();
+    uint32_t clock_hz = esp_clk_apb_freq();
 #if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32C3 || CONFIG_IDF_TARGET_ESP32H2 || CONFIG_IDF_TARGET_ESP32C2
     clock_hz = UART_CLK_FREQ_ROM; // From esp32-s3 on, UART clock source is selected to XTAL in ROM
 #endif

@@ -128,7 +128,7 @@ This file get's pulled into assembly sources. Therefore, some includes need to b
 #define configUSE_PREEMPTION                            1
 #define configUSE_TASK_PREEMPTION_DISABLE               1
 #define configUSE_TICKLESS_IDLE                         0
-#define configCPU_CLOCK_HZ                              (CONFIG_ESP32_DEFAULT_CPU_FREQ_MHZ * 1000000)
+#define configCPU_CLOCK_HZ                              (CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ * 1000000)
 #define configTICK_RATE_HZ                              CONFIG_FREERTOS_HZ
 #define configMAX_PRIORITIES                            ( 25 )  //This has impact on speed of search for highest priority
 #define configMINIMAL_STACK_SIZE                        ( 768 + configSTACK_OVERHEAD_TOTAL )
@@ -196,7 +196,7 @@ This file get's pulled into assembly sources. Therefore, some includes need to b
 #elif CONFIG_FREERTOS_CHECK_STACKOVERFLOW_CANARY
 #define configCHECK_FOR_STACK_OVERFLOW                  2
 #endif
-#define configRECORD_STACK_HIGH_ADDRESS                 1
+#define configRECORD_STACK_HIGH_ADDRESS                 1   // This must be set as the port requires TCB.pxEndOfStack
 
 // ------------------- Run-time Stats ----------------------
 
@@ -298,13 +298,6 @@ extern uint32_t port_switch_flag[];
 #define configCHECK_MUTEX_GIVEN_BY_OWNER                1
 #else
 #define configCHECK_MUTEX_GIVEN_BY_OWNER                0
-#endif
-
-#ifndef __ASSEMBLER__
-#if CONFIG_FREERTOS_ENABLE_STATIC_TASK_CLEAN_UP
-extern void vPortCleanUpTCB ( void *pxTCB );
-#define portCLEAN_UP_TCB( pxTCB )                       vPortCleanUpTCB( pxTCB )
-#endif
 #endif
 #endif //0
 

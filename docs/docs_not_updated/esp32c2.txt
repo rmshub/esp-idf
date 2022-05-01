@@ -88,7 +88,6 @@ api-reference/peripherals/adc
 api-reference/peripherals/sdspi_host
 api-reference/peripherals/lcd
 api-reference/peripherals/secure_element
-api-reference/peripherals/ledc
 api-reference/peripherals/temp_sensor
 api-reference/peripherals/spi_slave_hd
 api-reference/peripherals/i2c
@@ -173,7 +172,6 @@ api-reference/protocols/esp_http_client
 api-reference/protocols/esp_https_server
 api-reference/protocols/openssl_apis
 api-reference/protocols/esp_spi_slave_protocol
-api-reference/protocols/modbus
 api-reference/protocols/esp_tls
 api-reference/protocols/mdns
 api-reference/protocols/index
