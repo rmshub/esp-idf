@@ -13,6 +13,7 @@
 #include "esp_private/panic_reason.h"
 #include "sdkconfig.h"
 #include "soc/soc.h"
+#include "soc/soc_caps.h"
 #include "soc/dport_reg.h"
 #include "soc/timer_group_reg.h"
 
@@ -259,7 +260,7 @@ xt_highintx:
 #endif /* CONFIG_ESP_SYSTEM_CHECK_INT_LEVEL_5 */
 #if CONFIG_ESP_INT_WDT_CHECK_CPU1
     /* Check if the cause is the app cpu failing to tick.*/
-    movi    a0, int_wdt_app_cpu_ticked
+    movi    a0, int_wdt_cpu1_ticked
     l32i    a0, a0, 0
     bnez    a0, 2f
     /* It is. Modify cause. */
@@ -380,7 +381,7 @@ xt_highintx:
     /* Here, we can use a0, a2, a3, a4, a5 registers */
     getcoreid   a5
 
-    rsil    a0, CONFIG_ESP32_DPORT_DIS_INTERRUPT_LVL /* disable nested interrupt */
+    rsil    a0, SOC_DPORT_WORKAROUND_DIS_INTERRUPT_LVL /* disable nested interrupt */
 
     beqz    a5, 1f
     movi    a2, _lx_intr_livelock_app

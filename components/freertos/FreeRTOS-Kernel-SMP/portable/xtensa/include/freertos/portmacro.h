@@ -267,7 +267,7 @@ static inline BaseType_t xPortInIsrContext(void)
     return xPortCheckIfInISR();
 }
 
-BaseType_t IRAM_ATTR xPortInterruptedFromISRContext(void);
+BaseType_t xPortInterruptedFromISRContext(void);
 
 static inline UBaseType_t xPortSetInterruptMaskFromISR(void)
 {
@@ -382,7 +382,6 @@ portmacro.h. Therefore, we need to keep these headers around for now to allow th
 #include <stdarg.h>
 #include <xtensa/hal.h>
 #include "esp_attr.h"
-#include "esp_timer.h"
 #include "esp_newlib.h"
 #include "esp_heap_caps.h"
 #include "esp_rom_sys.h"
@@ -391,6 +390,11 @@ portmacro.h. Therefore, we need to keep these headers around for now to allow th
 #include <limits.h>
 #include <xtensa/config/system.h>
 #include <xtensa/xtensa_api.h>
+
+/* [refactor-todo] introduce a port wrapper function to avoid including esp_timer.h into the public header */
+#if CONFIG_FREERTOS_RUN_TIME_STATS_USING_ESP_TIMER
+#include "esp_timer.h"
+#endif
 
 #ifdef __cplusplus
 }

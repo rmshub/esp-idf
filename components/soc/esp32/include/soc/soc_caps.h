@@ -58,6 +58,7 @@
 // defined correctly
 #define SOC_BROWNOUT_RESET_SUPPORTED    "Not determined"
 #define SOC_TWAI_BRP_DIV_SUPPORTED      "Not determined"
+#define SOC_DPORT_WORKAROUND            "Not determined"
 #endif
 
 /*-------------------------- COMMON CAPS ---------------------------------------*/
@@ -68,7 +69,6 @@
 #define SOC_MCPWM_SUPPORTED         1
 #define SOC_SDMMC_HOST_SUPPORTED    1
 #define SOC_BT_SUPPORTED            1
-#define SOC_BLUEDROID_SUPPORTED     1
 #define SOC_CLASSIC_BT_SUPPORTED    1
 #define SOC_PCNT_SUPPORTED          1
 #define SOC_WIFI_SUPPORTED          1
@@ -90,11 +90,15 @@
 #define SOC_FLASH_ENC_SUPPORTED     1
 #define SOC_SECURE_BOOT_SUPPORTED   1
 
+#if SOC_CAPS_ECO_VER < 2
+#define SOC_DPORT_WORKAROUND                   1
+#define SOC_DPORT_WORKAROUND_DIS_INTERRUPT_LVL (5U)
+#endif // SOC_CAPS_ECO_VER < 2
+
 /*-------------------------- ADC CAPS ----------------------------------------*/
 /**
  * TO BE REMOVED
  * Check if adc support digital controller (DMA) mode.
- * @value
  *      - 1 : support;
  *      - 0 : not support;
  */
@@ -106,6 +110,7 @@
 #define SOC_ADC_PERIPH_NUM                      (2)
 #define SOC_ADC_CHANNEL_NUM(PERIPH_NUM)         ((PERIPH_NUM==0)? 8: 10)
 #define SOC_ADC_MAX_CHANNEL_NUM                 (10)
+#define SOC_ADC_ATTEN_NUM                       (4)
 
 /*!< Digital */
 #define SOC_ADC_DIGI_CONTROLLER_NUM             (2)
@@ -117,8 +122,9 @@
 #define SOC_ADC_SAMPLE_FREQ_THRES_LOW           (2000)
 
 /*!< RTC */
-#define SOC_ADC_MAX_BITWIDTH                    (12)
-
+#define SOC_ADC_RTC_MIN_BITWIDTH                (9)
+#define SOC_ADC_RTC_MAX_BITWIDTH                (12)
+#define SOC_RTC_SLOW_CLOCK_SUPPORT_8MD256       (1)
 
 /*-------------------------- BROWNOUT CAPS -----------------------------------*/
 #if SOC_CAPS_ECO_VER >= 1
@@ -215,7 +221,6 @@
 #define SOC_MCPWM_CAPTURE_TIMERS_PER_GROUP   (1)    ///< The number of capture timers that each group has
 #define SOC_MCPWM_CAPTURE_CHANNELS_PER_TIMER (3)    ///< The number of capture channels that each capture timer has
 #define SOC_MCPWM_GPIO_SYNCHROS_PER_GROUP    (3)    ///< The number of GPIO synchros that each group has
-#define SOC_MCPWM_BASE_CLK_HZ       (160000000ULL)  ///< Base Clock frequency of 160MHz
 
 /*-------------------------- MPU CAPS ----------------------------------------*/
 //TODO: correct the caller and remove unsupported lines
@@ -262,6 +267,11 @@
 #define SOC_SPI_MAXIMUM_BUFFER_SIZE     64
 #define SOC_SPI_MAX_PRE_DIVIDER         8192
 
+// Although ESP32 doesn't has memspi, but keep consistent with following chips.(This means SPI0/1)
+#define SOC_MEMSPI_SRC_FREQ_80M_SUPPORTED         1
+#define SOC_MEMSPI_SRC_FREQ_40M_SUPPORTED         1
+#define SOC_MEMSPI_SRC_FREQ_26M_SUPPORTED         1
+#define SOC_MEMSPI_SRC_FREQ_20M_SUPPORTED         1
 
 
 // Peripheral supports DIO, DOUT, QIO, or QOUT
@@ -303,6 +313,9 @@
 /*-------------------------- SPIRAM CAPS -------------------------------------*/
 #define SOC_SPIRAM_SUPPORTED    1
 
+/*-------------------------- SPI MEM CAPS ---------------------------------------*/
+#define SOC_SPI_MEM_SUPPORT_CONFIG_GPIO_BY_EFUSE         (1)
+
 /*--------------------------- SHA CAPS ---------------------------------------*/
 /* ESP32 style SHA engine, where multiple states can be stored in parallel */
 #define SOC_SHA_SUPPORT_PARALLEL_ENG    (1)
@@ -339,8 +352,11 @@
 #define SOC_PHY_DIG_REGS_MEM_SIZE       (21*4)
 
 /*-------------------------- Power Management CAPS ---------------------------*/
-#define SOC_PM_SUPPORT_EXT_WAKEUP       (1)
+#define SOC_PM_SUPPORT_EXT_WAKEUP                 (1)
 #define SOC_PM_SUPPORT_TOUCH_SENSOR_WAKEUP        (1)     /*!<Supports waking up from touch pad trigger */
+#define SOC_PM_SUPPORT_RTC_PERIPH_PD              (1)
+#define SOC_PM_SUPPORT_RTC_FAST_MEM_PD            (1)
+#define SOC_PM_SUPPORT_RTC_SLOW_MEM_PD            (1)
 
 /* ---------------------------- Compatibility ------------------------------- */
 #define SOC_CAN_SUPPORTED                   SOC_TWAI_SUPPORTED
@@ -362,3 +378,8 @@
 
 /*------------------------------ BLE --------------------------------------------*/
 #define SOC_BLE_DONT_UPDATE_OWN_RPA  (1)
+
+/*-------------------------- WI-FI HARDWARE CAPS -------------------------------*/
+#define SOC_WIFI_HW_TSF                 (0)    /*!< Support hardware TSF */
+#define SOC_WIFI_FTM_SUPPORT            (0)    /*!< FTM Support */
+#define SOC_WIFI_GCMP_SUPPORT           (0)    /*!< GCMP Support(GCMP128 and GCMP256) */

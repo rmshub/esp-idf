@@ -143,7 +143,6 @@ exclude =
         components/bootloader/subproject/components/micro-ecc/micro-ecc,
         components/bt/host/nimble/nimble,
         components/cmock/CMock,
-        components/esptool_py/esptool,
         components/json/cJSON,
         components/mbedtls/mbedtls,
         components/openthread/openthread,
@@ -161,7 +160,6 @@ exclude =
         components/wifi_provisioning/python/wifi_config_pb2.py,
         components/wifi_provisioning/python/wifi_constants_pb2.py,
         components/esp_local_ctrl/python/esp_local_ctrl_pb2.py,
-        examples/provisioning/legacy/custom_config/components/custom_provisioning/python/custom_config_pb2.py,
 
 per-file-ignores =
     # Sphinx conf.py files use star imports to setup config variables

@@ -21,6 +21,7 @@
 #endif
 #include "esp_freertos_hooks.h"
 #include "esp_rom_sys.h"
+#include "esp_timer.h"
 
 /* Counter task counts a target variable forever */
 static void task_count(void *vp_counter)
@@ -172,6 +173,7 @@ static void test_resume_task_from_isr(int target_core)
     };
     TEST_ESP_OK(gptimer_register_event_callbacks(gptimer, &cbs, suspend_task));
     TEST_ESP_OK(gptimer_set_alarm_action(gptimer, &alarm_config));
+    TEST_ESP_OK(gptimer_enable(gptimer));
     TEST_ESP_OK(gptimer_start(gptimer));
     // wait the timer interrupt fires up
     vTaskDelay(2);
@@ -183,6 +185,7 @@ static void test_resume_task_from_isr(int target_core)
     TEST_ASSERT_UINT32_WITHIN(100, alarm_config.alarm_count, (unsigned)resumed_counter);
 
     // clean up
+    TEST_ESP_OK(gptimer_disable(gptimer));
     TEST_ESP_OK(gptimer_del_timer(gptimer));
 }
 
@@ -197,26 +200,22 @@ TEST_CASE("Resume task from ISR (other core)", "[freertos]")
     test_resume_task_from_isr(!UNITY_FREERTOS_CPU);
 }
 
+#if !CONFIG_FREERTOS_SMP
+/*
+Scheduler suspension behavior has changed in SMP FreeRTOS, thus these test are disabled for SMP FreeRTOS.
+See IDF-5201
+*/
+
 static volatile bool block;
 static bool suspend_both_cpus;
 
 static void IRAM_ATTR suspend_scheduler_while_block_set(void *arg)
 {
-#ifdef CONFIG_FREERTOS_SMP
-    //Note: Scheduler suspension behavior changed in FreeRTOS SMP
-    vTaskPreemptionDisable(NULL);
-#else
     vTaskSuspendAll();
-#endif // CONFIG_FREERTOS_SMP
 
     while (block) { };
     esp_rom_delay_us(1);
-#ifdef CONFIG_FREERTOS_SMP
-    //Note: Scheduler suspension behavior changed in FreeRTOS SMP
-    vTaskPreemptionEnable(NULL);
-#else
     xTaskResumeAll();
-#endif // CONFIG_FREERTOS_SMP
 }
 
 static void IRAM_ATTR suspend_scheduler_on_both_cpus(void)
@@ -226,23 +225,13 @@ static void IRAM_ATTR suspend_scheduler_on_both_cpus(void)
         TEST_ESP_OK(esp_ipc_call((xPortGetCoreID() == 0) ? 1 : 0, &suspend_scheduler_while_block_set, NULL));
     }
 
-#ifdef CONFIG_FREERTOS_SMP
-    //Note: Scheduler suspension behavior changed in FreeRTOS SMP
-    vTaskPreemptionDisable(NULL);
-#else
     vTaskSuspendAll();
-#endif // CONFIG_FREERTOS_SMP
 }
 
 static void IRAM_ATTR resume_scheduler_on_both_cpus(void)
 {
     block = false;
-#ifdef CONFIG_FREERTOS_SMP
-    //Note: Scheduler suspension behavior changed in FreeRTOS SMP
-    vTaskPreemptionEnable(NULL);
-#else
     xTaskResumeAll();
-#endif // CONFIG_FREERTOS_SMP
 }
 
 static const int waiting_ms = 2000;
@@ -402,3 +391,4 @@ TEST_CASE("Test suspend-resume CPU works with xTimer", "[freertos]")
     test_scheduler_suspend3(1);
 }
 #endif // CONFIG_FREERTOS_UNICORE
+#endif // !CONFIG_FREERTOS_SMP

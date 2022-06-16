@@ -31,7 +31,6 @@
 #define SOC_GDMA_SUPPORTED              1
 #define SOC_TWAI_SUPPORTED              1
 #define SOC_BT_SUPPORTED                1
-#define SOC_BLUEDROID_SUPPORTED		1
 #define SOC_ASYNC_MEMCPY_SUPPORTED      1
 #define SOC_USB_SERIAL_JTAG_SUPPORTED   1
 #define SOC_TEMP_SENSOR_SUPPORTED       1
@@ -40,7 +39,6 @@
 #define SOC_SUPPORTS_SECURE_DL_MODE     1
 #define SOC_EFUSE_KEY_PURPOSE_FIELD         1
 #define SOC_RTC_FAST_MEM_SUPPORTED        1
-#define SOC_RTC_SLOW_MEM_SUPPORTED        0
 #define SOC_I2S_SUPPORTED               1
 #define SOC_RMT_SUPPORTED               1
 #define SOC_SIGMADELTA_SUPPORTED        1
@@ -74,6 +72,7 @@
 #define SOC_ADC_PERIPH_NUM                      (2)
 #define SOC_ADC_CHANNEL_NUM(PERIPH_NUM)         ((PERIPH_NUM==0)? 5 : 1)
 #define SOC_ADC_MAX_CHANNEL_NUM                 (5)
+#define SOC_ADC_ATTEN_NUM                       (4)
 
 /*!< Digital */
 #define SOC_ADC_DIGI_CONTROLLER_NUM             (1U)
@@ -86,7 +85,8 @@
 #define SOC_ADC_SAMPLE_FREQ_THRES_LOW           611
 
 /*!< RTC */
-#define SOC_ADC_MAX_BITWIDTH                    (12)
+#define SOC_ADC_RTC_MIN_BITWIDTH                (12)
+#define SOC_ADC_RTC_MAX_BITWIDTH                (12)
 
 /*!< Calibration */
 #define SOC_ADC_CALIBRATION_V1_SUPPORTED        (1) /*!< support HW offset calibration version 1*/
@@ -155,7 +155,7 @@
 #define SOC_I2C_FIFO_LEN            (32) /*!< I2C hardware FIFO depth */
 #define SOC_I2C_SUPPORT_SLAVE       (1)
 
-#define SOC_I2C_SUPPORT_HW_FSM_RST  (1)
+// FSM_RST only resets the FSM, not using it. So SOC_I2C_SUPPORT_HW_FSM_RST not defined.
 #define SOC_I2C_SUPPORT_HW_CLR_BUS  (1)
 
 #define SOC_I2C_SUPPORT_XTAL        (1)
@@ -195,7 +195,7 @@
 #define SOC_RMT_SUPPORT_TX_ASYNC_STOP         1  /*!< Support stop transmission asynchronously */
 #define SOC_RMT_SUPPORT_TX_LOOP_COUNT         1  /*!< Support transmit specified number of cycles in loop mode */
 #define SOC_RMT_SUPPORT_TX_SYNCHRO            1  /*!< Support coordinate a group of TX channels to start simultaneously */
-#define SOC_RMT_SUPPORT_TX_CARRIER_ALWAYS_ON  1  /*!< TX carrier can be modulated all the time */
+#define SOC_RMT_SUPPORT_TX_CARRIER_DATA_ONLY  1  /*!< TX carrier can be modulated to data phase only */
 #define SOC_RMT_SUPPORT_XTAL                  1  /*!< Support set XTAL clock as the RMT clock source */
 #define SOC_RMT_SUPPORT_APB                   1  /*!< Support set APB as the RMT clock source */
 #define SOC_RMT_SUPPORT_RC_FAST               1  /*!< Support set RC_FAST clock as the RMT clock source */
@@ -207,6 +207,8 @@
 #define SOC_RTC_CNTL_CPU_PD_DMA_BLOCK_SIZE      (SOC_RTC_CNTL_CPU_PD_DMA_BUS_WIDTH >> 3)
 
 #define SOC_RTC_CNTL_CPU_PD_RETENTION_MEM_SIZE  (SOC_RTC_CNTL_CPU_PD_REG_FILE_NUM * (SOC_RTC_CNTL_CPU_PD_DMA_BUS_WIDTH >> 3))
+
+#define SOC_RTC_SLOW_CLOCK_SUPPORT_8MD256       (1)
 
 /*-------------------------- RTCIO CAPS --------------------------------------*/
 /* No dedicated RTCIO subsystem on ESP32-C3. RTC functions are still supported
@@ -269,9 +271,15 @@
 #define SOC_SPI_MEM_SUPPORT_IDLE_INTR                     (1)
 #define SOC_SPI_MEM_SUPPORT_SW_SUSPEND                    (1)
 #define SOC_SPI_MEM_SUPPORT_CHECK_SUS                     (1)
+#define SOC_SPI_MEM_SUPPORT_CONFIG_GPIO_BY_EFUSE          (1)
 
+#define SOC_MEMSPI_SRC_FREQ_80M_SUPPORTED         1
+#define SOC_MEMSPI_SRC_FREQ_40M_SUPPORTED         1
+#define SOC_MEMSPI_SRC_FREQ_26M_SUPPORTED         1
+#define SOC_MEMSPI_SRC_FREQ_20M_SUPPORTED         1
 
 /*-------------------------- SYSTIMER CAPS ----------------------------------*/
+#define SOC_SYSTIMER_SUPPORTED             1
 #define SOC_SYSTIMER_COUNTER_NUM           (2)  // Number of counter units
 #define SOC_SYSTIMER_ALARM_NUM             (3)  // Number of alarm units
 #define SOC_SYSTIMER_BIT_WIDTH_LO          (32) // Bit width of systimer low part
@@ -321,9 +329,6 @@
 // UART has an extra TX_WAIT_SEND state when the FIFO is not empty and XOFF is enabled
 #define SOC_UART_SUPPORT_FSM_TX_WAIT_SEND   (1)
 
-/*-------------------------- WI-FI HARDWARE TSF CAPS -------------------------------*/
-#define SOC_WIFI_HW_TSF                 (1)
-
 /*-------------------------- COEXISTENCE HARDWARE PTI CAPS -------------------------------*/
 #define SOC_COEX_HW_PTI                 (1)
 
@@ -348,3 +353,8 @@
 /*-------------------------- Temperature Sensor CAPS -------------------------------------*/
 #define SOC_TEMPERATURE_SENSOR_SUPPORT_FAST_RC                (1)
 #define SOC_TEMPERATURE_SENSOR_SUPPORT_XTAL                (1)
+
+/*------------------------------------ WI-FI CAPS ------------------------------------*/
+#define SOC_WIFI_HW_TSF                 (1)    /*!< Support hardware TSF */
+#define SOC_WIFI_FTM_SUPPORT            (1)    /*!< FTM Support */
+#define SOC_WIFI_GCMP_SUPPORT           (1)    /*!< GCMP Support(GCMP128 and GCMP256) */

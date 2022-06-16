@@ -83,6 +83,7 @@
 #define SOC_ADC_PERIPH_NUM                      (2)
 #define SOC_ADC_CHANNEL_NUM(PERIPH_NUM)         (10)
 #define SOC_ADC_MAX_CHANNEL_NUM                 (10)
+#define SOC_ADC_ATTEN_NUM                       (4)
 
 /*!< Digital */
 #define SOC_ADC_DIGI_CONTROLLER_NUM             (2)
@@ -93,7 +94,9 @@
 #define SOC_ADC_SAMPLE_FREQ_THRES_LOW           611
 
 /*!< RTC */
-#define SOC_ADC_MAX_BITWIDTH                    (13)
+#define SOC_ADC_RTC_MIN_BITWIDTH                (13)
+#define SOC_ADC_RTC_MAX_BITWIDTH                (13)
+#define SOC_RTC_SLOW_CLOCK_SUPPORT_8MD256       (1)
 
 /*!< Calibration */
 #define SOC_ADC_CALIBRATION_V1_SUPPORTED        (1) /*!< support HW offset calibration version 1*/
@@ -147,8 +150,7 @@
 #define SOC_I2C_FIFO_LEN       (32) /*!< I2C hardware FIFO depth */
 #define SOC_I2C_SUPPORT_SLAVE       (1)
 
-//ESP32-S2 support hardware FSM reset
-#define SOC_I2C_SUPPORT_HW_FSM_RST  (1)
+// FSM_RST only resets the FSM, not using it. So SOC_I2C_SUPPORT_HW_FSM_RST not defined.
 //ESP32-S2 support hardware clear bus
 #define SOC_I2C_SUPPORT_HW_CLR_BUS  (1)
 
@@ -214,7 +216,7 @@
 #define SOC_RMT_SUPPORT_TX_ASYNC_STOP         1  /*!< Support stop transmission asynchronously */
 #define SOC_RMT_SUPPORT_TX_LOOP_COUNT         1  /*!< Support transmiting specified number of cycles in loop mode */
 #define SOC_RMT_SUPPORT_TX_SYNCHRO            1  /*!< Support coordinate a group of TX channels to start simultaneously */
-#define SOC_RMT_SUPPORT_TX_CARRIER_ALWAYS_ON  1  /*!< TX carrier can be modulated all the time */
+#define SOC_RMT_SUPPORT_TX_CARRIER_DATA_ONLY  1  /*!< TX carrier can be modulated to data phase only */
 #define SOC_RMT_SUPPORT_REF_TICK              1  /*!< Support set REF_TICK as the RMT clock source */
 #define SOC_RMT_SUPPORT_APB                   1  /*!< Support set APB as the RMT clock source */
 #define SOC_RMT_CHANNEL_CLK_INDEPENDENT       1  /*!< Can select different source clock for each channel */
@@ -257,6 +259,11 @@
 #define SOC_MEMSPI_IS_INDEPENDENT 1
 #define SOC_SPI_SUPPORT_OCT 1
 
+#define SOC_MEMSPI_SRC_FREQ_80M_SUPPORTED         1
+#define SOC_MEMSPI_SRC_FREQ_40M_SUPPORTED         1
+#define SOC_MEMSPI_SRC_FREQ_26M_SUPPORTED         1
+#define SOC_MEMSPI_SRC_FREQ_20M_SUPPORTED         1
+
 /*-------------------------- SYSTIMER CAPS ----------------------------------*/
 #define SOC_SYSTIMER_COUNTER_NUM  (1)  // Number of counter units
 #define SOC_SYSTIMER_ALARM_NUM    (3)  // Number of alarm units
@@ -264,6 +271,7 @@
 #define SOC_SYSTIMER_BIT_WIDTH_HI (32) // Bit width of systimer high part
 
 /*-------------------------- TIMER GROUP CAPS --------------------------------*/
+#define SOC_SYSTIMER_SUPPORTED             1
 #define SOC_TIMER_GROUPS                  (2)
 #define SOC_TIMER_GROUP_TIMERS_PER_GROUP  (2)
 #define SOC_TIMER_GROUP_COUNTER_BIT_WIDTH (64)
@@ -341,6 +349,7 @@
 /*-------------------------- Flash Encryption CAPS----------------------------*/
 #define SOC_FLASH_ENCRYPTED_XTS_AES_BLOCK_MAX   (64)
 #define SOC_FLASH_ENCRYPTION_XTS_AES        1
+#define SOC_FLASH_ENCRYPTION_XTS_AES_OPTIONS 1
 #define SOC_FLASH_ENCRYPTION_XTS_AES_128    1
 #define SOC_FLASH_ENCRYPTION_XTS_AES_256    1
 
@@ -350,9 +359,6 @@
 #define SOC_AES_SUPPORT_AES_128 (1)
 #define SOC_AES_SUPPORT_AES_192 (1)
 #define SOC_AES_SUPPORT_AES_256 (1)
-
-/*-------------------------- WI-FI HARDWARE TSF CAPS -------------------------------*/
-#define SOC_WIFI_HW_TSF                 (1)
 
 /*--------------- PHY REGISTER AND MEMORY SIZE CAPS --------------------------*/
 #define SOC_PHY_DIG_REGS_MEM_SIZE       (21*4)
@@ -364,14 +370,16 @@
 #define SOC_SPI_MEM_SUPPORT_AUTO_WAIT_IDLE                (1)
 #define SOC_SPI_MEM_SUPPORT_AUTO_SUSPEND                  (1)
 #define SOC_SPI_MEM_SUPPORT_SW_SUSPEND                    (1)
+#define SOC_SPI_MEM_SUPPORT_CONFIG_GPIO_BY_EFUSE          (1)
+
 /*-------------------------- Power Management CAPS ---------------------------*/
-#define SOC_PM_SUPPORT_EXT_WAKEUP       (1)
-
-#define SOC_PM_SUPPORT_WIFI_WAKEUP      (1)
-
-#define SOC_PM_SUPPORT_WIFI_PD          (1)
-
+#define SOC_PM_SUPPORT_EXT_WAKEUP                 (1)
+#define SOC_PM_SUPPORT_WIFI_WAKEUP                (1)
+#define SOC_PM_SUPPORT_WIFI_PD                    (1)
+#define SOC_PM_SUPPORT_RTC_PERIPH_PD              (1)
 #define SOC_PM_SUPPORT_TOUCH_SENSOR_WAKEUP        (1)     /*!<Supports waking up from touch pad trigger */
+#define SOC_PM_SUPPORT_RTC_FAST_MEM_PD            (1)
+#define SOC_PM_SUPPORT_RTC_SLOW_MEM_PD            (1)
 
 /*-------------------------- COEXISTENCE HARDWARE PTI CAPS -------------------------------*/
 #define SOC_COEX_HW_PTI                 (1)
@@ -380,3 +388,8 @@
 
 /*-------------------------- Temperature Sensor CAPS -------------------------------------*/
 #define SOC_TEMPERATURE_SENSOR_SUPPORT_FAST_RC                (1)
+
+/*------------------------------------ WI-FI CAPS ------------------------------------*/
+#define SOC_WIFI_HW_TSF                 (1)    /*!< Support hardware TSF */
+#define SOC_WIFI_FTM_SUPPORT            (1)    /*!< FTM Support */
+#define SOC_WIFI_GCMP_SUPPORT           (0)    /*!< GCMP Support(GCMP128 and GCMP256) */

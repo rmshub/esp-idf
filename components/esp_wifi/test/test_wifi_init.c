@@ -14,6 +14,8 @@
 #define EVENT_HANDLER_FLAG_DO_NOT_AUTO_RECONNECT 0x00000001
 #define EMPH_STR(s) "****** "s" ******"
 
+#if !TEMPORARY_DISABLED_FOR_TARGETS(ESP32C2)
+//IDF-5046
 static const char* TAG = "test_wifi_init";
 static uint32_t wifi_event_handler_flag;
 static EventGroupHandle_t wifi_events;
@@ -104,6 +106,7 @@ static void wifi_driver_can_start_on_APP_CPU_task(void* arg)
 
 TEST_CASE("wifi driver can start on APP CPU", "[wifi_init]")
 {
+    test_case_uses_tcpip();
     TaskHandle_t th = NULL;
     SemaphoreHandle_t sema = xSemaphoreCreateBinary();
     TEST_ASSERT_NOT_NULL(sema);
@@ -206,6 +209,7 @@ static void wifi_stop_task(void* arg)
 
 TEST_CASE("Calling esp_wifi_stop() without start", "[wifi_init]")
 {
+    test_case_uses_tcpip();
     TaskHandle_t th = NULL;
     SemaphoreHandle_t sema = xSemaphoreCreateBinary();
     TEST_ASSERT_NOT_NULL(sema);
@@ -274,3 +278,5 @@ TEST_CASE("Calling esp_wifi_deinit() without stop", "[wifi_init]")
     sema = NULL;
     unity_utils_task_delete(th);
 }
+
+#endif //!TEMPORARY_DISABLED_FOR_TARGETS(ESP32C2)

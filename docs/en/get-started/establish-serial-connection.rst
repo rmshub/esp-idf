@@ -13,8 +13,8 @@ Connect the {IDF_TARGET_NAME} board to the PC using the USB cable. If device dri
 
 Below is the list of USB to serial converter chips installed on most of the {IDF_TARGET_NAME} boards produced by Espressif together with links to the drivers:
 
-* CP210x: `CP210x USB to UART Bridge VCP Drivers <https://www.silabs.com/products/development-tools/software/usb-to-uart-bridge-vcp-drivers>`_
-* FTDI: `FTDI Virtual COM Port Drivers <https://www.ftdichip.com/Drivers/VCP.htm>`_
+* CP210x: `CP210x USB to UART Bridge VCP Drivers <https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers>`_
+* FTDI: `FTDI Virtual COM Port Drivers <https://ftdichip.com/drivers/vcp-drivers/>`_
 
 Please check the board user guide for specific USB to serial converter chip used. The drivers above are primarily for reference. Under normal circumstances, the drivers should be bundled with an operating system and automatically installed upon connecting the board to the PC.
 
@@ -77,12 +77,12 @@ Make sure you re-login to enable read and write permissions for the serial port.
 Verify serial connection
 ------------------------
 
-Now verify that the serial connection is operational. You can do this using a serial terminal program by checking if you get any output on the terminal after reseting {IDF_TARGET_NAME}.
+Now verify that the serial connection is operational. You can do this using a serial terminal program by checking if you get any output on the terminal after resetting {IDF_TARGET_NAME}.
 
 Windows and Linux
 ^^^^^^^^^^^^^^^^^
 
-In this example we will use `PuTTY SSH Client <http://www.putty.org/>`_ that is available for both Windows and Linux. You can use other serial program and set communication parameters like below.
+In this example we will use `PuTTY SSH Client <https://www.putty.org/>`_ that is available for both Windows and Linux. You can use other serial programs and set communication parameters like below.
 
 Run terminal, set identified serial port, baud rate = 115200, data bits = 8, stop bits = 1, and parity = N. Below are example screen shots of setting the port and such transmission parameters (in short described as  115200-8-1-N) on Windows and Linux. Remember to select exactly the same serial port you have identified in steps above.
 
@@ -136,7 +136,7 @@ To spare you the trouble of installing a serial terminal program, macOS offers t
 Example Output
 ^^^^^^^^^^^^^^
 
-An example log by {IDF_TARGET_NAME} is shown below. Reset the board if you do not see anything.
+An example log is shown below. Reset the board if you do not see anything.
 
 .. highlight:: none
 

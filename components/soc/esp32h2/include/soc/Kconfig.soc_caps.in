@@ -27,10 +27,6 @@ config SOC_BT_SUPPORTED
     bool
     default y
 
-config SOC_BLUEDROID_SUPPORTED
-    bool
-    default n
-
 config SOC_ESP_NIMBLE_CONTROLLER
     bool
     default y
@@ -58,10 +54,6 @@ config SOC_TEMP_SENSOR_SUPPORTED
 config SOC_RTC_FAST_MEM_SUPPORTED
     bool
     default y
-
-config SOC_RTC_SLOW_MEM_SUPPORTED
-    bool
-    default n
 
 config SOC_I2S_SUPPORTED
     bool
@@ -141,11 +133,15 @@ config SOC_ADC_MONITOR_SUPPORTED
 
 config SOC_ADC_PERIPH_NUM
     int
-    default 2
+    default 1
 
 config SOC_ADC_MAX_CHANNEL_NUM
     int
     default 5
+
+config SOC_ADC_ATTEN_NUM
+    int
+    default 4
 
 config SOC_ADC_DIGI_CONTROLLER_NUM
     int
@@ -175,7 +171,11 @@ config SOC_ADC_SAMPLE_FREQ_THRES_LOW
     int
     default 611
 
-config SOC_ADC_MAX_BITWIDTH
+config SOC_ADC_RTC_MIN_BITWIDTH
+    int
+    default 12
+
+config SOC_ADC_RTC_MAX_BITWIDTH
     int
     default 12
 
@@ -280,10 +280,6 @@ config SOC_I2C_FIFO_LEN
     default 32
 
 config SOC_I2C_SUPPORT_SLAVE
-    bool
-    default y
-
-config SOC_I2C_SUPPORT_HW_FSM_RST
     bool
     default y
 
@@ -407,7 +403,7 @@ config SOC_RMT_SUPPORT_TX_SYNCHRO
     bool
     default y
 
-config SOC_RMT_SUPPORT_TX_CARRIER_ALWAYS_ON
+config SOC_RMT_SUPPORT_TX_CARRIER_DATA_ONLY
     bool
     default y
 
@@ -536,6 +532,30 @@ config SOC_SPI_MEM_SUPPORT_SW_SUSPEND
     default y
 
 config SOC_SPI_MEM_SUPPORT_CHECK_SUS
+    bool
+    default y
+
+config SOC_SPI_MEM_SUPPORT_CONFIG_GPIO_BY_EFUSE
+    bool
+    default y
+
+config SOC_MEMSPI_SRC_FREQ_48M_SUPPORTED
+    bool
+    default y
+
+config SOC_MEMSPI_SRC_FREQ_24M_SUPPORTED
+    bool
+    default y
+
+config SOC_MEMSPI_SRC_FREQ_16M_SUPPORTED
+    bool
+    default y
+
+config SOC_MEMSPI_SRC_FREQ_12M_SUPPORTED
+    bool
+    default y
+
+config SOC_SYSTIMER_SUPPORTED
     bool
     default y
 

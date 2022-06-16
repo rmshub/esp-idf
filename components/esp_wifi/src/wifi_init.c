@@ -44,7 +44,7 @@ uint64_t g_wifi_feature_caps =
 #if CONFIG_ESP32_WIFI_ENABLE_WPA3_SAE
     CONFIG_FEATURE_WPA3_SAE_BIT |
 #endif
-#if (CONFIG_ESP32_SPIRAM_SUPPORT || CONFIG_ESP32S2_SPIRAM_SUPPORT || CONFIG_ESP32S3_SPIRAM_SUPPORT)
+#if CONFIG_SPIRAM
     CONFIG_FEATURE_CACHE_TX_BUF_BIT |
 #endif
 #if CONFIG_ESP_WIFI_FTM_INITIATOR_SUPPORT
@@ -111,6 +111,10 @@ esp_err_t esp_wifi_deinit(void)
         return err;
     }
 
+#if CONFIG_ESP_WIFI_SLP_BEACON_LOST_OPT
+    esp_wifi_beacon_monitor_configure(false, 0, 0, 0, 0);
+#endif
+
 #if CONFIG_ESP_WIFI_SLP_IRAM_OPT
     esp_pm_unregister_light_sleep_default_params_config_callback();
 #endif
@@ -129,6 +133,9 @@ esp_err_t esp_wifi_deinit(void)
     phy_init_flag();
 #endif
     esp_wifi_power_domain_off();
+#if CONFIG_MAC_BB_PD
+    esp_mac_bb_pd_mem_deinit();
+#endif
     return err;
 }
 
@@ -253,6 +260,11 @@ esp_err_t esp_wifi_init(const wifi_init_config_t *config)
             return result;
         }
     }
+#if CONFIG_ESP_WIFI_SLP_BEACON_LOST_OPT
+    esp_wifi_beacon_monitor_configure(true, CONFIG_ESP_WIFI_SLP_BEACON_LOST_TIMEOUT,
+            CONFIG_ESP_WIFI_SLP_BEACON_LOST_THRESHOLD, CONFIG_ESP_WIFI_SLP_PHY_ON_DELTA_EARLY_TIME,
+            CONFIG_ESP_WIFI_SLP_PHY_OFF_DELTA_TIMEOUT_TIME);
+#endif
     adc2_cal_include(); //This enables the ADC2 calibration constructor at start up.
 
     esp_wifi_config_info();

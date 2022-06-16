@@ -30,7 +30,7 @@
 #include "crypto/sha256.h"
 
 #include "utils/ext_password.h"
-#include "tls/tls.h"
+#include "crypto/tls.h"
 #include "eap_peer/eap_i.h"
 #include "eap_peer/eap_config.h"
 #include "eap_peer/eap.h"
@@ -296,11 +296,9 @@ int eap_peer_register_methods(void)
 		ret = eap_peer_mschapv2_register();
 #endif
 
-#ifndef USE_MBEDTLS_CRYPTO
 #ifdef EAP_FAST
 	if (ret == 0)
 		ret = eap_peer_fast_register();
-#endif
 #endif
 
 #ifdef EAP_PEAP
@@ -620,7 +618,7 @@ int eap_peer_config_init(
 			config_methods[allowed_method_count].vendor = EAP_VENDOR_IETF;
 			config_methods[allowed_method_count++].method = EAP_TYPE_TLS;
 		}
-#ifndef USE_MBEDTLS_CRYPTO
+#ifdef EAP_FAST
 		if (g_wpa_pac_file) {
 			//set EAP-FAST
 			config_methods[allowed_method_count].vendor = EAP_VENDOR_IETF;
@@ -663,7 +661,7 @@ int eap_peer_blob_init(struct eap_sm *sm)
 			ret = -2;
 			goto _out;
 		}
-		os_strncpy(sm->blob[0].name, CLIENT_CERT_NAME, BLOB_NAME_LEN+1);
+		os_strlcpy(sm->blob[0].name, CLIENT_CERT_NAME, BLOB_NAME_LEN+1);
 		sm->blob[0].len = g_wpa_client_cert_len;
 		sm->blob[0].data = g_wpa_client_cert;
 	}
@@ -674,7 +672,7 @@ int eap_peer_blob_init(struct eap_sm *sm)
 			ret = -2;
 			goto _out;
 		}
-		os_strncpy(sm->blob[1].name, PRIVATE_KEY_NAME, BLOB_NAME_LEN+1);
+		os_strlcpy(sm->blob[1].name, PRIVATE_KEY_NAME, BLOB_NAME_LEN+1);
 		sm->blob[1].len = g_wpa_private_key_len;
 		sm->blob[1].data = g_wpa_private_key;
 	}
@@ -685,7 +683,7 @@ int eap_peer_blob_init(struct eap_sm *sm)
 			ret = -2;
 			goto _out;
 		}
-		os_strncpy(sm->blob[2].name, CA_CERT_NAME, BLOB_NAME_LEN+1);
+		os_strlcpy(sm->blob[2].name, CA_CERT_NAME, BLOB_NAME_LEN+1);
 		sm->blob[2].len = g_wpa_ca_cert_len;
 		sm->blob[2].data = g_wpa_ca_cert;
 	}
@@ -696,7 +694,7 @@ int eap_peer_blob_init(struct eap_sm *sm)
 			ret = -2;
 			goto _out;
 		}
-		os_strncpy(sm->blob[3].name, "blob://", 8);
+		os_strlcpy(sm->blob[3].name, "blob://", 8);
 		sm->blob[3].len = g_wpa_pac_file_len;
 		sm->blob[3].data = g_wpa_pac_file;
 	}

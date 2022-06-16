@@ -36,6 +36,7 @@
 #include "soc/soc_memory_layout.h"
 #include "soc/dport_reg.h"
 #include "esp_coexist_internal.h"
+#include "esp_timer.h"
 #if !CONFIG_FREERTOS_UNICORE
 #include "esp_ipc.h"
 #endif
@@ -151,8 +152,8 @@ struct osi_funcs_t {
     void (* _task_delete)(void *task_handle);
     bool (* _is_in_isr)(void);
     int (* _cause_sw_intr_to_core)(int core_id, int intr_no);
-    void *(* _malloc)(uint32_t size);
-    void *(* _malloc_internal)(uint32_t size);
+    void *(* _malloc)(size_t size);
+    void *(* _malloc_internal)(size_t size);
     void (* _free)(void *p);
     int32_t (* _read_efuse_mac)(uint8_t mac[6]);
     void (* _srand)(unsigned int seed);
@@ -1647,7 +1648,7 @@ esp_err_t esp_bt_controller_init(esp_bt_controller_config_t *cfg)
     btdm_lpclk_sel = BTDM_LPCLK_SEL_XTAL; // set default value
 #if CONFIG_BTDM_CTRL_LPCLK_SEL_EXT_32K_XTAL
     // check whether or not EXT_CRYS is working
-    if (rtc_clk_slow_freq_get() == RTC_SLOW_FREQ_32K_XTAL) {
+    if (rtc_clk_slow_src_get() == SOC_RTC_SLOW_CLK_SRC_XTAL32K) {
         btdm_lpclk_sel = BTDM_LPCLK_SEL_XTAL32K; // External 32kHz XTAL
 #ifdef CONFIG_PM_ENABLE
         s_btdm_allow_light_sleep = true;

@@ -31,8 +31,8 @@
 
 // Currently no runners for S3
 #define WITH_SD_TEST    (SOC_SDMMC_HOST_SUPPORTED && !TEMPORARY_DISABLED_FOR_TARGETS(ESP32S3))
-// Currently, no runners for S3
-#define WITH_SDSPI_TEST (!TEMPORARY_DISABLED_FOR_TARGETS(ESP32S3))
+// Currently, no runners for S3 and C2
+#define WITH_SDSPI_TEST (!TEMPORARY_DISABLED_FOR_TARGETS(ESP32S3, ESP32C2))
 // Can't test eMMC (slot 0) and PSRAM together
 #define WITH_EMMC_TEST  (SOC_SDMMC_HOST_SUPPORTED && !CONFIG_SPIRAM && !TEMPORARY_DISABLED_FOR_TARGETS(ESP32S3))
 
@@ -869,10 +869,6 @@ static void test_sdspi_erase_blocks(size_t start_block, size_t block_count)
     float time_er = 1e3f * (t_stop_wr.tv_sec - t_start_er.tv_sec) + 1e-3f * (t_stop_wr.tv_usec - t_start_er.tv_usec);
     printf("Erase duration: %.2fms\n", time_er);
 
-    // nominal delay before re-init card
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    // has to re-init card, after erase operation.
-    TEST_ESP_OK(sdmmc_card_init(&config, card));
     printf("Verifying erase state...\n");
     uint8_t erase_mem_byte = 0xFF;
     // ensure all the blocks are erased and are up to after erase state.

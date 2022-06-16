@@ -32,6 +32,7 @@ which are undefined if the following flag is not defined */
 #include <protocomm_security.h>
 #include <protocomm_security0.h>
 #include <protocomm_security1.h>
+#include "test_utils.h"
 
 #include "session.pb-c.h"
 
@@ -887,7 +888,7 @@ static esp_err_t test_security1_wrong_pop (void)
     return ESP_OK;
 }
 
-__attribute__((unused)) static esp_err_t test_security1_insecure_client (void)
+static esp_err_t test_security1_insecure_client (void)
 {
     ESP_LOGI(TAG, "Starting Security 1 insecure client test");
 
@@ -939,7 +940,7 @@ __attribute__((unused)) static esp_err_t test_security1_insecure_client (void)
     return ESP_OK;
 }
 
-__attribute__((unused)) static esp_err_t test_security1_weak_session (void)
+static esp_err_t test_security1_weak_session (void)
 {
     ESP_LOGI(TAG, "Starting Security 1 weak session test");
 

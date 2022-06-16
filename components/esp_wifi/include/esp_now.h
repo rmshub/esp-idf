@@ -182,7 +182,7 @@ esp_err_t esp_now_unregister_send_cb(void);
   *          - ESP_ERR_ESPNOW_NOT_INIT : ESPNOW is not initialized
   *          - ESP_ERR_ESPNOW_ARG : invalid argument
   *          - ESP_ERR_ESPNOW_INTERNAL : internal error
-  *          - ESP_ERR_ESPNOW_NO_MEM : out of memory
+  *          - ESP_ERR_ESPNOW_NO_MEM : out of memory, when this happens, you can delay a while before sending the next data
   *          - ESP_ERR_ESPNOW_NOT_FOUND : peer is not found
   *          - ESP_ERR_ESPNOW_IF : current WiFi interface doesn't match that of peer
   */
@@ -309,15 +309,13 @@ esp_err_t esp_now_get_peer_num(esp_now_peer_num_t *num);
 esp_err_t esp_now_set_pmk(const uint8_t *pmk);
 
 /**
-  * @brief     Set esp_now wake window for sta_disconnected power management
+  * @brief     Set wake window for esp_now to wake up in interval unit
   *
-  * @param     window  how much microsecond would the chip keep waked each interval, vary from 0 to 65535
+  * @param     window  Milliseconds would the chip keep waked each interval, from 0 to 65535.
   *
-  * @attention 1. Only when ESP_WIFI_STA_DISCONNECTED_PM_ENABLE is enabled, this configuration could work
-  * @attention 2. This configuration only work for station mode and disconnected status
-  * @attention 3. If more than one module has configured its wake_window, chip would choose the largest one to stay waked
-  * @attention 4. If the gap between interval and window is smaller than 5ms, the chip would keep waked all the time
-  * @attention 5. If never configured wake_window, the chip would keep waked at disconnected once it uses esp_now
+  * @attention 1. This configuration could work at connected status.
+  *               When ESP_WIFI_STA_DISCONNECTED_PM_ENABLE is enabled, this configuration could work at disconnected status.
+  * @attention 2. Default value is the maximum.
   *
   * @return
   *          - ESP_OK : succeed

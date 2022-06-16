@@ -3,10 +3,6 @@
 # using gen_soc_caps_kconfig.py, do not edit manually
 #####################################################
 
-config SOC_BROWNOUT_RESET_SUPPORTED
-    bool
-    default y
-
 config SOC_CPU_BREAKPOINTS_NUM
     int
     default 2
@@ -112,10 +108,6 @@ config SOC_RISCV_COPROC_SUPPORTED
     default y
 
 config SOC_BT_SUPPORTED
-    bool
-    default y
-
-config SOC_BLUEDROID_SUPPORTED
     bool
     default y
 
@@ -243,6 +235,10 @@ config SOC_ADC_MAX_CHANNEL_NUM
     int
     default 10
 
+config SOC_ADC_ATTEN_NUM
+    int
+    default 4
+
 config SOC_ADC_DIGI_CONTROLLER_NUM
     int
     default 2
@@ -263,15 +259,27 @@ config SOC_ADC_SAMPLE_FREQ_THRES_LOW
     int
     default 611
 
-config SOC_ADC_MAX_BITWIDTH
+config SOC_ADC_RTC_MIN_BITWIDTH
     int
     default 12
+
+config SOC_ADC_RTC_MAX_BITWIDTH
+    int
+    default 12
+
+config SOC_RTC_SLOW_CLOCK_SUPPORT_8MD256
+    bool
+    default y
 
 config SOC_ADC_CALIBRATION_V1_SUPPORTED
     bool
     default y
 
 config SOC_APB_BACKUP_DMA
+    bool
+    default y
+
+config SOC_BROWNOUT_RESET_SUPPORTED
     bool
     default y
 
@@ -348,10 +356,6 @@ config SOC_I2C_FIFO_LEN
     default 32
 
 config SOC_I2C_SUPPORT_SLAVE
-    bool
-    default y
-
-config SOC_I2C_SUPPORT_HW_FSM_RST
     bool
     default y
 
@@ -443,10 +447,6 @@ config SOC_MCPWM_SWSYNC_CAN_PROPAGATE
     bool
     default y
 
-config SOC_MCPWM_BASE_CLK_HZ
-    int
-    default 160000000
-
 config SOC_PCNT_GROUPS
     bool
     default y
@@ -507,7 +507,7 @@ config SOC_RMT_SUPPORT_TX_SYNCHRO
     bool
     default y
 
-config SOC_RMT_SUPPORT_TX_CARRIER_ALWAYS_ON
+config SOC_RMT_SUPPORT_TX_CARRIER_DATA_ONLY
     bool
     default y
 
@@ -631,11 +631,27 @@ config SOC_SPI_SUPPORT_OCT
     bool
     default y
 
+config SOC_MEMSPI_SRC_FREQ_120M
+    bool
+    default y
+
+config SOC_MEMSPI_SRC_FREQ_80M_SUPPORTED
+    bool
+    default y
+
+config SOC_MEMSPI_SRC_FREQ_40M_SUPPORTED
+    bool
+    default y
+
+config SOC_MEMSPI_SRC_FREQ_20M_SUPPORTED
+    bool
+    default y
+
 config SOC_SPIRAM_SUPPORTED
     bool
     default y
 
-config SOC_TOUCH_VERSION_2
+config SOC_SYSTIMER_SUPPORTED
     bool
     default y
 
@@ -690,6 +706,10 @@ config SOC_TIMER_GROUP_SUPPORT_APB
 config SOC_TIMER_GROUP_TOTAL_TIMERS
     int
     default 4
+
+config SOC_TOUCH_VERSION_2
+    bool
+    default y
 
 config SOC_TOUCH_SENSOR_NUM
     int
@@ -835,6 +855,10 @@ config SOC_PM_SUPPORT_TAGMEM_PD
     bool
     default y
 
+config SOC_PM_SUPPORT_RTC_PERIPH_PD
+    bool
+    default y
+
 config SOC_PM_SUPPORT_TOUCH_SENSOR_WAKEUP
     bool
     default y
@@ -867,15 +891,15 @@ config SOC_FLASH_ENCRYPTION_XTS_AES
     bool
     default y
 
+config SOC_FLASH_ENCRYPTION_XTS_AES_OPTIONS
+    bool
+    default y
+
 config SOC_FLASH_ENCRYPTION_XTS_AES_128
     bool
     default y
 
 config SOC_FLASH_ENCRYPTION_XTS_AES_256
-    bool
-    default y
-
-config SOC_WIFI_HW_TSF
     bool
     default y
 
@@ -915,6 +939,10 @@ config SOC_SPI_MEM_SUPPORT_TIME_TUNING
     bool
     default y
 
+config SOC_SPI_MEM_SUPPORT_CONFIG_GPIO_BY_EFUSE
+    bool
+    default y
+
 config SOC_COEX_HW_PTI
     bool
     default y
@@ -932,6 +960,18 @@ config SOC_SDMMC_SUPPORT_XTAL_CLOCK
     default y
 
 config SOC_TEMPERATURE_SENSOR_SUPPORT_FAST_RC
+    bool
+    default y
+
+config SOC_WIFI_HW_TSF
+    bool
+    default y
+
+config SOC_WIFI_FTM_SUPPORT
+    bool
+    default y
+
+config SOC_WIFI_GCMP_SUPPORT
     bool
     default y
 

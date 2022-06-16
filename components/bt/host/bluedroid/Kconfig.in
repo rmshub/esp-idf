@@ -61,6 +61,14 @@ config BT_SPP_ENABLED
     help
         This enables the Serial Port Profile
 
+config BT_L2CAP_ENABLED
+    bool "BT L2CAP"
+    depends on BT_CLASSIC_ENABLED
+    default n
+    help
+        This enables the Logical Link Control and Adaptation Layer Protocol.
+        Only supported classic bluetooth.
+
 config BT_HFP_ENABLE
     bool "Hands Free/Handset Profile"
     depends on BT_CLASSIC_ENABLED
@@ -1069,14 +1077,14 @@ config BT_BLE_RPA_SUPPORTED
 
 config BT_BLE_50_FEATURES_SUPPORTED
     bool "Enable BLE 5.0 features"
-    depends on (BT_BLUEDROID_ENABLED && (IDF_TARGET_ESP32C3 || IDF_TARGET_ESP32S3))
+    depends on (BT_BLUEDROID_ENABLED && (IDF_TARGET_ESP32C3 || IDF_TARGET_ESP32S3 || SOC_ESP_NIMBLE_CONTROLLER))
     default y
     help
         This enables BLE 5.0 features, this option only support esp32c3/esp32s3 chip
 
 config BT_BLE_42_FEATURES_SUPPORTED
     bool "Enable BLE 4.2 features"
-    depends on (BT_BLUEDROID_ENABLED && (IDF_TARGET_ESP32C3 || IDF_TARGET_ESP32S3))
+    depends on (BT_BLUEDROID_ENABLED && (IDF_TARGET_ESP32C3 || IDF_TARGET_ESP32S3 || SOC_ESP_NIMBLE_CONTROLLER))
     default n
     help
         This enables BLE 4.2 features.

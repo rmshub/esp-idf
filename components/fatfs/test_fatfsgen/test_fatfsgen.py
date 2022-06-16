@@ -12,11 +12,11 @@ from test_utils import CFG, fill_sector, generate_test_dir_1, generate_test_dir_
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 import fatfsgen  # noqa E402  # pylint: disable=C0413
-from fatfsgen_utils.exceptions import InconsistentFATAttributes  # noqa E402  # pylint: disable=C0413
-from fatfsgen_utils.exceptions import TooLongNameException  # noqa E402  # pylint: disable=C0413
-from fatfsgen_utils.exceptions import WriteDirectoryException  # noqa E402  # pylint: disable=C0413
-from fatfsgen_utils.exceptions import LowerCaseException, NoFreeClusterException  # noqa E402  # pylint: disable=C0413
-from fatfsgen_utils.utils import FAT12, read_filesystem  # noqa E402  # pylint: disable=C0413
+from fatfs_utils.exceptions import InconsistentFATAttributes  # noqa E402  # pylint: disable=C0413
+from fatfs_utils.exceptions import TooLongNameException  # noqa E402  # pylint: disable=C0413
+from fatfs_utils.exceptions import WriteDirectoryException  # noqa E402  # pylint: disable=C0413
+from fatfs_utils.exceptions import LowerCaseException, NoFreeClusterException  # noqa E402  # pylint: disable=C0413
+from fatfs_utils.utils import FAT12, read_filesystem  # noqa E402  # pylint: disable=C0413
 
 
 class FatFSGen(unittest.TestCase):
@@ -189,7 +189,7 @@ class FatFSGen(unittest.TestCase):
 
     def test_fatfs16_detection(self) -> None:
         fatfs = fatfsgen.FATFS(size=16 * 1024 * 1024)
-        self.assertEqual(fatfs.state.fatfs_type, 16)
+        self.assertEqual(fatfs.state.boot_sector_state.fatfs_type, 16)
 
     def test_fatfs32_detection(self) -> None:
         self.assertRaises(NotImplementedError, fatfsgen.FATFS, size=256 * 1024 * 1024)

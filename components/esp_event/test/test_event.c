@@ -21,6 +21,9 @@
 
 #include "test_utils.h"
 
+
+#if !TEMPORARY_DISABLED_FOR_TARGETS(ESP32C2)
+//IDF-4035
 static const char* TAG = "test_event";
 
 #define TEST_CONFIG_ITEMS_TO_REGISTER        5
@@ -2002,6 +2005,7 @@ TEST_CASE("can post events from interrupt handler", "[event]")
     };
     TEST_ESP_OK(gptimer_register_event_callbacks(gptimer, &cbs, sem));
     TEST_ESP_OK(gptimer_set_alarm_action(gptimer, &alarm_config));
+    TEST_ESP_OK(gptimer_enable(gptimer));
     TEST_ESP_OK(gptimer_start(gptimer));
 
     TEST_SETUP();
@@ -2012,7 +2016,9 @@ TEST_CASE("can post events from interrupt handler", "[event]")
     xSemaphoreTake(sem, portMAX_DELAY);
 
     TEST_TEARDOWN();
+    TEST_ESP_OK(gptimer_disable(gptimer));
     TEST_ESP_OK(gptimer_del_timer(gptimer));
 }
 
 #endif // CONFIG_ESP_EVENT_POST_FROM_ISR
+#endif //!TEMPORARY_DISABLED_FOR_TARGETS(ESP32C2)

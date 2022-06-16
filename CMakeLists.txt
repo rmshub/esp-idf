@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.16)
 project(esp-idf C CXX ASM)
 
 if(CMAKE_CURRENT_LIST_DIR STREQUAL CMAKE_SOURCE_DIR)
@@ -60,23 +60,6 @@ endif()
 
 if(CONFIG_COMPILER_SAVE_RESTORE_LIBCALLS)
     list(APPEND compile_options "-msave-restore")
-endif()
-
-if(CONFIG_COMPILER_DISABLE_GCC8_WARNINGS)
-    list(APPEND compile_options "-Wno-parentheses"
-                                "-Wno-sizeof-pointer-memaccess"
-                                "-Wno-clobbered")
-
-    list(APPEND compile_options "-Wno-format-overflow"
-                                "-Wno-stringop-truncation"
-                                "-Wno-misleading-indentation"
-                                "-Wno-cast-function-type"
-                                "-Wno-implicit-fallthrough"
-                                "-Wno-unused-const-variable"
-                                "-Wno-switch-unreachable"
-                                "-Wno-format-truncation"
-                                "-Wno-memset-elt-size"
-                                "-Wno-int-in-bool-context")
 endif()
 
 if(CMAKE_C_COMPILER_ID MATCHES "GNU")
