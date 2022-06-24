@@ -68,13 +68,19 @@ static const char *TAG = "clk";
     rtc_config_t cfg = RTC_CONFIG_DEFAULT();
     soc_reset_reason_t rst_reas;
     rst_reas = esp_rom_get_reset_reason(0);
-    if (rst_reas == RESET_REASON_CHIP_POWER_ON) {
+    if (rst_reas == RESET_REASON_CHIP_POWER_ON
+#if SOC_EFUSE_HAS_EFUSE_RST_BUG
+        || rst_reas == RESET_REASON_CORE_EFUSE_CRC
+#endif
+        ) {
         cfg.cali_ocode = 1;
     }
     rtc_init(cfg);
 
     assert(rtc_clk_xtal_freq_get() == RTC_XTAL_FREQ_40M);
 
+    bool rc_fast_d256_is_enabled = rtc_clk_8md256_enabled();
+    rtc_clk_8m_enable(true, rc_fast_d256_is_enabled);
     rtc_clk_fast_src_set(SOC_RTC_FAST_CLK_SRC_RC_FAST);
 #endif
 

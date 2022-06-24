@@ -28,6 +28,24 @@ if(CONFIG_FREERTOS_SMP)
             "FreeRTOS-Kernel-SMP/portable/xtensa/include/freertos"
             "FreeRTOS-Kernel-SMP/portable/xtensa"
             .)
+
+    elseif(CONFIG_IDF_TARGET_ARCH_RISCV)
+        set(srcs
+            "FreeRTOS-Kernel-SMP/portable/riscv/port.c"
+            "FreeRTOS-Kernel-SMP/portable/riscv/portasm.S")
+
+        set(include_dirs
+            FreeRTOS-Kernel-SMP/include
+            esp_additions/include/freertos          # For files with #include "FreeRTOSConfig.h"
+            FreeRTOS-Kernel-SMP/portable/riscv/include
+            esp_additions/include                   # For files with #include "freertos/FreeRTOSConfig.h"
+            FreeRTOS-Kernel-SMP/portable/riscv/include/freertos)
+
+        set(private_include_dirs
+            FreeRTOS-Kernel-SMP/portable/riscv/include/freertos
+            FreeRTOS-Kernel-SMP/portable/riscv
+            .)
+
     endif()
 
     list(APPEND srcs
@@ -164,4 +182,8 @@ if(CONFIG_FREERTOS_RUN_TIME_STATS_USING_ESP_TIMER)
     # [refactor-todo]: esp_timer is required by FreeRTOS when we use esp_timer_get_time() to do profiling
     # Introduce a port wrapper function to avoid including esp_timer.h into the public header
     idf_component_optional_requires(PUBLIC esp_timer)
+endif()
+
+if(CONFIG_SPIRAM)
+    idf_component_optional_requires(PRIVATE esp_psram)
 endif()

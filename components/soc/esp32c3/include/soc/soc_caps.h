@@ -25,7 +25,6 @@
 #pragma once
 
 /*-------------------------- COMMON CAPS ---------------------------------------*/
-#define SOC_CPU_CORES_NUM               1
 #define SOC_ADC_SUPPORTED               1
 #define SOC_DEDICATED_GPIO_SUPPORTED    1
 #define SOC_GDMA_SUPPORTED              1
@@ -38,6 +37,7 @@
 #define SOC_WIFI_SUPPORTED              1
 #define SOC_SUPPORTS_SECURE_DL_MODE     1
 #define SOC_EFUSE_KEY_PURPOSE_FIELD         1
+#define SOC_EFUSE_HAS_EFUSE_RST_BUG         1
 #define SOC_RTC_FAST_MEM_SUPPORTED        1
 #define SOC_I2S_SUPPORTED               1
 #define SOC_RMT_SUPPORTED               1
@@ -101,10 +101,12 @@
 #define SOC_SHARED_IDCACHE_SUPPORTED            1   //Shared Cache for both instructions and data
 
 /*-------------------------- CPU CAPS ----------------------------------------*/
-#define SOC_CPU_BREAKPOINTS_NUM         8
-#define SOC_CPU_WATCHPOINTS_NUM         8
+#define SOC_CPU_CORES_NUM               (1U)
+#define SOC_CPU_INTR_NUM                32
 #define SOC_CPU_HAS_FLEXIBLE_INTC       1
 
+#define SOC_CPU_BREAKPOINTS_NUM         8
+#define SOC_CPU_WATCHPOINTS_NUM         8
 #define SOC_CPU_WATCHPOINT_SIZE         0x80000000 // bytes
 
 /*-------------------------- DIGITAL SIGNATURE CAPS ----------------------------------------*/

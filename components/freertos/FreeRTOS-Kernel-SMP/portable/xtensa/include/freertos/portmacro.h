@@ -17,6 +17,7 @@
 #include "portbenchmark.h"
 #include "esp_macros.h"
 #include "hal/cpu_hal.h"
+#include "compare_set.h"            /* For compare_and_set_native(). [refactor-todo] Use esp_cpu.h instead */
 #include "esp_private/crosscore_int.h"
 
 /*
@@ -354,6 +355,9 @@ static inline bool IRAM_ATTR xPortCanYield(void)
 
     return ((ps_reg & PS_INTLEVEL_MASK) == 0);
 }
+
+// Added for backward compatibility with IDF
+#define portYIELD_WITHIN_API()                      vTaskYieldWithinAPI()
 
 // ----------------------- System --------------------------
 
