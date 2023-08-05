@@ -13,6 +13,7 @@
 #include "esp_partition.h"
 #include <functional>
 #include "nvs_handle_simple.hpp"
+#include "nvs_memory_management.hpp"
 #include "esp_err.h"
 #include <esp_rom_crc.h>
 #include "nvs_internal.h"
@@ -22,7 +23,13 @@
 #include "esp_log.h"
 static const char* TAG = "nvs";
 
-class NVSHandleEntry : public intrusive_list_node<NVSHandleEntry> {
+/**
+ * @brief  Configuration structure for the active default security scheme
+ *         for NVS Encryption
+ */
+static nvs_sec_scheme_t nvs_sec_default_scheme_cfg;
+
+class NVSHandleEntry : public intrusive_list_node<NVSHandleEntry>, public ExceptionlessAllocatable {
 public:
     NVSHandleEntry(nvs::NVSHandleSimple *handle, const char* part_name)
         : nvs_handle(handle),
@@ -106,7 +113,7 @@ extern "C" esp_err_t nvs_flash_init_partition_ptr(const esp_partition_t *partiti
     }
 
     esp_err_t init_res = NVSPartitionManager::get_instance()->init_custom(part,
-            partition->address / SPI_FLASH_SEC_SIZE,
+            0,
             partition->size / SPI_FLASH_SEC_SIZE);
 
     if (init_res != ESP_OK) {
@@ -116,7 +123,7 @@ extern "C" esp_err_t nvs_flash_init_partition_ptr(const esp_partition_t *partiti
     return init_res;
 }
 
-#ifndef LINUX_TARGET
+#ifndef LINUX_HOST_LEGACY_TEST
 extern "C" esp_err_t nvs_flash_init_partition(const char *part_name)
 {
     esp_err_t lock_result = Lock::init();
@@ -132,28 +139,20 @@ extern "C" esp_err_t nvs_flash_init(void)
 {
 #ifdef CONFIG_NVS_ENCRYPTION
     esp_err_t ret = ESP_FAIL;
-    const esp_partition_t *key_part = esp_partition_find_first(
-                                          ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_NVS_KEYS, NULL);
-    if (key_part == NULL) {
-        ESP_LOGE(TAG, "CONFIG_NVS_ENCRYPTION is enabled, but no partition with subtype nvs_keys found in the partition table.");
-        return ret;
-    }
-
     nvs_sec_cfg_t cfg = {};
-    ret = nvs_flash_read_security_cfg(key_part, &cfg);
-    if (ret == ESP_ERR_NVS_KEYS_NOT_INITIALIZED) {
-        ESP_LOGI(TAG, "NVS key partition empty, generating keys");
-        ret = nvs_flash_generate_keys(key_part, &cfg);
+
+    ret = nvs_flash_read_security_cfg_v2(&nvs_sec_default_scheme_cfg, &cfg);
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to read NVS security cfg: [0x%02X] (%s)", ret, esp_err_to_name(ret));
+        ESP_LOGI(TAG, "Generating NVS encr-keys...");
+        ret = nvs_flash_generate_keys_v2(&nvs_sec_default_scheme_cfg, &cfg);
         if (ret != ESP_OK) {
-            ESP_LOGE(TAG, "Failed to generate keys: [0x%02X] (%s)", ret, esp_err_to_name(ret));
+            ESP_LOGE(TAG, "Failed to generate NVS encr-keys: [0x%02X] (%s)", ret, esp_err_to_name(ret));
             return ret;
         }
-    } else if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to read NVS security cfg: [0x%02X] (%s)", ret, esp_err_to_name(ret));
-        return ret;
     }
 
-    ret = nvs_flash_secure_init_partition(NVS_DEFAULT_PART_NAME, &cfg);
+    ret = nvs_flash_secure_init(&cfg);
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         ESP_LOGE(TAG, "Failed to initialize NVS partition: [0x%02X] (%s)", ret, esp_err_to_name(ret));
         return ret;
@@ -165,7 +164,6 @@ extern "C" esp_err_t nvs_flash_init(void)
 #endif
 }
 
-#ifdef CONFIG_NVS_ENCRYPTION
 extern "C" esp_err_t nvs_flash_secure_init_partition(const char *part_name, nvs_sec_cfg_t* cfg)
 {
     esp_err_t lock_result = Lock::init();
@@ -181,7 +179,6 @@ extern "C" esp_err_t nvs_flash_secure_init(nvs_sec_cfg_t* cfg)
 {
     return nvs_flash_secure_init_partition(NVS_DEFAULT_PART_NAME, cfg);
 }
-#endif
 
 extern "C" esp_err_t nvs_flash_erase_partition(const char *part_name)
 {
@@ -239,7 +236,7 @@ extern "C" esp_err_t nvs_flash_erase(void)
 {
     return nvs_flash_erase_partition(NVS_DEFAULT_PART_NAME);
 }
-#endif // ! LINUX_TARGET
+#endif // LINUX_HOST_LEGACY_TEST
 
 extern "C" esp_err_t nvs_flash_deinit_partition(const char* partition_name)
 {
@@ -312,7 +309,7 @@ extern "C" void nvs_close(nvs_handle_t handle)
 extern "C" esp_err_t nvs_erase_key(nvs_handle_t c_handle, const char* key)
 {
     Lock lock;
-    ESP_LOGD(TAG, "%s %s\r\n", __func__, key);
+    ESP_LOGD(TAG, "%s %s", __func__, key);
     NVSHandleSimple *handle;
     auto err = nvs_find_ns_handle(c_handle, &handle);
     if (err != ESP_OK) {
@@ -325,7 +322,7 @@ extern "C" esp_err_t nvs_erase_key(nvs_handle_t c_handle, const char* key)
 extern "C" esp_err_t nvs_erase_all(nvs_handle_t c_handle)
 {
     Lock lock;
-    ESP_LOGD(TAG, "%s\r\n", __func__);
+    ESP_LOGD(TAG, "%s", __func__);
     NVSHandleSimple *handle;
     auto err = nvs_find_ns_handle(c_handle, &handle);
     if (err != ESP_OK) {
@@ -566,7 +563,7 @@ extern "C" esp_err_t nvs_get_used_entry_count(nvs_handle_t c_handle, size_t* use
     return err;
 }
 
-#if (defined CONFIG_NVS_ENCRYPTION) && (!defined LINUX_TARGET)
+#ifndef LINUX_TARGET
 
 extern "C" esp_err_t nvs_flash_generate_keys(const esp_partition_t* partition, nvs_sec_cfg_t* cfg)
 {
@@ -703,7 +700,39 @@ extern "C" esp_err_t nvs_flash_read_security_cfg(const esp_partition_t* partitio
     return ESP_OK;
 }
 
-#endif
+#endif // ! LINUX_TARGET
+
+extern "C" esp_err_t nvs_flash_register_security_scheme(nvs_sec_scheme_t *scheme_cfg)
+{
+    if (scheme_cfg == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    memcpy(&nvs_sec_default_scheme_cfg, scheme_cfg, sizeof(nvs_sec_scheme_t));
+
+    return ESP_OK;
+}
+
+extern "C" nvs_sec_scheme_t *nvs_flash_get_default_security_scheme(void)
+{
+    return &nvs_sec_default_scheme_cfg;
+}
+
+extern "C" esp_err_t nvs_flash_generate_keys_v2(nvs_sec_scheme_t *scheme_cfg, nvs_sec_cfg_t* cfg)
+{
+    if (scheme_cfg == nullptr || cfg == nullptr || scheme_cfg->nvs_flash_key_gen == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    return (scheme_cfg->nvs_flash_key_gen)(scheme_cfg->scheme_data, cfg);
+}
+
+extern "C" esp_err_t nvs_flash_read_security_cfg_v2(nvs_sec_scheme_t *scheme_cfg, nvs_sec_cfg_t* cfg)
+{
+    if (scheme_cfg == nullptr || cfg == nullptr || scheme_cfg->nvs_flash_read_cfg == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    return (scheme_cfg->nvs_flash_read_cfg)(scheme_cfg->scheme_data, cfg);
+}
 
 static nvs_iterator_t create_iterator(nvs::Storage *storage, nvs_type_t type)
 {

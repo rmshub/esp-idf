@@ -8,7 +8,7 @@ ESP-IDF 编程指南
 
         快速预览中不包括 API 函数文档。如需生成完整的文档，请在 MR 中添加 docs_full 标签。
 
-这里是乐鑫 IoT 开发框架 (`esp-idf <https://github.com/espressif/esp-idf>`_) 的文档中心。ESP-IDF 是 `ESP32、ESP32-S 和 ESP32-C <https://www.espressif.com/en/products/socs>`_ 系列芯片的官方开发框架。
+这里是乐鑫 IoT 开发框架 (`esp-idf <https://github.com/espressif/esp-idf>`_) 的文档中心。ESP-IDF 是 `ESP32、ESP32-S ESP32-C 和 ESP32-H <https://www.espressif.com/en/products/socs>`_ 系列芯片的官方开发框架。
 
 .. only:: html
 
@@ -19,13 +19,9 @@ ESP-IDF 编程指南
     本文档仅包含针对 {IDF_TARGET_NAME} 芯片的 ESP-IDF 使用。
 
 ==================  ==================  ==================
-|快速入门|_          |API 参考|_         |H/W 参考|_
+|快速入门|_          |API 参考|_         |API 指南|_
 ------------------  ------------------  ------------------
-`快速入门`_          `API 参考`_         `H/W 参考`_
-------------------  ------------------  ------------------
-|API 指南|_          |贡献代码|_         |相关资源|_
-------------------  ------------------  ------------------
-`API 指南`_          `贡献代码`_         `相关资源`_
+`快速入门`_          `API 参考`_         `API 指南`_
 ==================  ==================  ==================
 
 .. |快速入门| image:: ../_static/get-started.png
@@ -34,19 +30,10 @@ ESP-IDF 编程指南
 .. |API 参考| image:: ../_static/api-reference.png
 .. _API 参考: api-reference/index.html
 
-.. |H/W 参考| image:: ../_static/hw-reference.png
-.. _H/W 参考: hw-reference/index.html
-
 .. |API 指南| image:: ../_static/api-guides.png
 .. _API 指南: api-guides/index.html
 
 .. _Libraries and Frameworks: libraries-and-frameworks/index.html
-
-.. |贡献代码| image:: ../_static/contribute.png
-.. _贡献代码: contribute/index.html
-
-.. |相关资源| image:: ../_static/resources.png
-.. _相关资源: resources.html
 
 
 .. toctree::
@@ -57,6 +44,7 @@ ESP-IDF 编程指南
    hw-reference/index
    api-guides/index
    migration-guides/index
+   security/index
    libraries-and-frameworks/index
    contribute/index
    versions
@@ -64,5 +52,3 @@ ESP-IDF 编程指南
    COPYRIGHT
    about
    languages
-
-* :ref:`genindex`

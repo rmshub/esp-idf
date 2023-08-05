@@ -5,7 +5,7 @@
 
 一般情况下，{IDF_TARGET_NAME} 的固件是通过芯片的串口烧录。但是，通过串口烧录 {IDF_TARGET_NAME} 需要连接 USB 转串口转换器（如 CP210x 或 FTDI），详细信息可参阅 :doc:`与 {IDF_TARGET_NAME} 创建串口连接<../get-started/establish-serial-connection>`。{IDF_TARGET_NAME} 包含一个 USB OTG 外设，使其可以通过 USB 将 {IDF_TARGET_NAME} 直接连接到主机，即不需要 USB 转串口转换器也可完成烧录。
 
-设备固件升级 (DFU) 是一种通过通用串行总线 (USB) 升级设备固件的机制。
+设备固件升级 (DFU) 是一种通过通用串行总线 (USB) 升级设备固件的机制。但是，启用安全启动 (Secure Boot) 或 flash 加密会禁用 ROM 中的 USB-OTG USB 堆栈，则无法通过该端口上的模拟串口或 DFU 进行更新。
 
 - 入门指南中的 :ref:`get-started-get-prerequisites` 介绍了 DFU 的软件要求。
 - :ref:`api_guide_dfu_build` 章节介绍了如何使用 ESP-IDF 构建固件。
@@ -128,3 +128,10 @@ USB 驱动（仅限 Windows）
 - 出现 ``No DFU capable USB device available`` 错误的原因可能是在 Windows 上没有正确安装 USB 驱动程序（请参考 :ref:`api_guide_dfu_flash_win`），或是未在 Linux 上设置 Udev 规则（请参考 :ref:`api_guide_dfu_flash_udev`)，或是设备未处于引导加载程序模式。
 
 - 在 Windows 上使用 ``dfu-util`` 第一次烧录失败，并出现 ``Lost device after RESET?`` 错误信息。出现此问题时，请重新烧录一次，再次烧录应该会成功。
+
+.. only:: SOC_SUPPORTS_SECURE_DL_MODE
+
+    安全下载模式
+    --------------------
+
+    启用安全下载模式后，DFU 不再可用。请参见 :doc:`Flash 加密 <../security/flash-encryption>`，了解详细信息。

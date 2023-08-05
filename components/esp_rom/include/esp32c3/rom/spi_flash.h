@@ -328,20 +328,6 @@ esp_rom_spiflash_result_t esp_rom_spiflash_read(uint32_t src_addr, uint32_t *des
 void esp_rom_spiflash_write_encrypted_enable(void);
 
 /**
-  * @brief Prepare 32 Bytes data to encrpto writing, you should Erase it yourself if need.
-  *        Please do not call this function in SDK.
-  *
-  * @param  uint32_t flash_addr : Address to write, should be 32 bytes aligned.
-  *
-  * @param  uint32_t *data : The pointer to data which is to write.
-  *
-  * @return ESP_ROM_SPIFLASH_RESULT_OK : Prepare OK.
-  *         ESP_ROM_SPIFLASH_RESULT_ERR : Prepare error.
-  *         ESP_ROM_SPIFLASH_RESULT_TIMEOUT : Prepare timeout.
-  */
-esp_rom_spiflash_result_t esp_rom_spiflash_prepare_encrypted_data(uint32_t flash_addr, uint32_t *data);
-
-/**
   * @brief SPI1 go out of encrypto mode.
   *        Please do not call this function in SDK.
   *
@@ -430,19 +416,6 @@ esp_rom_spiflash_result_t esp_rom_spiflash_write_enable(esp_rom_spiflash_chip_t 
   * @return None
   */
 void esp_rom_spiflash_fix_dummylen(uint8_t spi, uint8_t freqdiv);
-
-/**
-  * @brief Select SPI Flash to QIO mode when WP pad is read from Flash.
-  *    Please do not call this function in SDK.
-  *
-  * @param  uint8_t wp_gpio_num: WP gpio number.
-  *
-  * @param  uint32_t ishspi: 0 for spi, 1 for hspi, flash pad decided by strapping
-  *              else, bit[5:0] spiclk, bit[11:6] spiq, bit[17:12] spid, bit[23:18] spics0, bit[29:24] spihd
-  *
-  * @return None
-  */
-void esp_rom_spiflash_select_qiomode(uint8_t wp_gpio_num, uint32_t ishspi);
 
 /**
   * @brief Set SPI Flash pad drivers.

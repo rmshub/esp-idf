@@ -323,7 +323,7 @@ C++ Header files have the extension ``.hpp``. C++ source files have the extensio
 Naming
 ^^^^^^
 
-* **Class and struct** names shall be written in ``CamelCase`` with a capital letter as beginning. Member variables and methods shall be in ``snake_case``.
+* **Class and struct** names shall be written in ``CamelCase`` with a capital letter as beginning. Member variables and methods shall be in ``snake_case``. An exception from ``CamelCase`` is if the readability is severely decreased, e.g. in ``GPIOOutput``, then an underscore ``_`` is allowed to make it more readable: ``GPIO_Output``.
 * **Namespaces** shall be in lower ``snake_case``.
 * **Templates** are specified in the line above the function declaration.
 * Interfaces in terms of Object-Oriented Programming shall be named without the suffix ``...Interface``. Later, this makes it easier to extract interfaces from normal classes and vice versa without making a breaking change.
@@ -459,6 +459,24 @@ EditorConfig helps developers define and maintain consistent coding styles betwe
 
 For more information, see `EditorConfig <https://editorconfig.org>`_ Website.
 
+Third Party Component Code Styles
+---------------------------------
+
+ESP-IDF integrates a number of third party components where these components may have differing code styles.
+
+FreeRTOS
+^^^^^^^^
+
+The code style adopted by FreeRTOS is described in the `FreeRTOS style guide <https://www.freertos.org/FreeRTOS-Coding-Standard-and-Style-Guide.html#StyleGuide>`_. Formatting of FreeRTOS source code is automated using `Uncrustify <https://github.com/uncrustify/uncrustify>`_, thus a copy of the FreeRTOS code style's Uncrustify configuration (``uncrustify.cfg``) is stored within ESP-IDF FreeRTOS component.
+
+If a FreeRTOS source file is modified, the updated file can be formatted again by following the steps below:
+
+1. Ensure that Uncrustify (v0.69.0) is installed on your system
+2. Run the following command on the update FreeRTOS source file (where ``source.c`` is the path to the source file that requires formatting).
+
+.. code-block:: bash
+
+    uncrustify -c $IDF_PATH/components/freertos/FreeRTOS-Kernel/uncrustify.cfg --replace source.c --no-backup
 
 Documenting Code
 ----------------

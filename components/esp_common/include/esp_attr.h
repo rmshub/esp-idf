@@ -25,6 +25,9 @@ extern "C" {
 // Forces data into DRAM instead of flash
 #define DRAM_ATTR _SECTION_ATTR_IMPL(".dram1", __COUNTER__)
 
+// Forces code into TCM instead of flash
+#define TCM_IRAM_ATTR _SECTION_ATTR_IMPL(".tcm.text", __COUNTER__)
+
 // IRAM can only be accessed as an 8-bit memory on ESP32, when CONFIG_ESP32_IRAM_AS_8BIT_ACCESSIBLE_MEMORY is set
 #define IRAM_8BIT_ACCESSIBLE (CONFIG_IDF_TARGET_ESP32 && CONFIG_ESP32_IRAM_AS_8BIT_ACCESSIBLE_MEMORY)
 
@@ -180,7 +183,7 @@ FORCE_INLINE_ATTR TYPE& operator<<=(TYPE& a, int b) { a = a << b; return a; }
 /* Use IDF_DEPRECATED attribute to mark anything deprecated from use in
    ESP-IDF's own source code, but not deprecated for external users.
 */
-#ifdef IDF_CI_BUILD
+#ifdef CONFIG_IDF_CI_BUILD
 #define IDF_DEPRECATED(REASON) __attribute__((deprecated(REASON)))
 #else
 #define IDF_DEPRECATED(REASON)

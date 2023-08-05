@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Unlicense OR CC0-1.0
  */
@@ -16,7 +16,6 @@
 #include "msc_host.h"
 #include "msc_host_vfs.h"
 #include "ffconf.h"
-#include "ff.h"
 #include "esp_vfs.h"
 #include "errno.h"
 #include "hal/usb_hal.h"
@@ -57,8 +56,8 @@ static void print_device_info(msc_host_device_info_t *info)
 
     printf("Device info:\n");
     printf("\t Capacity: %llu MB\n", capacity);
-    printf("\t Sector size: %u\n", info->sector_size);
-    printf("\t Sector count: %u\n", info->sector_count);
+    printf("\t Sector size: %"PRIu32"\n", info->sector_size);
+    printf("\t Sector count: %"PRIu32"\n", info->sector_count);
     printf("\t PID: 0x%4X \n", info->idProduct);
     printf("\t VID: 0x%4X \n", info->idVendor);
     wprintf(L"\t iProduct: %S \n", info->iProduct);
@@ -81,7 +80,7 @@ static void file_operations(void)
     bool directory_exists = stat(directory, &s) == 0;
     if (!directory_exists) {
         if (mkdir(directory, 0775) != 0) {
-            ESP_LOGE(TAG, "mkdir failed with errno: %s\n", strerror(errno));
+            ESP_LOGE(TAG, "mkdir failed with errno: %s", strerror(errno));
         }
     }
 
@@ -161,7 +160,7 @@ void app_main(void)
     BaseType_t task_created;
 
     const gpio_config_t input_pin = {
-        .pin_bit_mask = (1 << USB_DISCONNECT_PIN),
+        .pin_bit_mask = BIT64(USB_DISCONNECT_PIN),
         .mode = GPIO_MODE_INPUT,
         .pull_up_en = GPIO_PULLUP_ENABLE,
     };
@@ -178,7 +177,7 @@ void app_main(void)
     const msc_host_driver_config_t msc_config = {
         .create_backround_task = true,
         .task_priority = 5,
-        .stack_size = 2048,
+        .stack_size = 4096,
         .callback = msc_event_cb,
     };
     ESP_ERROR_CHECK( msc_host_install(&msc_config) );

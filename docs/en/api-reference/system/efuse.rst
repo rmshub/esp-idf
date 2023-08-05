@@ -29,6 +29,8 @@ For more details, see *{IDF_TARGET_NAME} Technical Reference Manual* > *eFuse Co
 
 .. only:: not esp32 and not esp32c2
 
+  .. list::
+
     {IDF_TARGET_NAME} has 11 eFuse blocks each of the size of 256 bits (not all bits are available):
 
     * EFUSE_BLK0 is used entirely for system purposes;
@@ -40,7 +42,9 @@ For more details, see *{IDF_TARGET_NAME} Technical Reference Manual* > *eFuse Co
     * EFUSE_BLK6 (also named EFUSE_BLK_KEY2) can be used as key (for secure_boot or flash_encryption) or for user purposes;
     * EFUSE_BLK7 (also named EFUSE_BLK_KEY3) can be used as key (for secure_boot or flash_encryption) or for user purposes;
     * EFUSE_BLK8 (also named EFUSE_BLK_KEY4) can be used as key (for secure_boot or flash_encryption) or for user purposes;
-    * EFUSE_BLK9 (also named EFUSE_BLK_KEY5) can be used as key (for secure_boot or flash_encryption) or for user purposes;
+    :SOC_EFUSE_BLOCK9_KEY_PURPOSE_QUIRK and SOC_ECDSA_SUPPORTED: * EFUSE_BLK9 (also named EFUSE_BLK_KEY5) can be used for any purpose except for flash encryption or ECDSA (due to a HW bug);
+    :SOC_EFUSE_BLOCK9_KEY_PURPOSE_QUIRK and not SOC_ECDSA_SUPPORTED: * EFUSE_BLK9 (also named EFUSE_BLK_KEY5) can be used for any purpose except for flash encryption (due to a HW bug);
+    :not SOC_EFUSE_BLOCK9_KEY_PURPOSE_QUIRK: * EFUSE_BLK9 (also named EFUSE_BLK_KEY5) can be used as key (for secure_boot or flash_encryption) or for user purposes;
     * EFUSE_BLK10 (also named EFUSE_BLK_SYS_DATA_PART2) is reseved for system purposes.
 
 .. only:: esp32c2
@@ -247,6 +251,8 @@ To write some fields into one block, or different blocks in one time, you need t
 
     FOR TESTING ONLY (NOT RECOMMENDED): You can ignore or suppress errors that violate encoding scheme data in order to burn the necessary bits in the eFuse block.
 
+.. _efuse_API:
+
 eFuse API
 ---------
 
@@ -276,7 +282,7 @@ Access to the fields is via a pointer to the description structure. API function
 * :cpp:func:`esp_efuse_get_keypurpose_dis_write` - Returns a write protection of the key purpose field for an eFuse key block (for esp32 always true).
 * :cpp:func:`esp_efuse_key_block_unused` - Returns true if the key block is unused, false otherwise.
 
-For frequently used fields, special functions are made, like this :cpp:func:`esp_efuse_get_chip_ver`, :cpp:func:`esp_efuse_get_pkg_ver`.
+For frequently used fields, special functions are made, like this :cpp:func:`esp_efuse_get_pkg_ver`.
 
 .. only:: SOC_EFUSE_KEY_PURPOSE_FIELD or SOC_SUPPORT_SECURE_BOOT_REVOKE_KEY
 
@@ -399,6 +405,53 @@ Thus, reading the eFuse ``USER_DATA`` block written as above gives the following
     // id = 0x01
     // b'001
 
+Get eFuses During Build
+-----------------------
+
+There is a way to get the state of eFuses at the build stage of the project. There are two cmake functions for this:
+
+* ``espefuse_get_json_summary()`` - It calls the ``espefuse.py summary --format json`` command and returns a json string (it is not stored in a file).
+* ``espefuse_get_efuse()`` - It finds a given eFuse name in the json string and returns its property.
+
+The json string has the following properties:
+
+.. code-block:: json
+
+    {
+        "MAC": {
+            "bit_len": 48,
+            "block": 0,
+            "category": "identity",
+            "description": "Factory MAC Address",
+            "efuse_type": "bytes:6",
+            "name": "MAC",
+            "pos": 0,
+            "readable": true,
+            "value": "94:b9:7e:5a:6e:58 (CRC 0xe2 OK)",
+            "word": 1,
+            "writeable": true
+        },
+    }
+
+These functions can be used from a top-level project ``CMakeLists.txt`` (:example_file:`get-started/hello_world/CMakeLists.txt`):
+
+.. code-block:: cmake
+
+    # ...
+    project(hello_world)
+
+    espefuse_get_json_summary(efuse_json)
+    espefuse_get_efuse(ret_data ${efuse_json} "MAC" "value")
+    message("MAC:" ${ret_data})
+
+The format of the ``value`` property is the same as shown in ``espefuse.py summary``.
+
+.. code-block:: none
+
+    MAC:94:b9:7e:5a:6e:58 (CRC 0xe2 OK)
+
+There is an example test :example_file:`system/efuse/CMakeLists.txt` which adds a custom target ``efuse-summary``. This allows you to run the ``idf.py efuse-summary`` command to read the required eFuses (specified in the ``efuse_names`` list) at any time, not just at project build time.
+
 Debug eFuse & Unit tests
 ------------------------
 
@@ -411,6 +464,11 @@ During startup, the eFuses are copied to RAM. All eFuse operations (read and wri
 In addition to the :ref:`CONFIG_EFUSE_VIRTUAL` option there is :ref:`CONFIG_EFUSE_VIRTUAL_KEEP_IN_FLASH` option that adds a feature to keep eFuses in flash memory. To use this mode the partition_table should have the `efuse` partition. partition.csv: ``"efuse_em, data, efuse,   ,   0x2000,"``.
 During startup, the eFuses are copied from flash or, in case if flash is empty, from real eFuse to RAM and then update flash. This option allows keeping eFuses after reboots (possible to test secure_boot and flash_encryption features with this option).
 
+Flash Encryption Testing
+""""""""""""""""""""""""
+
+Flash Encryption (FE) is a hardware feature that requires the physical burning of eFuses: key and FLASH_CRYPT_CNT. If FE is not actually enabled then enabling the :ref:`CONFIG_EFUSE_VIRTUAL_KEEP_IN_FLASH` option just gives testing possibilities and does not encrypt anything in the flash, even though the logs say encryption happens. The :cpp:func:`bootloader_flash_write` is adapted for this purpose. But if FE is already enabled on the chip and you run an application or bootloader created with the :ref:`CONFIG_EFUSE_VIRTUAL_KEEP_IN_FLASH` option then the flash encryption/decryption operations will work properly (data are encrypted as it is written into an encrypted flash partition and decrypted when they are read from an encrypted partition).
+
 espefuse.py
 ^^^^^^^^^^^
 
@@ -419,5 +477,5 @@ esptool includes a useful tool for reading/writing {IDF_TARGET_NAME} eFuse bits 
 .. include:: inc/espefuse_summary_{IDF_TARGET_NAME}.rst
 
 
-.. include-build-file:: inc/components/efuse/{IDF_TARGET_PATH_NAME}/include/esp_efuse.inc
-.. include-build-file:: inc/components/efuse/include/esp_efuse.inc
+.. include-build-file:: inc/esp_efuse_chip.inc
+.. include-build-file:: inc/esp_efuse.inc

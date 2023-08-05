@@ -9,6 +9,7 @@
 #include "esp_attr.h"
 #include "esp_err.h"
 #include "esp_types.h"
+#include "esp_bit_defs.h"
 #include "esp_log.h"
 #include "../esp_psram_impl.h"
 #include "esp32s3/rom/ets_sys.h"
@@ -19,6 +20,8 @@
 #include "soc/io_mux_reg.h"
 #include "soc/syscon_reg.h"
 #include "esp_private/spi_flash_os.h"
+#include "esp_private/mspi_timing_tuning.h"
+#include "esp_private/esp_gpio_reserve.h"
 
 #define OPI_PSRAM_SYNC_READ             0x0000
 #define OPI_PSRAM_SYNC_WRITE            0x8080
@@ -29,7 +32,8 @@
 #define OCT_PSRAM_ADDR_BITLEN           32
 #define OCT_PSRAM_RD_DUMMY_BITLEN       (2*(10-1))
 #define OCT_PSRAM_WR_DUMMY_BITLEN       (2*(5-1))
-#define OCT_PSRAM_CS1_IO                CONFIG_DEFAULT_PSRAM_CS_IO
+#define OCT_PSRAM_CS1_IO                SPI_CS1_GPIO_NUM
+#define OCT_PSRAM_VENDOR_ID             0xD
 
 #define OCT_PSRAM_CS_SETUP_TIME         3
 #define OCT_PSRAM_CS_HOLD_TIME          3
@@ -261,6 +265,9 @@ static void s_init_psram_pins(void)
     PIN_SET_DRV(GPIO_PIN_MUX_REG[OCT_PSRAM_CS1_IO], 3);
     //Set psram clock pin drive strength
     REG_SET_FIELD(SPI_MEM_DATE_REG(0), SPI_MEM_SPI_SMEM_SPICLK_FUN_DRV, 3);
+
+    // Preserve psram pins
+    esp_gpio_reserve_pins(BIT64(OCT_PSRAM_CS1_IO));
 }
 
 /**
@@ -294,7 +301,7 @@ esp_err_t esp_psram_impl_enable(psram_vaddr_mode_t vaddrmode)
     s_configure_psram_ecc();
 
     //enter MSPI slow mode to init PSRAM device registers
-    spi_timing_enter_mspi_low_speed_mode(true);
+    mspi_timing_enter_low_speed_mode(true);
 
     //set to variable dummy mode
     SET_PERI_REG_MASK(SPI_MEM_DDR_REG(1), SPI_MEM_SPI_FMEM_VAR_DUMMY);
@@ -310,16 +317,21 @@ esp_err_t esp_psram_impl_enable(psram_vaddr_mode_t vaddrmode)
     s_init_psram_mode_reg(1, &mode_reg);
     //Print PSRAM info
     s_get_psram_mode_reg(1, &mode_reg);
+    if (mode_reg.mr1.vendor_id != OCT_PSRAM_VENDOR_ID) {
+        ESP_EARLY_LOGE(TAG, "PSRAM ID read error: 0x%08x, PSRAM chip not found or not supported, or wrong PSRAM line mode", mode_reg.mr1.vendor_id);
+        return ESP_ERR_NOT_SUPPORTED;
+    }
     s_print_psram_info(&mode_reg);
     s_psram_size = mode_reg.mr2.density == 0x1 ? PSRAM_SIZE_4MB  :
                    mode_reg.mr2.density == 0X3 ? PSRAM_SIZE_8MB  :
                    mode_reg.mr2.density == 0x5 ? PSRAM_SIZE_16MB :
-                   mode_reg.mr2.density == 0x7 ? PSRAM_SIZE_32MB : 0;
+                   mode_reg.mr2.density == 0x7 ? PSRAM_SIZE_32MB :
+                   mode_reg.mr2.density == 0x6 ? PSRAM_SIZE_64MB : 0;
 
     //Do PSRAM timing tuning, we use SPI1 to do the tuning, and set the SPI0 PSRAM timing related registers accordingly
-    spi_timing_psram_tuning();
+    mspi_timing_psram_tuning();
     //Back to the high speed mode. Flash/PSRAM clocks are set to the clock that user selected. SPI0/1 registers are all set correctly
-    spi_timing_enter_mspi_high_speed_mode(true);
+    mspi_timing_enter_high_speed_mode(true);
 
     /**
      * Tuning may change SPI1 regs, whereas legacy spi_flash APIs rely on these regs.

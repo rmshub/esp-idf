@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -16,9 +16,9 @@
 #include "xt_instr_macros.h"
 #include "portbenchmark.h"
 #include "esp_macros.h"
-#include "hal/cpu_hal.h"
-#include "compare_set.h"            /* For compare_and_set_native(). [refactor-todo] Use esp_cpu.h instead */
+#include "esp_cpu.h"
 #include "esp_private/crosscore_int.h"
+#include "esp_memory_utils.h"
 
 /*
 Note: We should not include any FreeRTOS headers (directly or indirectly) here as this will create a reverse dependency
@@ -72,7 +72,7 @@ typedef uint32_t TickType_t;
 #define portCRITICAL_NESTING_IN_TCB     1
 #define portSTACK_GROWTH                ( -1 )
 #define portTICK_PERIOD_MS              ( ( TickType_t ) 1000 / configTICK_RATE_HZ )
-#define portBYTE_ALIGNMENT              4
+#define portBYTE_ALIGNMENT              16    // Xtensa Windowed ABI requires the stack pointer to always be 16-byte aligned. See "isa_rm.pdf 8.1.1 Windowed Register Usage and Stack Layout"
 #define portNOP()                       XT_NOP()    //Todo: Check if XT_NOP exists
 
 /* ---------------------------------------------- Forward Declarations -------------------------------------------------
@@ -143,6 +143,7 @@ void vPortCleanUpTCB ( void *pxTCB );
 #define portDISABLE_INTERRUPTS()            ({ \
     unsigned int prev_level = XTOS_SET_INTLEVEL(XCHAL_EXCM_LEVEL); \
     portbenchmarkINTERRUPT_DISABLE(); \
+    prev_level = ((prev_level >> XCHAL_PS_INTLEVEL_SHIFT) & XCHAL_PS_INTLEVEL_MASK); \
     prev_level; \
 })
 
@@ -253,7 +254,7 @@ static inline void __attribute__((always_inline)) vPortYieldFromISR( void )
 
 static inline BaseType_t __attribute__((always_inline)) xPortGetCoreID( void )
 {
-    return (BaseType_t) cpu_hal_get_core_id();
+    return (BaseType_t) esp_cpu_get_core_id();
 }
 
 /* ------------------------------------------------ IDF Compatibility --------------------------------------------------
@@ -284,18 +285,6 @@ static inline void vPortClearInterruptMaskFromISR(UBaseType_t prev_level)
 }
 
 // ---------------------- Spinlocks ------------------------
-
-static inline void __attribute__((always_inline)) uxPortCompareSet(volatile uint32_t *addr, uint32_t compare, uint32_t *set)
-{
-    compare_and_set_native(addr, compare, set);
-}
-
-static inline void uxPortCompareSetExtram(volatile uint32_t *addr, uint32_t compare, uint32_t *set)
-{
-#if defined(CONFIG_SPIRAM)
-    compare_and_set_extram(addr, compare, set);
-#endif
-}
 
 static inline bool __attribute__((always_inline)) vPortCPUAcquireMutexTimeout(portMUX_TYPE *mux, int timeout)
 {
@@ -363,15 +352,46 @@ static inline bool IRAM_ATTR xPortCanYield(void)
 
 void vPortSetStackWatchpoint(void *pxStackStart);
 
-#define portVALID_TCB_MEM(ptr)      (esp_ptr_internal(ptr) && esp_ptr_byte_accessible(ptr))
-#ifdef CONFIG_SPIRAM_ALLOW_STACK_EXTERNAL_MEMORY
-#define portVALID_STACK_MEM(ptr)    (esp_ptr_byte_accessible(ptr))
-#else
-#define portVALID_STACK_MEM(ptr)    (esp_ptr_internal(ptr) && esp_ptr_byte_accessible(ptr))
-#endif
+// -------------------- Heap Related -----------------------
 
-#define portTcbMemoryCaps               (MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT)
-#define portStackMemoryCaps             (MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT)
+/**
+ * @brief Checks if a given piece of memory can be used to store a task's TCB
+ *
+ * - Defined in heap_idf.c
+ *
+ * @param ptr Pointer to memory
+ * @return true Memory can be used to store a TCB
+ * @return false Otherwise
+ */
+bool xPortCheckValidTCBMem(const void *ptr);
+
+/**
+ * @brief Checks if a given piece of memory can be used to store a task's stack
+ *
+ * - Defined in heap_idf.c
+ *
+ * @param ptr Pointer to memory
+ * @return true Memory can be used to store a task stack
+ * @return false Otherwise
+ */
+bool xPortcheckValidStackMem(const void *ptr);
+
+#define portVALID_TCB_MEM(ptr)      xPortCheckValidTCBMem(ptr)
+#define portVALID_STACK_MEM(ptr)    xPortcheckValidStackMem(ptr)
+
+/* ------------------------------------------------------ Misc ---------------------------------------------------------
+ * - Miscellaneous porting macros
+ * - These are not part of the FreeRTOS porting interface, but are used by other FreeRTOS dependent components
+ * ------------------------------------------------------------------------------------------------------------------ */
+
+// --------------------- App-Trace -------------------------
+
+#if CONFIG_APPTRACE_SV_ENABLE
+extern volatile BaseType_t xPortSwitchFlag;
+#define os_task_switch_is_pended(_cpu_) (xPortSwitchFlag)
+#else
+#define os_task_switch_is_pended(_cpu_) (false)
+#endif
 
 // --------------- Compatibility Includes ------------------
 /*

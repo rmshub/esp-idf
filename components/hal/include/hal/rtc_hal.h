@@ -9,9 +9,16 @@
 #include <stdint.h>
 #include "soc/soc_caps.h"
 #include "hal/gpio_types.h"
+
+#if !SOC_LP_TIMER_SUPPORTED
 #include "hal/rtc_cntl_ll.h"
-#if !CONFIG_IDF_TARGET_ESP32C3 && !CONFIG_IDF_TARGET_ESP32H2 && !CONFIG_IDF_TARGET_ESP32C2
+#endif
+#if SOC_RTCIO_INPUT_OUTPUT_SUPPORTED
 #include "hal/rtc_io_ll.h"
+#endif
+
+#ifdef __cplusplus
+extern "C" {
 #endif
 
 typedef struct rtc_cntl_sleep_retent {
@@ -39,23 +46,25 @@ typedef struct rtc_cntl_sleep_retent {
 
 #define RTC_HAL_DMA_LINK_NODE_SIZE      (16)
 
-#if SOC_PM_SUPPORT_EXT_WAKEUP
+#if SOC_PM_SUPPORT_EXT1_WAKEUP
 
-#define rtc_hal_ext1_get_wakeup_pins()                    rtc_cntl_ll_ext1_get_wakeup_pins()
+#define rtc_hal_ext1_get_wakeup_status()                  rtc_cntl_ll_ext1_get_wakeup_status()
+
+#define rtc_hal_ext1_clear_wakeup_status()                rtc_cntl_ll_ext1_clear_wakeup_status()
 
 #define rtc_hal_ext1_set_wakeup_pins(mask, mode)          rtc_cntl_ll_ext1_set_wakeup_pins(mask, mode)
 
 #define rtc_hal_ext1_clear_wakeup_pins()                  rtc_cntl_ll_ext1_clear_wakeup_pins()
 
-#endif
+#define rtc_hal_ext1_get_wakeup_pins()                    rtc_cntl_ll_ext1_get_wakeup_pins()
 
-#if SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+#endif // SOC_PM_SUPPORT_EXT1_WAKEUP
 
-#define rtc_hal_gpio_get_wakeup_pins()                    rtc_cntl_ll_gpio_get_wakeup_pins()
+#if SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP && (SOC_RTCIO_PIN_COUNT == 0)
 
-#define rtc_hal_gpio_clear_wakeup_pins()                  rtc_cntl_ll_gpio_clear_wakeup_pins()
+#define rtc_hal_gpio_get_wakeup_status()                  rtc_cntl_ll_gpio_get_wakeup_status()
 
-#define rtc_hal_gpio_set_wakeup_pins()                    rtc_cntl_ll_gpio_set_wakeup_pins()
+#define rtc_hal_gpio_clear_wakeup_status()                rtc_cntl_ll_gpio_clear_wakeup_status()
 
 #endif
 
@@ -85,3 +94,7 @@ void rtc_cntl_hal_disable_tagmem_retention(void *addr);
 #define rtc_hal_ulp_wakeup_enable()                       rtc_cntl_ll_ulp_wakeup_enable()
 
 #define rtc_hal_ulp_int_clear()                           rtc_cntl_ll_ulp_int_clear()
+
+#ifdef __cplusplus
+}
+#endif

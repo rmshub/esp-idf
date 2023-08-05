@@ -10,14 +10,18 @@ Wi-Fi
     :maxdepth: 1
 
     esp_now
-    esp-wifi-mesh
+    :SOC_WIFI_MESH_SUPPORT: esp-wifi-mesh
     esp_smartconfig
     esp_wifi
     esp_dpp
+    esp_nan
 
 Code examples for the Wi-Fi API are provided in the :example:`wifi` directory of ESP-IDF examples.
 
-Code examples for ESP-WIFI-MESH are provided in the :example:`mesh` directory of ESP-IDF examples.
+.. only:: SOC_WIFI_MESH_SUPPORT
+
+      Code examples for ESP-WIFI-MESH are provided in the :example:`mesh` directory of ESP-IDF examples.
+
 
 
 Ethernet
@@ -39,6 +43,7 @@ Thread
    esp_openthread
 
 Thread is an IPv6-based mesh networking technology for IoT.
+
 Code examples for the Thread API are provided in the :example:`openthread` directory of ESP-IDF examples.
 
 ESP-NETIF
@@ -59,7 +64,7 @@ IP Network Layer
 
 Code examples for TCP/IP socket APIs are provided in the :example:`protocols/sockets` directory of ESP-IDF examples.
 
-Application Layer 
+Application Layer
 =================
 
 Documentation for Application layer network protocols (above the IP Network layer) are provided in :doc:`../protocols/index`.

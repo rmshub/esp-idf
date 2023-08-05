@@ -8,6 +8,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include "esp_err.h"
 
 #ifdef __cplusplus
@@ -64,6 +65,7 @@ extern "C" {
 #define ETS_INTERNAL_SW0_INTR_SOURCE        -4 ///< Software int source 1
 #define ETS_INTERNAL_SW1_INTR_SOURCE        -5 ///< Software int source 2
 #define ETS_INTERNAL_PROFILING_INTR_SOURCE  -6 ///< Int source for profiling
+#define ETS_INTERNAL_UNUSED_INTR_SOURCE    -99 ///< Interrupt is not assigned to any source
 
 /**@}*/
 
@@ -305,6 +307,13 @@ static inline int esp_intr_flags_to_level(int flags)
 {
     return __builtin_ffs((flags & ESP_INTR_FLAG_LEVELMASK) >> 1) + 1;
 }
+
+/**
+ * @brief Dump the status of allocated interrupts
+ * @param stream  The stream to dump to, if NULL then stdout is used
+ * @return ESP_OK on success
+ */
+esp_err_t esp_intr_dump(FILE *stream);
 
 /**@}*/
 

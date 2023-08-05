@@ -1,4 +1,6 @@
 if(CONFIG_OPENTHREAD_ENABLED)
+    idf_build_get_property(idf_target IDF_TARGET)
+
     set(public_include_dirs
         "include"
         "openthread/include")
@@ -14,6 +16,8 @@ if(CONFIG_OPENTHREAD_ENABLED)
         "private_include")
 
         set(src_dirs
+        "src"
+        "src/port"
         "openthread/examples/platforms/utils"
         "openthread/src/core/api"
         "openthread/src/core/common"
@@ -33,16 +37,20 @@ if(CONFIG_OPENTHREAD_ENABLED)
 
     if(CONFIG_OPENTHREAD_FTD OR CONFIG_OPENTHREAD_MTD)
         list(APPEND src_dirs
-            "openthread/examples/apps/cli"
             "openthread/src/core/backbone_router"
             "openthread/src/core/coap"
             "openthread/src/core/meshcop"
             "openthread/src/core/net"
-            "openthread/src/cli"
             "openthread/src/lib/platform")
 
-        list(APPEND exclude_srcs
-            "openthread/examples/apps/cli/main.c")
+        if(CONFIG_OPENTHREAD_CLI)
+            list(APPEND src_dirs
+                "openthread/examples/apps/cli"
+                "openthread/src/cli")
+
+            list(APPEND exclude_srcs
+                "openthread/examples/apps/cli/main.c")
+        endif()
 
     elseif(CONFIG_OPENTHREAD_RADIO)
         list(APPEND src_dirs
@@ -50,8 +58,10 @@ if(CONFIG_OPENTHREAD_ENABLED)
             "openthread/examples/apps/ncp")
 
         list(APPEND exclude_srcs
+            "src/port/esp_openthread_state.c"
             "openthread/examples/apps/ncp/main.c"
             "openthread/src/core/api/backbone_router_api.cpp"
+            "openthread/src/core/api/child_supervision_api.cpp"
             "openthread/src/core/api/dataset_api.cpp"
             "openthread/src/core/api/dns_api.cpp"
             "openthread/src/core/api/entropy_api.cpp"
@@ -59,8 +69,11 @@ if(CONFIG_OPENTHREAD_ENABLED)
             "openthread/src/core/api/icmp6_api.cpp"
             "openthread/src/core/api/ip6_api.cpp"
             "openthread/src/core/api/link_api.cpp"
+            "openthread/src/core/api/link_metrics_api.cpp"
             "openthread/src/core/api/message_api.cpp"
+            "openthread/src/core/api/nat64_api.cpp"
             "openthread/src/core/api/netdata_api.cpp"
+            "openthread/src/core/api/netdiag_api.cpp"
             "openthread/src/core/api/random_crypto_api.cpp"
             "openthread/src/core/api/tcp_api.cpp"
             "openthread/src/core/api/udp_api.cpp"
@@ -77,9 +90,12 @@ if(CONFIG_OPENTHREAD_ENABLED)
             "openthread/src/core/mac/mac_links.cpp"
             "openthread/src/core/thread/announce_begin_server.cpp"
             "openthread/src/core/thread/announce_sender.cpp"
+            "openthread/src/core/thread/address_resolver.cpp"
+            "openthread/src/core/thread/child_supervision.cpp"
             "openthread/src/core/thread/discover_scanner.cpp"
             "openthread/src/core/thread/energy_scan_server.cpp"
             "openthread/src/core/thread/key_manager.cpp"
+            "openthread/src/core/thread/link_metrics.cpp"
             "openthread/src/core/thread/lowpan.cpp"
             "openthread/src/core/thread/mesh_forwarder.cpp"
             "openthread/src/core/thread/mesh_forwarder_ftd.cpp"
@@ -91,11 +107,24 @@ if(CONFIG_OPENTHREAD_ENABLED)
             "openthread/src/core/thread/network_data_leader_ftd.cpp"
             "openthread/src/core/thread/network_data_types.cpp"
             "openthread/src/core/thread/network_data_service.cpp"
+            "openthread/src/core/thread/network_diagnostic.cpp"
             "openthread/src/core/thread/panid_query_server.cpp"
             "openthread/src/core/thread/thread_netif.cpp"
             "openthread/src/core/thread/tmf.cpp"
             "openthread/src/core/thread/topology.cpp"
             "openthread/src/core/utils/child_supervision.cpp")
+    endif()
+
+    if(CONFIG_OPENTHREAD_RADIO_NATIVE)
+        list(APPEND exclude_srcs
+            "src/port/esp_openthread_radio_spinel.cpp"
+            "src/port/esp_spi_spinel_interface.cpp"
+            "src/port/esp_uart_spinel_interface.cpp"
+            )
+    elseif(CONFIG_OPENTHREAD_RADIO_SPINEL_UART OR CONFIG_OPENTHREAD_RADIO_SPINEL_SPI)
+        list(APPEND exclude_srcs
+            "src/port/esp_openthread_radio.c"
+            "src/port/esp_openthread_sleep.c")
     endif()
 
     if(CONFIG_OPENTHREAD_BORDER_ROUTER)
@@ -107,6 +136,16 @@ if(CONFIG_OPENTHREAD_ENABLED)
         set_source_files_properties("openthread/src/core/net/srp_server.cpp"
             PROPERTIES COMPILE_FLAGS
             -Wno-maybe-uninitialized)
+    endif()
+
+    if(NOT CONFIG_OPENTHREAD_DNS64_CLIENT)
+        list(APPEND exclude_srcs
+            "src/esp_openthread_dns64.c")
+    endif()
+
+    if(NOT CONFIG_FREERTOS_USE_TICKLESS_IDLE)
+        list(APPEND exclude_srcs
+            "src/port/esp_openthread_sleep.c")
     endif()
 
     if(CONFIG_OPENTHREAD_FTD)
@@ -141,7 +180,10 @@ idf_component_register(SRC_DIRS "${src_dirs}"
                        EXCLUDE_SRCS "${exclude_srcs}"
                        INCLUDE_DIRS "${public_include_dirs}"
                        PRIV_INCLUDE_DIRS "${private_include_dirs}"
-                       REQUIRES mbedtls ieee802154 console lwip)
+                       REQUIRES esp_netif lwip driver
+                       LDFRAGMENTS linker.lf
+                       PRIV_REQUIRES console esp_event esp_partition esp_timer
+                                     ieee802154 mbedtls nvs_flash)
 
 if(CONFIG_OPENTHREAD_ENABLED)
     if(CONFIG_OPENTHREAD_RADIO)
@@ -161,54 +203,20 @@ if(CONFIG_OPENTHREAD_ENABLED)
         "PACKAGE_VERSION=\"${IDF_VERSION_FOR_OPENTHREAD_PACKAGE}-${OPENTHREAD_VERSION}\""
         "OPENTHREAD_BUILD_DATETIME=\"${OT_BUILD_TIMESTAMP}\""
         )
+
     if(CONFIG_OPENTHREAD_RADIO)
         file(WRITE ${CMAKE_BINARY_DIR}/rcp_version ${OT_FULL_VERSION_STRING})
     endif()
 
-    if(CONFIG_OPENTHREAD_ESP_LIB_FROM_INTERNAL_SRC)
-        idf_component_get_property(openthread_port_lib openthread_port COMPONENT_LIB)
-        idf_component_get_property(lwip_lib lwip COMPONENT_LIB)
-        idf_component_get_property(esp_netif_lib esp_netif COMPONENT_LIB)
-        idf_component_get_property(esp_system_lib esp_system COMPONENT_LIB)
-        target_link_libraries(${COMPONENT_LIB} PUBLIC
-                              $<TARGET_FILE:${openthread_port_lib}>
-                              $<TARGET_FILE:${esp_system_lib}>)
-        target_link_libraries(${COMPONENT_LIB} PUBLIC
-                              $<TARGET_FILE:${lwip_lib}>
-                              $<TARGET_FILE:${esp_netif_lib}>
-                              $<TARGET_FILE:${openthread_port_lib}>
-                              $<TARGET_FILE:${esp_netif_lib}>
-                              $<TARGET_FILE:${lwip_lib}>)
-        if(CONFIG_OPENTHREAD_BORDER_ROUTER)
+    if(CONFIG_OPENTHREAD_BORDER_ROUTER)
+        if($ENV{OPENTHREAD_ESP_BR_LIB_FROM_INTERNAL_SRC})
             idf_component_get_property(openthread_br_lib openthread_br COMPONENT_LIB)
             target_link_libraries(${COMPONENT_LIB} PUBLIC $<TARGET_FILE:${openthread_br_lib}>)
-        endif()
-
-    else()
-        if(IDF_TARGET STREQUAL "esp32h2")
-            if(CONFIG_IDF_TARGET_ESP32H2_BETA_VERSION_1)
-                add_prebuilt_library(openthread_port
-                    "${CMAKE_CURRENT_SOURCE_DIR}/lib/${idf_target}/rev1/libopenthread_port.a"
-                    REQUIRES openthread)
-            endif()
-            if(CONFIG_IDF_TARGET_ESP32H2_BETA_VERSION_2)
-                add_prebuilt_library(openthread_port
-                    "${CMAKE_CURRENT_SOURCE_DIR}/lib/${idf_target}/rev2/libopenthread_port.a"
-                    REQUIRES openthread)
-            endif()
         else()
-            add_prebuilt_library(openthread_port "${CMAKE_CURRENT_SOURCE_DIR}/lib/${idf_target}/libopenthread_port.a"
-                                REQUIRES openthread)
-        endif()
-        add_prebuilt_library(openthread_br "${CMAKE_CURRENT_SOURCE_DIR}/lib/${idf_target}/libopenthread_br.a"
-                            REQUIRES openthread)
-
-        target_link_libraries(${COMPONENT_LIB} INTERFACE openthread_port)
-
-        if(CONFIG_OPENTHREAD_BORDER_ROUTER)
+            add_prebuilt_library(openthread_br "${CMAKE_CURRENT_SOURCE_DIR}/lib/${idf_target}/libopenthread_br.a"
+                                 REQUIRES openthread)
             target_link_libraries(${COMPONENT_LIB} INTERFACE openthread_br)
         endif()
-
     endif()
 
 endif()

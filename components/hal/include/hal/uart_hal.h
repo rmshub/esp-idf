@@ -60,6 +60,15 @@ typedef struct {
 #define uart_hal_ena_intr_mask(hal, mask)  uart_ll_ena_intr_mask((hal)->dev, mask)
 
 /**
+ * @brief Get the UART raw interrupt status
+ *
+ * @param  hal Context of the HAL layer
+ *
+ * @return UART raw interrupt status
+ */
+#define uart_hal_get_intraw_mask(hal) uart_ll_get_intraw_mask((hal)->dev)
+
+/**
  * @brief Get the UART interrupt status
  *
  * @param  hal Context of the HAL layer
@@ -186,7 +195,7 @@ void uart_hal_init(uart_hal_context_t *hal, uart_port_t uart_num);
  *
  * @return None
  */
-void uart_hal_set_sclk(uart_hal_context_t *hal, uart_sclk_t sclk);
+void uart_hal_set_sclk(uart_hal_context_t *hal, soc_module_clk_t sclk);
 
 /**
  * @brief Get the UART source clock type
@@ -196,17 +205,18 @@ void uart_hal_set_sclk(uart_hal_context_t *hal, uart_sclk_t sclk);
  *
  * @return None
  */
-void uart_hal_get_sclk(uart_hal_context_t *hal, uart_sclk_t *sclk);
+void uart_hal_get_sclk(uart_hal_context_t *hal, soc_module_clk_t *sclk);
 
 /**
  * @brief  Configure the UART baud-rate and select the source clock
  *
  * @param  hal Context of the HAL layer
  * @param  baud_rate The baud-rate to be set
+ * @param  sclk_freq Frequency of the clock source of UART, in Hz.
  *
  * @return None
  */
-void uart_hal_set_baudrate(uart_hal_context_t *hal, uint32_t baud_rate);
+void uart_hal_set_baudrate(uart_hal_context_t *hal, uint32_t baud_rate, uint32_t sclk_freq);
 
 /**
  * @brief  Configure the UART stop bit
@@ -408,10 +418,11 @@ void uart_hal_get_parity(uart_hal_context_t *hal, uart_parity_t *parity_mode);
  *
  * @param  hal Context of the HAL layer
  * @param  baud_rate Pointer to accept the current baud-rate
+ * @param  sclk_freq Frequency of the clock source of UART, in Hz.
  *
  * @return None
  */
-void uart_hal_get_baudrate(uart_hal_context_t *hal, uint32_t *baud_rate);
+void uart_hal_get_baudrate(uart_hal_context_t *hal, uint32_t *baud_rate, uint32_t sclk_freq);
 
 /**
  * @brief Get the hw flow control configuration

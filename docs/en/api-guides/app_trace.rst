@@ -292,7 +292,7 @@ How To Use It
 
 In order to use logging via trace module, users need to perform the following steps:
 
-1. On the target side, the special vprintf-like function ``esp_apptrace_vprintf`` needs to be installed. It sends log data to the host. Example code is provided in :example:`system/app_trace_to_host`.
+1. On the target side, the special vprintf-like function :cpp:func:`esp_apptrace_vprintf` needs to be installed. It sends log data to the host. An example is ``esp_log_set_vprintf(esp_apptrace_vprintf);``. To send log data to UART again, use ``esp_log_set_vprintf(vprintf);``.
 2. Follow instructions in items 2-5 in `Application Specific Tracing`_.
 3. To print out collected log records, run the following command in terminal: ``$IDF_PATH/tools/esp_app_trace/logtrace_proc.py /path/to/trace/file /path/to/program/elf/file``.
 
@@ -427,7 +427,7 @@ Good instructions on how to install, configure, and visualize data in Impulse fr
 
 .. note::
 
-    ESP-IDF uses its own mapping for SystemView FreeRTOS events IDs, so users need to replace the original file mapping ``$SYSVIEW_INSTALL_DIR/Description/SYSVIEW_FreeRTOS.txt`` with ``$IDF_PATH/docs/api-guides/SYSVIEW_FreeRTOS.txt``. Also, contents of that IDF-specific file should be used when configuring SystemView serializer using the above link.
+    ESP-IDF uses its own mapping for SystemView FreeRTOS events IDs, so users need to replace the original file mapping ``$SYSVIEW_INSTALL_DIR/Description/SYSVIEW_FreeRTOS.txt`` with ``$IDF_PATH/tools/esp_app_trace/SYSVIEW_FreeRTOS.txt``. Also, contents of that IDF-specific file should be used when configuring SystemView serializer using the above link.
 
 .. only:: not CONFIG_FREERTOS_UNICORE
 

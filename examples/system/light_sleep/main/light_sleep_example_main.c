@@ -50,12 +50,23 @@ static void light_sleep_task(void *args)
                  * Otherwise the chip may fall sleep again before running uart task */
                 vTaskDelay(1);
                 break;
+#if CONFIG_IDF_TARGET_ESP32S2 || CONFIG_IDF_TARGET_ESP32S3
+            case ESP_SLEEP_WAKEUP_TOUCHPAD:
+                wakeup_reason = "touch";
+                break;
+#endif
             default:
                 wakeup_reason = "other";
                 break;
         }
+#if CONFIG_NEWLIB_NANO_FORMAT
+        /* printf in newlib-nano does not support %ll format, causing example test fail */
+        printf("Returned from light sleep, reason: %s, t=%d ms, slept for %d ms\n",
+                wakeup_reason, (int) (t_after_us / 1000), (int) ((t_after_us - t_before_us) / 1000));
+#else
         printf("Returned from light sleep, reason: %s, t=%lld ms, slept for %lld ms\n",
                 wakeup_reason, t_after_us / 1000, (t_after_us - t_before_us) / 1000);
+#endif
         if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_GPIO) {
             /* Waiting for the gpio inactive, or the chip will continously trigger wakeup*/
             example_wait_gpio_inactive();
@@ -72,6 +83,10 @@ void app_main(void)
     example_register_timer_wakeup();
     /* Enable wakeup from light sleep by uart */
     example_register_uart_wakeup();
+#if CONFIG_IDF_TARGET_ESP32S2 || CONFIG_IDF_TARGET_ESP32S3
+    /* Enable wakeup from light sleep by touch element */
+    example_register_touch_wakeup();
+#endif
 
     xTaskCreate(light_sleep_task, "light_sleep_task", 4096, NULL, 6, NULL);
 }

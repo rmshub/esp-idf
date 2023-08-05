@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -18,13 +18,29 @@
 extern "C" {
 #endif
 
+/*
+ Definitions for the deepsleep prepare callbacks
+*/
+typedef void (*esp_deep_sleep_cb_t)(void);
+
 /**
  * @brief Logic function used for EXT1 wakeup mode.
  */
+#if SOC_PM_SUPPORT_EXT1_WAKEUP
+#if CONFIG_IDF_TARGET_ESP32
 typedef enum {
     ESP_EXT1_WAKEUP_ALL_LOW = 0,    //!< Wake the chip when all selected GPIOs go low
     ESP_EXT1_WAKEUP_ANY_HIGH = 1    //!< Wake the chip when any of the selected GPIOs go high
 } esp_sleep_ext1_wakeup_mode_t;
+#else
+typedef enum {
+    ESP_EXT1_WAKEUP_ANY_LOW = 0,    //!< Wake the chip when any of the selected GPIOs go low
+    ESP_EXT1_WAKEUP_ANY_HIGH = 1,    //!< Wake the chip when any of the selected GPIOs go high
+    ESP_EXT1_WAKEUP_ALL_LOW __attribute__((deprecated("wakeup mode \"ALL_LOW\" is no longer supported after ESP32, \
+    please use ESP_EXT1_WAKEUP_ANY_LOW instead"))) = ESP_EXT1_WAKEUP_ANY_LOW
+} esp_sleep_ext1_wakeup_mode_t;
+#endif
+#endif
 
 #if SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
 typedef enum {
@@ -47,13 +63,31 @@ typedef enum {
     ESP_PD_DOMAIN_RTC_FAST_MEM,    //!< RTC fast memory
 #endif
     ESP_PD_DOMAIN_XTAL,            //!< XTAL oscillator
+#if SOC_PM_SUPPORT_XTAL32K_PD
+    ESP_PD_DOMAIN_XTAL32K,         //!< External 32 kHz XTAL oscillator
+#endif
+#if SOC_PM_SUPPORT_RC32K_PD
+    ESP_PD_DOMAIN_RC32K,           //!< Internal 32 kHz RC oscillator
+#endif
+#if SOC_PM_SUPPORT_RC_FAST_PD
+    ESP_PD_DOMAIN_RC_FAST,         //!< Internal Fast oscillator
+#endif
 #if SOC_PM_SUPPORT_CPU_PD
     ESP_PD_DOMAIN_CPU,             //!< CPU core
 #endif
-    ESP_PD_DOMAIN_RTC8M,           //!< Internal 8M oscillator
+#if SOC_PM_SUPPORT_VDDSDIO_PD
     ESP_PD_DOMAIN_VDDSDIO,         //!< VDD_SDIO
+#endif
+#if SOC_PM_SUPPORT_MODEM_PD
+    ESP_PD_DOMAIN_MODEM,           //!< MODEM, includes WiFi, Bluetooth and IEEE802.15.4
+#endif
+#if SOC_PM_SUPPORT_TOP_PD
+    ESP_PD_DOMAIN_TOP,             //!< SoC TOP
+#endif
     ESP_PD_DOMAIN_MAX              //!< Number of domains
 } esp_sleep_pd_domain_t;
+
+#define ESP_PD_DOMAIN_RTC8M _Pragma("GCC warning \"'ESP_PD_DOMAIN_RTC8M' enum is deprecated\"") ESP_PD_DOMAIN_RC_FAST
 
 /**
  * @brief Power down options
@@ -75,7 +109,7 @@ typedef enum {
     ESP_SLEEP_WAKEUP_TIMER,        //!< Wakeup caused by timer
     ESP_SLEEP_WAKEUP_TOUCHPAD,     //!< Wakeup caused by touchpad
     ESP_SLEEP_WAKEUP_ULP,          //!< Wakeup caused by ULP program
-    ESP_SLEEP_WAKEUP_GPIO,         //!< Wakeup caused by GPIO (light sleep only)
+    ESP_SLEEP_WAKEUP_GPIO,         //!< Wakeup caused by GPIO (light sleep only on ESP32, S2 and S3)
     ESP_SLEEP_WAKEUP_UART,         //!< Wakeup caused by UART (light sleep only)
     ESP_SLEEP_WAKEUP_WIFI,              //!< Wakeup caused by WIFI (light sleep only)
     ESP_SLEEP_WAKEUP_COCPU,             //!< Wakeup caused by COCPU int
@@ -83,8 +117,21 @@ typedef enum {
     ESP_SLEEP_WAKEUP_BT,           //!< Wakeup caused by BT (light sleep only)
 } esp_sleep_source_t;
 
+/**
+ * @brief Sleep mode
+ */
+typedef enum {
+    ESP_SLEEP_MODE_LIGHT_SLEEP,   //!< light sleep mode
+    ESP_SLEEP_MODE_DEEP_SLEEP     //!< deep sleep mode
+} esp_sleep_mode_t;
+
 /* Leave this type define for compatibility */
 typedef esp_sleep_source_t esp_sleep_wakeup_cause_t;
+
+enum {
+    ESP_ERR_SLEEP_REJECT = ESP_ERR_INVALID_STATE,
+    ESP_ERR_SLEEP_TOO_SHORT_SLEEP_DURATION = ESP_ERR_INVALID_ARG,
+};
 
 /**
  * @brief Disable wakeup source
@@ -107,10 +154,8 @@ esp_err_t esp_sleep_disable_wakeup_source(esp_sleep_source_t source);
 #if SOC_ULP_SUPPORTED
 /**
  * @brief Enable wakeup by ULP coprocessor
- * @note In revisions 0 and 1 of the ESP32, ULP wakeup source
- *       cannot be used when RTC_PERIPH power domain is forced
- *       to be powered on (ESP_PD_OPTION_ON) or when
- *       ext0 wakeup source is used.
+ * @note On ESP32, ULP wakeup source cannot be used when RTC_PERIPH power domain is forced,
+ *       to be powered on (ESP_PD_OPTION_ON) or when ext0 wakeup source is used.
  * @return
  *      - ESP_OK on success
  *      - ESP_ERR_NOT_SUPPORTED if additional current by touch (CONFIG_RTC_EXT_CRYST_ADDIT_CURRENT) is enabled.
@@ -129,15 +174,12 @@ esp_err_t esp_sleep_enable_ulp_wakeup(void);
  */
 esp_err_t esp_sleep_enable_timer_wakeup(uint64_t time_in_us);
 
-#if SOC_TOUCH_SENSOR_NUM > 0
-
+#if SOC_TOUCH_SENSOR_SUPPORTED
 /**
  * @brief Enable wakeup by touch sensor
  *
- * @note In revisions 0 and 1 of the ESP32, touch wakeup source
- *       can not be used when RTC_PERIPH power domain is forced
- *       to be powered on (ESP_PD_OPTION_ON) or when ext0 wakeup
- *       source is used.
+ * @note On ESP32, touch wakeup source can not be used when RTC_PERIPH power domain is forced
+ *       to be powered on (ESP_PD_OPTION_ON) or when ext0 wakeup source is used.
  *
  * @note The FSM mode of the touch button should be configured
  *       as the timer trigger mode.
@@ -157,8 +199,7 @@ esp_err_t esp_sleep_enable_touchpad_wakeup(void);
  * @return touch pad which caused wakeup
  */
 touch_pad_t esp_sleep_get_touchpad_wakeup_status(void);
-
-#endif // SOC_TOUCH_SENSOR_NUM > 0
+#endif // SOC_TOUCH_SENSOR_SUPPORTED
 
 /**
  * @brief Returns true if a GPIO number is valid for use as wakeup source.
@@ -171,8 +212,7 @@ touch_pad_t esp_sleep_get_touchpad_wakeup_status(void);
  */
 bool esp_sleep_is_valid_wakeup_gpio(gpio_num_t gpio_num);
 
-#if SOC_PM_SUPPORT_EXT_WAKEUP
-
+#if SOC_PM_SUPPORT_EXT0_WAKEUP
 /**
  * @brief Enable wakeup using a pin
  *
@@ -186,11 +226,13 @@ bool esp_sleep_is_valid_wakeup_gpio(gpio_num_t gpio_num);
  *       configured in esp_deep_sleep_start/esp_light_sleep_start,
  *       immediately before entering sleep mode.
  *
- * @note In revisions 0 and 1 of the ESP32, ext0 wakeup source
- *       can not be used together with touch or ULP wakeup sources.
+ * @note ESP32: ext0 wakeup source can not be used together with touch or ULP wakeup sources.
  *
- * @param gpio_num  GPIO number used as wakeup source. Only GPIOs which are have RTC
- *             functionality can be used: 0,2,4,12-15,25-27,32-39.
+ * @param gpio_num  GPIO number used as wakeup source. Only GPIOs with the RTC
+ *        functionality can be used. For different SoCs, the related GPIOs are:
+ *          - ESP32: 0, 2, 4, 12-15, 25-27, 32-39;
+ *          - ESP32-S2: 0-21;
+ *          - ESP32-S3: 0-21.
  * @param level  input level which will trigger wakeup (0=low, 1=high)
  * @return
  *      - ESP_OK on success
@@ -199,7 +241,9 @@ bool esp_sleep_is_valid_wakeup_gpio(gpio_num_t gpio_num);
  *      - ESP_ERR_INVALID_STATE if wakeup triggers conflict
  */
 esp_err_t esp_sleep_enable_ext0_wakeup(gpio_num_t gpio_num, int level);
+#endif // SOC_PM_SUPPORT_EXT0_WAKEUP
 
+#if SOC_PM_SUPPORT_EXT1_WAKEUP
 /**
  * @brief Enable wakeup using multiple pins
  *
@@ -220,8 +264,12 @@ esp_err_t esp_sleep_enable_ext0_wakeup(gpio_num_t gpio_num, int level);
  *       kept enabled using esp_sleep_pd_config function.
  *
  * @param mask  bit mask of GPIO numbers which will cause wakeup. Only GPIOs
- *              which have RTC functionality can be used in this bit map:
- *              0,2,4,12-15,25-27,32-39.
+ *              which have RTC functionality can be used in this bit map.
+ *              For different SoCs, the related GPIOs are:
+ *                - ESP32: 0, 2, 4, 12-15, 25-27, 32-39;
+ *                - ESP32-S2: 0-21;
+ *                - ESP32-S3: 0-21.
+ *                - ESP32-C6: 0-7.
  * @param mode select logic function used to determine wakeup condition:
  *            - ESP_EXT1_WAKEUP_ALL_LOW: wake up when all selected GPIOs are low
  *            - ESP_EXT1_WAKEUP_ANY_HIGH: wake up when any of the selected GPIOs is high
@@ -232,7 +280,7 @@ esp_err_t esp_sleep_enable_ext0_wakeup(gpio_num_t gpio_num, int level);
  */
 esp_err_t esp_sleep_enable_ext1_wakeup(uint64_t mask, esp_sleep_ext1_wakeup_mode_t mode);
 
-#endif // SOC_PM_SUPPORT_EXT_WAKEUP
+#endif // SOC_PM_SUPPORT_EXT1_WAKEUP
 
 #if SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
 /**
@@ -241,25 +289,25 @@ esp_err_t esp_sleep_enable_ext1_wakeup(uint64_t mask, esp_sleep_ext1_wakeup_mode
  * This function enables an IO pin to wake up the chip from deep sleep.
  *
  * @note This function does not modify pin configuration. The pins are
- *       configured in esp_deep_sleep_start/esp_light_sleep_start,
- *       immediately before entering sleep mode.
+ *       configured inside esp_deep_sleep_start, immediately before entering sleep mode.
  *
  * @note You don't need to care to pull-up or pull-down before using this
- *       function, because this will be done in esp_deep_sleep_start/esp_light_sleep_start
- *       based on param mask you give. BTW, when you use low level to wake up the
- *       chip, we strongly recommand you to add external registors (pull-up).
+ *       function, because this will be set internally in esp_deep_sleep_start
+ *       based on the wakeup mode. BTW, when you use low level to wake up the
+ *       chip, we strongly recommend you to add external resistors (pull-up).
  *
  * @param gpio_pin_mask  Bit mask of GPIO numbers which will cause wakeup. Only GPIOs
- *              which are have RTC functionality can be used in this bit map.
+ *              which have RTC functionality (pads that powered by VDD3P3_RTC) can be used in this bit map.
  * @param mode Select logic function used to determine wakeup condition:
  *            - ESP_GPIO_WAKEUP_GPIO_LOW: wake up when the gpio turn to low.
  *            - ESP_GPIO_WAKEUP_GPIO_HIGH: wake up when the gpio turn to high.
  * @return
  *      - ESP_OK on success
- *      - ESP_ERR_INVALID_ARG if gpio num is more than 5 or mode is invalid,
+ *      - ESP_ERR_INVALID_ARG if the mask contains any invalid deep sleep wakeup pin or wakeup mode is invalid
  */
 esp_err_t esp_deep_sleep_enable_gpio_wakeup(uint64_t gpio_pin_mask, esp_deepsleep_gpio_wake_up_mode_t mode);
 #endif
+
 /**
  * @brief Enable wakeup from light sleep using GPIOs
  *
@@ -272,8 +320,7 @@ esp_err_t esp_deep_sleep_enable_gpio_wakeup(uint64_t gpio_pin_mask, esp_deepslee
  * wakeup level, for each GPIO which is used for wakeup.
  * Then call this function to enable wakeup feature.
  *
- * @note In revisions 0 and 1 of the ESP32, GPIO wakeup source
- *       can not be used together with touch or ULP wakeup sources.
+ * @note On ESP32, GPIO wakeup source can not be used together with touch or ULP wakeup sources.
  *
  * @return
  *      - ESP_OK on success
@@ -329,6 +376,20 @@ esp_err_t esp_sleep_enable_wifi_wakeup(void);
 esp_err_t esp_sleep_disable_wifi_wakeup(void);
 
 /**
+ * @brief Enable beacon wakeup by WiFi MAC, it will wake up the system into modem state
+ * @return
+ *      - ESP_OK on success
+ */
+esp_err_t esp_sleep_enable_wifi_beacon_wakeup(void);
+
+/**
+ * @brief Disable beacon wakeup by WiFi MAC
+ * @return
+ *      - ESP_OK on success
+ */
+esp_err_t esp_sleep_disable_wifi_beacon_wakeup(void);
+
+/**
  * @brief Get the bit mask of GPIOs which caused wakeup (ext1)
  *
  * If wakeup was caused by another source, this function will return 0.
@@ -360,21 +421,27 @@ uint64_t esp_sleep_get_gpio_wakeup_status(void);
  *      - ESP_ERR_INVALID_ARG if either of the arguments is out of range
  */
 esp_err_t esp_sleep_pd_config(esp_sleep_pd_domain_t domain,
-                                   esp_sleep_pd_option_t option);
+                              esp_sleep_pd_option_t option);
 
 /**
  * @brief Enter deep sleep with the configured wakeup options
  *
- * This function does not return.
+ * @note In general, the function does not return, but if the sleep is rejected,
+ * then it returns from it.
+ *
+ * The reason for the rejection can be such as a short sleep time.
  */
-void esp_deep_sleep_start(void) __attribute__((noreturn));
+void esp_deep_sleep_start(void);
 
 /**
  * @brief Enter light sleep with the configured wakeup options
  *
  * @return
  *  - ESP_OK on success (returned after wakeup)
- *  - ESP_ERR_INVALID_STATE if WiFi or BT is not stopped
+ *  - ESP_ERR_SLEEP_REJECT sleep request is rejected(wakeup source set before the sleep request)
+ *  - ESP_ERR_SLEEP_TOO_SHORT_SLEEP_DURATION after deducting the sleep flow overhead, the final sleep duration
+ *                                           is too short to cover the minimum sleep duration of the chip, when
+ *                                           rtc timer wakeup source enabled
  */
 esp_err_t esp_light_sleep_start(void);
 
@@ -388,22 +455,36 @@ esp_err_t esp_light_sleep_start(void);
  * Call to this function is equivalent to a call to esp_deep_sleep_enable_timer_wakeup
  * followed by a call to esp_deep_sleep_start.
  *
- * esp_deep_sleep does not shut down WiFi, BT, and higher level protocol
- * connections gracefully.
- * Make sure relevant WiFi and BT stack functions are called to close any
- * connections and deinitialize the peripherals. These include:
- *     - esp_bluedroid_disable
- *     - esp_bt_controller_disable
- *     - esp_wifi_stop
+ * @note In general, the function does not return, but if the sleep is rejected,
+ * then it returns from it.
  *
- * This function does not return.
- *
- * @note The device will wake up immediately if the deep-sleep time is set to 0
+ * The reason for the rejection can be such as a short sleep time.
  *
  * @param time_in_us  deep-sleep time, unit: microsecond
  */
-void esp_deep_sleep(uint64_t time_in_us) __attribute__((noreturn));
+void esp_deep_sleep(uint64_t time_in_us);
 
+
+/**
+  * @brief Register a callback to be called from the deep sleep prepare
+  *
+  * @warning deepsleep callbacks should without parameters, and MUST NOT,
+  *          UNDER ANY CIRCUMSTANCES, CALL A FUNCTION THAT MIGHT BLOCK.
+  *
+  * @param new_dslp_cb     Callback to be called
+  *
+  * @return
+  *     - ESP_OK:         Callback registered to the deepsleep misc_modules_sleep_prepare
+  *     - ESP_ERR_NO_MEM: No more hook space for register the callback
+  */
+esp_err_t esp_deep_sleep_register_hook(esp_deep_sleep_cb_t new_dslp_cb);
+
+/**
+  * @brief Unregister an deepsleep callback
+  *
+  * @param old_dslp_cb     Callback to be unregistered
+  */
+void esp_deep_sleep_deregister_hook(esp_deep_sleep_cb_t old_dslp_cb);
 
 /**
  * @brief Get the wakeup source which caused wakeup from sleep
@@ -447,6 +528,11 @@ typedef void (*esp_deep_sleep_wake_stub_fn_t)(void);
 void esp_set_deep_sleep_wake_stub(esp_deep_sleep_wake_stub_fn_t new_stub);
 
 /**
+ * @brief Set wake stub entry to default `esp_wake_stub_entry`
+ */
+void esp_set_deep_sleep_wake_stub_default_entry(void);
+
+/**
  * @brief Get current wake from deep sleep stub
  * @return Return current wake from deep sleep stub, or NULL if
  *         no stub is installed.
@@ -468,18 +554,46 @@ void esp_default_wake_deep_sleep(void);
 void esp_deep_sleep_disable_rom_logging(void);
 
 #ifdef SOC_PM_SUPPORT_CPU_PD
+
+#if SOC_PM_CPU_RETENTION_BY_RTCCNTL
 /**
- * @brief CPU Power down low-level initialize
- *
- * @param enable  enable or disable CPU power down during light sleep
+ * @brief CPU Power down low-level initialize, enable CPU power down during light sleep
  * @return
  *      - ESP_OK on success
  *      - ESP_ERR_NO_MEM not enough retention memory
  */
-esp_err_t esp_sleep_cpu_pd_low_init(bool enable);
+esp_err_t esp_sleep_cpu_pd_low_init(void);
+
+/**
+ * @brief CPU Power down low-level deinitialize, disable CPU power down during light sleep
+ * @return
+ *      - ESP_OK on success
+ *      - ESP_ERR_NO_MEM not enough retention memory
+ */
+esp_err_t esp_sleep_cpu_pd_low_deinit(void);
+
 #endif
 
-#if SOC_GPIO_SUPPORT_SLP_SWITCH
+/**
+ * @brief CPU Power down initialize
+ *
+ * @return
+ *      - ESP_OK on success
+ *      - ESP_ERR_NO_MEM not enough retention memory
+ */
+esp_err_t esp_sleep_cpu_retention_init(void);
+
+/**
+ * @brief CPU Power down de-initialize
+ *
+ * @return
+ *      - ESP_OK on success
+ *
+ * Release system retention memory.
+ */
+esp_err_t esp_sleep_cpu_retention_deinit(void);
+#endif
+
 /**
  * @brief Configure to isolate all GPIO pins in sleep state
  */
@@ -490,7 +604,6 @@ void esp_sleep_config_gpio_isolate(void);
  * @param enable decide whether to switch status or not
  */
 void esp_sleep_enable_gpio_switch(bool enable);
-#endif
 
 #if CONFIG_MAC_BB_PD
 /**

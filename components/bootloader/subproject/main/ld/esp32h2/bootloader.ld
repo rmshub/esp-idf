@@ -1,20 +1,52 @@
 /*
- * SPDX-FileCopyrightText: 2021-2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 /** Simplified memory map for the bootloader.
  *  Make sure the bootloader can load into main memory without overwriting itself.
- *  We put 2nd bootloader in the high address space (before ROM stack/data/bss).
- *  See memory usage for ROM bootloader at the end of this file.
+ *
+ *  ESP32-H2 ROM static data usage is as follows:
+ *  - 0x4083ba78 - 0x4084d380: Shared buffers, used in UART/USB/SPI download mode only
+ *  - 0x4084d380 - 0x4084f380: PRO CPU stack, can be reclaimed as heap after RTOS startup
+ *  - 0x4084f380 - 0x4084fee0: ROM .bss and .data used in startup code or nonos/early boot (can be freed when IDF runs)
+ *  - 0x4084fee0 - 0x40850000: ROM .bss and .data used in startup code and when IDF runs (cannot be freed)
+ *
+ *  The 2nd stage bootloader can take space up to the end of ROM shared
+ *  buffers area (0x4084d380).
  */
+
+/* We consider 0x3fcdc710 to be the last usable address for 2nd stage bootloader stack overhead, dram_seg,
+ * and work out iram_seg and iram_loader_seg addresses from there, backwards.
+ */
+
+/* These lengths can be adjusted, if necessary: */
+bootloader_usable_dram_end = 0x4084cfd0;
+bootloader_stack_overhead = 0x2000; /* For safety margin between bootloader data section and startup stacks */
+bootloader_dram_seg_len = 0x5000;
+bootloader_iram_loader_seg_len = 0x7000;
+bootloader_iram_seg_len = 0x2000;
+
+/* Start of the lower region is determined by region size and the end of the higher region */
+bootloader_dram_seg_end = bootloader_usable_dram_end - bootloader_stack_overhead;
+bootloader_dram_seg_start = bootloader_dram_seg_end - bootloader_dram_seg_len;
+bootloader_iram_loader_seg_start = bootloader_dram_seg_start - bootloader_iram_loader_seg_len;
+bootloader_iram_seg_start = bootloader_iram_loader_seg_start - bootloader_iram_seg_len;
 
 MEMORY
 {
-  iram_seg (RWX) :                  org = 0x403CE000, len = 0x2000
-  iram_loader_seg (RWX) :           org = 0x403D0000, len = 0x6000
-  dram_seg (RW) :                   org = 0x3FCD6000, len = 0x4000
+  iram_seg (RWX) :                  org = bootloader_iram_seg_start, len = bootloader_iram_seg_len
+  iram_loader_seg (RWX) :           org = bootloader_iram_loader_seg_start, len = bootloader_iram_loader_seg_len
+  dram_seg (RW) :                   org = bootloader_dram_seg_start, len = bootloader_dram_seg_len
 }
+
+/* The app may use RAM for static allocations up to the start of iram_loader_seg.
+ * If you have changed something above and this assert fails:
+ * 1. Check what the new value of bootloader_iram_loader_seg start is.
+ * 2. Update the value in this assert.
+ * 3. Update SRAM_DRAM_END in components/esp_system/ld/esp32h2/memory.ld.in to the same value.
+ */
+ASSERT(bootloader_iram_loader_seg_start == 0x4083EFD0, "bootloader_iram_loader_seg_start inconsistent with SRAM_DRAM_END");
 
 /* Default entry point: */
 ENTRY(call_start_cpu0);
@@ -27,15 +59,16 @@ SECTIONS
     . = ALIGN (16);
     _loader_text_start = ABSOLUTE(.);
     *(.stub .gnu.warning .gnu.linkonce.literal.* .gnu.linkonce.t.*.literal .gnu.linkonce.t.*)
-     *(.iram1 .iram1.*) /* catch stray IRAM_ATTR */
+    *(.iram1 .iram1.*) /* catch stray IRAM_ATTR */
     *liblog.a:(.literal .text .literal.* .text.*)
+    /* we use either libgcc or compiler-rt, so put similar entries for them here */
     *libgcc.a:(.literal .text .literal.* .text.*)
+    *libclang_rt.builtins.a:(.literal .text .literal.* .text.*)
     *libbootloader_support.a:bootloader_clock_loader.*(.literal .text .literal.* .text.*)
     *libbootloader_support.a:bootloader_common_loader.*(.literal .text .literal.* .text.*)
     *libbootloader_support.a:bootloader_flash.*(.literal .text .literal.* .text.*)
     *libbootloader_support.a:bootloader_random.*(.literal .text .literal.* .text.*)
     *libbootloader_support.a:bootloader_random*.*(.literal.bootloader_random_disable .text.bootloader_random_disable)
-    *libbootloader_support.a:bootloader_random*.*(.literal.bootloader_random_enable .text.bootloader_random_enable)
     *libbootloader_support.a:bootloader_efuse.*(.literal .text .literal.* .text.*)
     *libbootloader_support.a:bootloader_utility.*(.literal .text .literal.* .text.*)
     *libbootloader_support.a:bootloader_sha.*(.literal .text .literal.* .text.*)
@@ -44,8 +77,10 @@ SECTIONS
     *libbootloader_support.a:bootloader_soc.*(.literal .text .literal.* .text.*)
     *libbootloader_support.a:esp_image_format.*(.literal .text .literal.* .text.*)
     *libbootloader_support.a:flash_encrypt.*(.literal .text .literal.* .text.*)
+    *libbootloader_support.a:flash_encryption_secure_features.*(.literal .text .literal.* .text.*)
     *libbootloader_support.a:flash_partitions.*(.literal .text .literal.* .text.*)
     *libbootloader_support.a:secure_boot.*(.literal .text .literal.* .text.*)
+    *libbootloader_support.a:secure_boot_secure_features.*(.literal .text .literal.* .text.*)
     *libbootloader_support.a:secure_boot_signatures_bootloader.*(.literal .text .literal.* .text.*)
     *libmicro-ecc.a:*.*(.literal .text .literal.* .text.*)
     *libspi_flash.a:*.*(.literal .text .literal.* .text.*)
@@ -95,6 +130,12 @@ SECTIONS
     _bss_end = ABSOLUTE(.);
   } > dram_seg
 
+  .dram0.bootdesc : ALIGN(0x10)
+  {
+    _data_start = ABSOLUTE(.);
+    *(.data_bootloader_desc .data_bootloader_desc.*)               /* Should be the first.  Bootloader version info.        DO NOT PUT ANYTHING BEFORE IT! */
+  } > dram_seg
+
   .dram0.data :
   {
     _data_start = ABSOLUTE(.);
@@ -105,8 +146,6 @@ SECTIONS
     *(.sdata)
     *(.sdata.*)
     *(.gnu.linkonce.s.*)
-    *(.sdata2)
-    *(.sdata2.*)
     *(.gnu.linkonce.s2.*)
     *(.jcr)
     _data_end = ABSOLUTE(.);
@@ -119,6 +158,7 @@ SECTIONS
     *(.rodata.*)
     *(.gnu.linkonce.r.*)
     *(.rodata1)
+    *(.sdata2 .sdata2.* .srodata .srodata.*)
     __XT_EXCEPTION_TABLE_ = ABSOLUTE(.);
     *(.xt_except_table)
     *(.gcc_except_table)
@@ -182,17 +222,34 @@ SECTIONS
 /**
  *  Appendix: Memory Usage of ROM bootloader
  *
- *  +--------+--------------+------+ 0x3FCC_B900
- *  |        ^              |
- *  |        |              |
- *  |        | data/bss     |
- *  |        |              |
- *  |        v              |
- *  +------------------------------+ 0x3FCD_D210
- *  |        ^              |
- *  |        |              |
- *  |        | stack        |
- *  |        |              |
- *  |        v              |
- *  +------------------------------+ 0x3FCD_F210
+ * 0x4083ba78 ------------------> _dram0_0_start
+ *            |               |
+ *            |               |
+ *            |               |   1. Large buffers that are only used in certain boot modes, see shared_buffers.h
+ *            |               |
+ *            |               |
+ * 0x4084d380 ------------------> __stack_sentry
+ *            |               |
+ *            |               |   2. Startup pro cpu stack (freed when IDF app is running)
+ *            |               |
+ * 0x4084f380 ------------------> __stack (pro cpu)
+ *            |               |
+ *            |               |
+ *            |               |   3. Shared memory only used in startup code or nonos/early boot*
+ *            |               |      (can be freed when IDF runs)
+ *            |               |
+ *            |               |
+ * 0x4084fee0 ------------------> _dram0_rtos_reserved_start
+ *            |               |
+ *            |               |
+ *            |               |   4. Shared memory used in startup code and when IDF runs
+ *            |               |
+ *            |               |
+ * 0x4084ffc0 ------------------> _dram0_rtos_reserved_end
+ *            |               |
+ * 0x4084ffc8 ------------------> _data_start_interface
+ *            |               |
+ *            |               |   5. End of DRAM is the 'interface' data with constant addresses (ECO compatible)
+ *            |               |
+ * 0x40850000 ------------------> _data_end_interface
  */

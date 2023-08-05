@@ -64,6 +64,32 @@ typedef enum {
 ////////////////////////////////////////MCPWM Group Specific////////////////////////////////////////////////////////////
 
 /**
+ * @brief Set the clock source for MCPWM
+ *
+ * @param mcpwm Peripheral instance address
+ * @param clk_src Clock source for the MCPWM peripheral
+ */
+static inline void mcpwm_ll_group_set_clock_source(mcpwm_dev_t *mcpwm, mcpwm_timer_clock_source_t clk_src)
+{
+    (void)mcpwm;
+    (void)clk_src;
+}
+
+/**
+ * @brief Enable MCPWM module clock
+ *
+ * @note Not support to enable/disable the peripheral clock
+ *
+ * @param mcpwm Peripheral instance address
+ * @param en true to enable, false to disable
+ */
+static inline void mcpwm_ll_group_enable_clock(mcpwm_dev_t *mcpwm, bool en)
+{
+    (void)mcpwm; // only one MCPWM instance
+    (void)en;
+}
+
+/**
  * @brief Set the MCPWM group clock prescale
  *
  * @param mcpwm Peripheral instance address
@@ -286,7 +312,7 @@ static inline void mcpwm_ll_timer_set_start_stop_command(mcpwm_dev_t *mcpwm, int
         break;
     default:
         HAL_ASSERT(false);
-        break;;
+        break;
     }
 }
 
@@ -666,20 +692,20 @@ static inline void mcpwm_ll_operator_stop_update_action(mcpwm_dev_t *mcpwm, int 
  * @param trig_id Trigger ID, index from 0 to 1
  * @param fault_gpio_id Fault GPIO ID, index from 0 to 3
  */
-static inline void mcpwm_ll_operator_set_trigger_from_gpio(mcpwm_dev_t *mcpwm, int operator_id, int trig_id, int fault_gpio_id)
+static inline void mcpwm_ll_operator_set_trigger_from_gpio_fault(mcpwm_dev_t *mcpwm, int operator_id, int trig_id, int fault_gpio_id)
 {
     mcpwm->operators[operator_id].gen_cfg0.val &= ~(0x07 << (4 + 3 * trig_id));
     mcpwm->operators[operator_id].gen_cfg0.val |= (fault_gpio_id << (4 + 3 * trig_id));
 }
 
 /**
- * @brief Set trigger from timer sync event (when the timer taken the sync signal)
+ * @brief Set trigger from sync event (when the timer/gpio/soft taken the sync signal)
  *
  * @param mcpwm Peripheral instance address
  * @param operator_id Operator ID, index from 0 to 2
  * @param trig_id Trigger ID, index from 0 to 1
  */
-static inline void mcpwm_ll_operator_set_trigger_from_timer_sync(mcpwm_dev_t *mcpwm, int operator_id, int trig_id)
+static inline void mcpwm_ll_operator_set_trigger_from_sync(mcpwm_dev_t *mcpwm, int operator_id, int trig_id)
 {
     // the timer here is not selectable, must be the one connected with the operator
     mcpwm->operators[operator_id].gen_cfg0.val &= ~(0x07 << (4 + 3 * trig_id));
@@ -892,7 +918,7 @@ static inline void mcpwm_ll_operator_set_deadtime_clock_src(mcpwm_dev_t *mcpwm, 
         break;
     case MCPWM_LL_DEADTIME_CLK_SRC_TIMER:
         mcpwm->operators[operator_id].dt_cfg.dt_clk_sel = 1;
-        break;;
+        break;
     default:
         HAL_ASSERT(false);
     }

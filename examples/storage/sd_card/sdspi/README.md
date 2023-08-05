@@ -1,5 +1,5 @@
-| Supported Targets | ESP32 | ESP32-S2 | ESP32-S3 | ESP32-C3 |
-| ----------------- | ----- | -------- | -------- | -------- |
+| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C6 | ESP32-S2 | ESP32-S3 |
+| ----------------- | ----- | -------- | -------- | -------- | -------- | -------- |
 
 # SD Card example (SDSPI)
 
@@ -38,12 +38,12 @@ This example doesn't utilize card detect (CD) and write protect (WP) signals fro
 
 The table below shows the default pin assignments.
 
-SD card pin | SPI pin | ESP32 pin     | ESP32-S2, ESP32-S3 | ESP32-C3 and other chips  |  Notes
-------------|---------|---------------|--------------------|---------------------------|-------------
- D0         | MISO    | GPIO2         | GPIO37             | GPIO6                     |
- D3         | CS      | GPIO13 (MTCK) | GPIO34             | GPIO1                     |
- CLK        | SCK     | GPIO14 (MTMS) | GPIO36             | GPIO5                     |
- CMD        | MOSI    | GPIO15 (MTDO) | GPIO35             | GPIO4                     |  10k pullup
+SD card pin | SPI pin | ESP32 pin     | ESP32-S2, ESP32-S3 | ESP32-H2 | ESP32-C3 and other chips  |  Notes
+------------|---------|---------------|--------------------|----------|---------------------------|-------------
+ D0         | MISO    | GPIO2         | GPIO37             | GPIO0    | GPIO6                     |
+ D3         | CS      | GPIO13 (MTCK) | GPIO34             | GPIO1    | GPIO1                     |
+ CLK        | SCK     | GPIO14 (MTMS) | GPIO36             | GPIO4    | GPIO5                     |
+ CMD        | MOSI    | GPIO15 (MTDO) | GPIO35             | GPIO5    | GPIO4                     |  10k pullup
 
 
 #### ESP32 related notes
@@ -125,4 +125,3 @@ An attempt to download a new firmware under this conditions may also result in t
 `esptool --port PORT --before no_reset --baud 115200 --chip esp32 erase_flash`
 
 to erase your board's flash, then flash the firmware again.
-

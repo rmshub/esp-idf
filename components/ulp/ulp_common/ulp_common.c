@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -9,10 +9,10 @@
 #include "ulp_common.h"
 #include "esp_private/esp_clk.h"
 #include "soc/rtc.h"
-#include "soc/rtc_cntl_reg.h"
-#include "soc/sens_reg.h"
+#include "soc/rtc_cntl_periph.h"
 
 #if CONFIG_IDF_TARGET_ESP32
+#include "soc/sens_reg.h"
 #define ULP_FSM_PREPARE_SLEEP_CYCLES 2    /*!< Cycles spent by FSM preparing ULP for sleep */
 #define ULP_FSM_WAKEUP_SLEEP_CYCLES  2    /*!< Cycles spent by FSM waking up ULP from sleep */
 #endif
@@ -32,7 +32,7 @@ esp_err_t ulp_set_wakeup_period(size_t period_index, uint32_t period_us)
                                     + REG_GET_FIELD(RTC_CNTL_TIMER2_REG, RTC_CNTL_ULPCP_TOUCH_START_WAIT);
     if (period_cycles < min_sleep_period_cycles) {
         period_cycles = min_sleep_period_cycles;
-        ESP_LOGW("ulp", "Sleep period clipped to minimum of %d cycles", (uint32_t) min_sleep_period_cycles);
+        ESP_LOGW("ulp", "Sleep period clipped to minimum of %"PRIu32" cycles", (uint32_t) min_sleep_period_cycles);
     } else {
         period_cycles -= min_sleep_period_cycles;
     }

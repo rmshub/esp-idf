@@ -9,6 +9,7 @@
 #include "soc/rtc.h"
 #include "soc/rtc_cntl_reg.h"
 #include "hal/clk_tree_ll.h"
+#include "hal/rtc_cntl_ll.h"
 #include "soc/timer_group_reg.h"
 
 /* Calibration of RTC_SLOW_CLK is performed using a special feature of TIMG0.
@@ -194,11 +195,22 @@ uint32_t rtc_clk_cal_ratio(rtc_cal_sel_t cal_clk, uint32_t slowclk_cycles)
     return ratio;
 }
 
+static inline bool rtc_clk_cal_32k_valid(rtc_xtal_freq_t xtal_freq, uint32_t slowclk_cycles, uint64_t actual_xtal_cycles)
+{
+    uint64_t expected_xtal_cycles = (xtal_freq * 1000000ULL * slowclk_cycles) >> 15; // xtal_freq(hz) * slowclk_cycles / 32768
+    uint64_t delta = expected_xtal_cycles / 2000;                                    // 5/10000
+    return (actual_xtal_cycles >= (expected_xtal_cycles - delta)) && (actual_xtal_cycles <= (expected_xtal_cycles + delta));
+}
+
 uint32_t rtc_clk_cal(rtc_cal_sel_t cal_clk, uint32_t slowclk_cycles)
 {
     uint64_t xtal_cycles = rtc_clk_cal_internal(cal_clk, slowclk_cycles, RTC_TIME_CAL_ONEOFF_MODE);
-    uint32_t period = rtc_clk_xtal_to_slowclk(xtal_cycles, slowclk_cycles);
-    return period;
+
+    if ((cal_clk == RTC_CAL_32K_XTAL) && !rtc_clk_cal_32k_valid(rtc_clk_xtal_freq_get(), slowclk_cycles, xtal_cycles)) {
+        return 0;
+    }
+
+    return rtc_clk_xtal_to_slowclk(xtal_cycles, slowclk_cycles);
 }
 
 uint32_t rtc_clk_cal_cycling(rtc_cal_sel_t cal_clk, uint32_t slowclk_cycles)
@@ -223,27 +235,7 @@ uint64_t rtc_time_slowclk_to_us(uint64_t rtc_cycles, uint32_t period)
 
 uint64_t rtc_time_get(void)
 {
-    SET_PERI_REG_MASK(RTC_CNTL_TIME_UPDATE_REG, RTC_CNTL_TIME_UPDATE);
-    uint64_t t = READ_PERI_REG(RTC_CNTL_TIME0_REG);
-    t |= ((uint64_t) READ_PERI_REG(RTC_CNTL_TIME1_REG)) << 32;
-    return t;
-}
-
-uint64_t rtc_light_slp_time_get(void)
-{
-    uint64_t t_wake = READ_PERI_REG(RTC_CNTL_TIME_LOW0_REG);
-    t_wake |= ((uint64_t) READ_PERI_REG(RTC_CNTL_TIME_HIGH0_REG)) << 32;
-    uint64_t t_slp = READ_PERI_REG(RTC_CNTL_TIME_LOW1_REG);
-    t_slp |= ((uint64_t) READ_PERI_REG(RTC_CNTL_TIME_HIGH1_REG)) << 32;
-    return (t_wake - t_slp);
-}
-
-uint64_t rtc_deep_slp_time_get(void)
-{
-    uint64_t t_slp = READ_PERI_REG(RTC_CNTL_TIME_LOW1_REG);
-    t_slp |= ((uint64_t) READ_PERI_REG(RTC_CNTL_TIME_HIGH1_REG)) << 32;
-    uint64_t t_wake = rtc_time_get();
-    return (t_wake - t_slp);
+    return rtc_cntl_ll_get_rtc_time();
 }
 
 void rtc_clk_wait_for_slow_cycle(void) //This function may not by useful any more

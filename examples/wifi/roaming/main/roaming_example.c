@@ -1,4 +1,5 @@
 #include <string.h>
+#include <inttypes.h>
 #include <stdlib.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -50,7 +51,7 @@ static void event_handler(void* arg, esp_event_base_t event_base,
 	} else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_CONNECTED) {
 #if EXAMPLE_WIFI_RSSI_THRESHOLD
 		if (EXAMPLE_WIFI_RSSI_THRESHOLD) {
-			ESP_LOGI(TAG, "setting rssi threshold as %d\n", EXAMPLE_WIFI_RSSI_THRESHOLD);
+			ESP_LOGI(TAG, "setting rssi threshold as %d", EXAMPLE_WIFI_RSSI_THRESHOLD);
 			esp_wifi_set_rssi_threshold(EXAMPLE_WIFI_RSSI_THRESHOLD);
 		}
 #endif
@@ -172,7 +173,7 @@ static char * get_btm_neighbor_list(uint8_t *report, size_t report_len)
 		}
 
 		ESP_LOGI(TAG, "RMM neigbor report bssid=" MACSTR
-				" info=0x%x op_class=%u chan=%u phy_type=%u%s%s%s%s",
+				" info=0x%" PRIx32 " op_class=%u chan=%u phy_type=%u%s%s%s%s",
 				MAC2STR(nr), WPA_GET_LE32(nr + ETH_ALEN),
 				nr[ETH_ALEN + 4], nr[ETH_ALEN + 5],
 				nr[ETH_ALEN + 6],
@@ -186,7 +187,7 @@ static char * get_btm_neighbor_list(uint8_t *report, size_t report_len)
 		/* , */
 		len += snprintf(buf + len, MAX_NEIGHBOR_LEN - len, ",");
 		/* bssid info */
-		len += snprintf(buf + len, MAX_NEIGHBOR_LEN - len, "0x%04x", WPA_GET_LE32(nr + ETH_ALEN));
+		len += snprintf(buf + len, MAX_NEIGHBOR_LEN - len, "0x%04" PRIx32 "", WPA_GET_LE32(nr + ETH_ALEN));
 		len += snprintf(buf + len, MAX_NEIGHBOR_LEN - len, ",");
 		/* operating class */
 		len += snprintf(buf + len, MAX_NEIGHBOR_LEN - len, "%u", nr[ETH_ALEN + 4]);

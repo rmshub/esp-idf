@@ -9,12 +9,10 @@
 #include <stdio.h>
 #include <stdarg.h>
 
-#include "esp_netif.h"
-#include "lwip/sockets.h"
+#include "sys/socket.h"
 #include "esp_rom_md5.h"
 #include "esp_tls_crypto.h"
 
-#include "esp_system.h"
 #include "esp_log.h"
 #include "esp_check.h"
 
@@ -90,7 +88,7 @@ char *http_auth_digest(const char *username, const char *password, esp_http_auth
         goto _digest_exit;
     }
 
-    ESP_LOGD(TAG, "%s %s %s %s\r\n", "Digest", username, auth_data->realm, password);
+    ESP_LOGD(TAG, "%s %s %s %s", "Digest", username, auth_data->realm, password);
     if (strcasecmp(auth_data->algorithm, "md5-sess") == 0) {
         if (md5_printf(ha1, "%s:%s:%016llx", ha1, auth_data->nonce, auth_data->cnonce) <= 0) {
             goto _digest_exit;
@@ -118,12 +116,23 @@ char *http_auth_digest(const char *username, const char *password, esp_http_auth
             goto _digest_exit;
         }
     }
-    asprintf(&auth_str, "Digest username=\"%s\", realm=\"%s\", nonce=\"%s\", uri=\"%s\", algorithm=\"MD5\", "
-             "response=\"%s\", qop=%s, nc=%08x, cnonce=\"%016llx\"",
+    int rc = asprintf(&auth_str, "Digest username=\"%s\", realm=\"%s\", nonce=\"%s\", uri=\"%s\", algorithm=\"MD5\", "
+             "response=\"%s\", qop=%s, nc=%08x, cnonce=%016"PRIx64,
              username, auth_data->realm, auth_data->nonce, auth_data->uri, digest, auth_data->qop, auth_data->nc, auth_data->cnonce);
+    if (rc < 0) {
+        ESP_LOGE(TAG, "asprintf() returned: %d", rc);
+        ret = ESP_FAIL;
+        goto _digest_exit;
+    }
     if (auth_data->opaque) {
-        asprintf(&temp_auth_str, "%s, opaque=\"%s\"", auth_str, auth_data->opaque);
+        rc = asprintf(&temp_auth_str, "%s, opaque=\"%s\"", auth_str, auth_data->opaque);
+        // Free the previous memory allocated for `auth_str`
         free(auth_str);
+        if (rc < 0) {
+            ESP_LOGE(TAG, "asprintf() returned: %d", rc);
+            ret = ESP_FAIL;
+            goto _digest_exit;
+        }
         auth_str = temp_auth_str;
     }
 _digest_exit:
@@ -135,18 +144,20 @@ _digest_exit:
 
 char *http_auth_basic(const char *username, const char *password)
 {
-    int out;
+    size_t out;
     char *user_info = NULL;
     char *digest = NULL;
     esp_err_t ret = ESP_OK;
     size_t n = 0;
-    asprintf(&user_info, "%s:%s", username, password);
+    if (asprintf(&user_info, "%s:%s", username, password) < 0) {
+        return NULL;
+    }
     ESP_RETURN_ON_FALSE(user_info, NULL, TAG, "Memory exhausted");
     esp_crypto_base64_encode(NULL, 0, &n, (const unsigned char *)user_info, strlen(user_info));
     digest = calloc(1, 6 + n + 1);
     ESP_GOTO_ON_FALSE(digest, ESP_FAIL, _basic_exit, TAG, "Memory exhausted");
     strcpy(digest, "Basic ");
-    esp_crypto_base64_encode((unsigned char *)digest + 6, n, (size_t *)&out, (const unsigned char *)user_info, strlen(user_info));
+    esp_crypto_base64_encode((unsigned char *)digest + 6, n, &out, (const unsigned char *)user_info, strlen(user_info));
 _basic_exit:
     free(user_info);
     return (ret == ESP_OK) ? digest : NULL;

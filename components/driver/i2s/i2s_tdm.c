@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -40,17 +40,23 @@ static esp_err_t i2s_tdm_calculate_clock(i2s_chan_handle_t handle, const i2s_tdm
         clk_info->bclk = rate * handle->total_slot * slot_bits;
         clk_info->mclk = rate * clk_cfg->mclk_multiple;
         clk_info->bclk_div = clk_info->mclk / clk_info->bclk;
+        /* While RECEIVING multiple slots, the data will go wrong if the bclk_div is equal or smaller than 2 */
+        if (clk_info->bclk_div <= 2) {
+            clk_info->bclk_div = 3;
+            clk_info->mclk = clk_info->bclk * clk_info->bclk_div;
+            ESP_LOGW(TAG, "the current mclk multiple is too small, adjust the mclk multiple to %"PRIu32, clk_info->mclk / rate);
+        }
     } else {
-        /* For slave mode, mclk >= bclk * 8, so fix bclk_div to 2 first */
-        clk_info->bclk_div = 8;
+        if (clk_cfg->bclk_div < 8) {
+            ESP_LOGW(TAG, "the current bclk division is too small, adjust the bclk division to 8");
+            clk_info->bclk_div = 8;
+        } else {
+            clk_info->bclk_div = clk_cfg->bclk_div;
+        }
         clk_info->bclk = rate * handle->total_slot * slot_bits;
         clk_info->mclk = clk_info->bclk * clk_info->bclk_div;
     }
-#if SOC_I2S_SUPPORTS_APLL
-    clk_info->sclk = clk_cfg->clk_src == I2S_CLK_SRC_APLL ? i2s_set_get_apll_freq(clk_info->mclk) : I2S_LL_BASE_CLK;
-#else
-    clk_info->sclk = I2S_LL_BASE_CLK;
-#endif
+    clk_info->sclk = i2s_get_source_clk_freq(clk_cfg->clk_src, clk_info->mclk);
     clk_info->mclk_div = clk_info->sclk / clk_info->mclk;
 
     /* Check if the configuration is correct */
@@ -67,7 +73,7 @@ static esp_err_t i2s_tdm_set_clock(i2s_chan_handle_t handle, const i2s_tdm_clk_c
     i2s_hal_clock_info_t clk_info;
     /* Calculate clock parameters */
     ESP_RETURN_ON_ERROR(i2s_tdm_calculate_clock(handle, clk_cfg, &clk_info), TAG, "clock calculate failed");
-    ESP_LOGD(TAG, "Clock division info: [sclk] %d Hz [mdiv] %d [mclk] %d Hz [bdiv] %d [bclk] %d Hz",
+    ESP_LOGD(TAG, "Clock division info: [sclk] %"PRIu32" Hz [mdiv] %d [mclk] %"PRIu32" Hz [bdiv] %d [bclk] %"PRIu32" Hz",
              clk_info.sclk, clk_info.mclk_div, clk_info.mclk, clk_info.bclk_div, clk_info.bclk);
 
     portENTER_CRITICAL(&g_i2s.spinlock);
@@ -87,6 +93,7 @@ static esp_err_t i2s_tdm_set_clock(i2s_chan_handle_t handle, const i2s_tdm_clk_c
 
 static esp_err_t i2s_tdm_set_slot(i2s_chan_handle_t handle, const i2s_tdm_slot_config_t *slot_cfg)
 {
+    ESP_RETURN_ON_FALSE(slot_cfg->slot_mask, ESP_ERR_INVALID_ARG, TAG, "At least one channel should be enabled");
     /* Update the total slot num and active slot num */
     handle->active_slot = slot_cfg->slot_mode == I2S_SLOT_MODE_MONO ? 1 : __builtin_popcount(slot_cfg->slot_mask);
     uint32_t max_slot_num = 32 - __builtin_clz(slot_cfg->slot_mask);
@@ -216,7 +223,7 @@ esp_err_t i2s_channel_init_tdm_mode(i2s_chan_handle_t handle, const i2s_tdm_conf
     }
 #endif
     ESP_GOTO_ON_ERROR(i2s_tdm_set_clock(handle, &tdm_cfg->clk_cfg), err, TAG, "initialize channel failed while setting clock");
-    ESP_GOTO_ON_ERROR(i2s_init_dma_intr(handle, ESP_INTR_FLAG_LEVEL1), err, TAG, "initialize dma interrupt failed");
+    ESP_GOTO_ON_ERROR(i2s_init_dma_intr(handle, I2S_INTR_ALLOC_FLAGS), err, TAG, "initialize dma interrupt failed");
 
 #if SOC_I2S_HW_VERSION_2
     /* Enable clock to start outputting mclk signal. Some codecs will reset once mclk stop */
@@ -241,6 +248,8 @@ esp_err_t i2s_channel_init_tdm_mode(i2s_chan_handle_t handle, const i2s_tdm_conf
     /* Initialization finished, mark state as ready */
     handle->state = I2S_CHAN_STATE_READY;
     xSemaphoreGive(handle->mutex);
+    ESP_LOGD(TAG, "The %s channel on I2S%d has been initialized to TDM mode successfully",
+             handle->dir == I2S_DIR_TX ? "tx" : "rx", handle->controller->id);
     return ret;
 
 err:
@@ -256,7 +265,7 @@ esp_err_t i2s_channel_reconfig_tdm_clock(i2s_chan_handle_t handle, const i2s_tdm
     esp_err_t ret = ESP_OK;
 
     xSemaphoreTake(handle->mutex, portMAX_DELAY);
-    ESP_GOTO_ON_FALSE(handle->mode == I2S_COMM_MODE_TDM, ESP_ERR_INVALID_ARG, err, TAG, "this handle is not working in standard moded");
+    ESP_GOTO_ON_FALSE(handle->mode == I2S_COMM_MODE_TDM, ESP_ERR_INVALID_ARG, err, TAG, "this handle is not working in standard mode");
     ESP_GOTO_ON_FALSE(handle->state == I2S_CHAN_STATE_READY, ESP_ERR_INVALID_STATE, err, TAG, "invalid state, I2S should be disabled before reconfiguring the clock");
     i2s_tdm_config_t *tdm_cfg = (i2s_tdm_config_t *)handle->mode_info;
     ESP_GOTO_ON_FALSE(tdm_cfg, ESP_ERR_INVALID_STATE, err, TAG, "initialization not complete");
@@ -306,7 +315,7 @@ esp_err_t i2s_channel_reconfig_tdm_slot(i2s_chan_handle_t handle, const i2s_tdm_
     esp_err_t ret = ESP_OK;
 
     xSemaphoreTake(handle->mutex, portMAX_DELAY);
-    ESP_GOTO_ON_FALSE(handle->mode == I2S_COMM_MODE_TDM, ESP_ERR_INVALID_ARG, err, TAG, "this handle is not working in standard moded");
+    ESP_GOTO_ON_FALSE(handle->mode == I2S_COMM_MODE_TDM, ESP_ERR_INVALID_ARG, err, TAG, "this handle is not working in standard mode");
     ESP_GOTO_ON_FALSE(handle->state == I2S_CHAN_STATE_READY, ESP_ERR_INVALID_STATE, err, TAG, "invalid state, I2S should be disabled before reconfiguring the slot");
 
     i2s_tdm_config_t *tdm_cfg = (i2s_tdm_config_t *)handle->mode_info;
@@ -339,7 +348,7 @@ esp_err_t i2s_channel_reconfig_tdm_gpio(i2s_chan_handle_t handle, const i2s_tdm_
     esp_err_t ret = ESP_OK;
 
     xSemaphoreTake(handle->mutex, portMAX_DELAY);
-    ESP_GOTO_ON_FALSE(handle->mode == I2S_COMM_MODE_TDM, ESP_ERR_INVALID_ARG, err, TAG, "This handle is not working in standard moded");
+    ESP_GOTO_ON_FALSE(handle->mode == I2S_COMM_MODE_TDM, ESP_ERR_INVALID_ARG, err, TAG, "This handle is not working in standard mode");
     ESP_GOTO_ON_FALSE(handle->state == I2S_CHAN_STATE_READY, ESP_ERR_INVALID_STATE, err, TAG, "Invalid state, I2S should be disabled before reconfiguring the gpio");
 
     ESP_GOTO_ON_ERROR(i2s_tdm_set_gpio(handle, gpio_cfg), err, TAG, "set i2s standard slot failed");

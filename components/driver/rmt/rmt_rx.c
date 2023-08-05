@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -16,6 +16,7 @@
 #endif
 #include "esp_log.h"
 #include "esp_check.h"
+#include "esp_memory_utils.h"
 #include "esp_rom_gpio.h"
 #include "soc/rmt_periph.h"
 #include "soc/rtc.h"
@@ -73,7 +74,9 @@ static esp_err_t rmt_rx_init_dma_link(rmt_rx_channel_t *rx_channel, const rmt_rx
     gdma_channel_alloc_config_t dma_chan_config = {
         .direction = GDMA_CHANNEL_DIRECTION_RX,
     };
-    ESP_RETURN_ON_ERROR(gdma_new_channel(&dma_chan_config, &rx_channel->base.dma_chan), TAG, "allocate RX DMA channel failed");
+#if SOC_GDMA_TRIG_PERIPH_RMT0_BUS == SOC_GDMA_BUS_AHB
+    ESP_RETURN_ON_ERROR(gdma_new_ahb_channel(&dma_chan_config, &rx_channel->base.dma_chan), TAG, "allocate RX DMA channel failed");
+#endif
     gdma_strategy_config_t gdma_strategy_conf = {
         .auto_update_desc = true,
         .owner_check = true,
@@ -132,7 +135,6 @@ static esp_err_t rmt_rx_register_to_group(rmt_rx_channel_t *rx_channel, const rm
         if (channel_id < 0) {
             // didn't find a capable channel in the group, don't forget to release the group handle
             rmt_release_group_handle(group);
-            group = NULL;
         } else {
             rx_channel->base.channel_id = channel_id;
             rx_channel->base.channel_mask = channel_mask;
@@ -154,7 +156,7 @@ static void rmt_rx_unregister_from_group(rmt_channel_t *channel, rmt_group_t *gr
     rmt_release_group_handle(group);
 }
 
-static esp_err_t rmt_rx_destory(rmt_rx_channel_t *rx_channel)
+static esp_err_t rmt_rx_destroy(rmt_rx_channel_t *rx_channel)
 {
     if (rx_channel->base.intr) {
         ESP_RETURN_ON_ERROR(esp_intr_free(rx_channel->base.intr), TAG, "delete interrupt service failed");
@@ -238,7 +240,7 @@ esp_err_t rmt_new_rx_channel(const rmt_rx_channel_config_t *config, rmt_channel_
     // resolution loss due to division, calculate the real resolution
     rx_channel->base.resolution_hz = group->resolution_hz / real_div;
     if (rx_channel->base.resolution_hz != config->resolution_hz) {
-        ESP_LOGW(TAG, "channel resolution loss, real=%u", rx_channel->base.resolution_hz);
+        ESP_LOGW(TAG, "channel resolution loss, real=%"PRIu32, rx_channel->base.resolution_hz);
     }
 
     rmt_ll_rx_set_mem_blocks(hal->regs, channel_id, rx_channel->base.mem_block_num);
@@ -281,14 +283,14 @@ esp_err_t rmt_new_rx_channel(const rmt_rx_channel_config_t *config, rmt_channel_
     rx_channel->base.disable = rmt_rx_disable;
     // return general channel handle
     *ret_chan = &rx_channel->base;
-    ESP_LOGD(TAG, "new rx channel(%d,%d) at %p, gpio=%d, res=%uHz, hw_mem_base=%p, ping_pong_size=%d",
+    ESP_LOGD(TAG, "new rx channel(%d,%d) at %p, gpio=%d, res=%"PRIu32"Hz, hw_mem_base=%p, ping_pong_size=%d",
              group_id, channel_id, rx_channel, config->gpio_num, rx_channel->base.resolution_hz,
              rx_channel->base.hw_mem_base, rx_channel->ping_pong_symbols);
     return ESP_OK;
 
 err:
     if (rx_channel) {
-        rmt_rx_destory(rx_channel);
+        rmt_rx_destroy(rx_channel);
     }
     return ret;
 }
@@ -301,7 +303,7 @@ static esp_err_t rmt_del_rx_channel(rmt_channel_handle_t channel)
     int channel_id = channel->channel_id;
     ESP_LOGD(TAG, "del rx channel(%d,%d)", group_id, channel_id);
     // recycle memory resource
-    ESP_RETURN_ON_ERROR(rmt_rx_destory(rx_chan), TAG, "destory rx channel failed");
+    ESP_RETURN_ON_ERROR(rmt_rx_destroy(rx_chan), TAG, "destroy rx channel failed");
     return ESP_OK;
 }
 
@@ -343,6 +345,11 @@ esp_err_t rmt_receive(rmt_channel_handle_t channel, void *buffer, size_t buffer_
     rmt_hal_context_t *hal = &group->hal;
     int channel_id = channel->channel_id;
 
+    uint32_t filter_reg_value = ((uint64_t)group->resolution_hz * config->signal_range_min_ns) / 1000000000UL;
+    uint32_t idle_reg_value = ((uint64_t)channel->resolution_hz * config->signal_range_max_ns) / 1000000000UL;
+    ESP_RETURN_ON_FALSE(filter_reg_value <= RMT_LL_MAX_FILTER_VALUE, ESP_ERR_INVALID_ARG, TAG, "signal_range_min_ns too big");
+    ESP_RETURN_ON_FALSE(idle_reg_value <= RMT_LL_MAX_IDLE_VALUE, ESP_ERR_INVALID_ARG, TAG, "signal_range_max_ns too big");
+
     // fill in the transaction descriptor
     rmt_rx_trans_desc_t *t = &rx_chan->trans_desc;
     t->buffer = buffer;
@@ -364,9 +371,9 @@ esp_err_t rmt_receive(rmt_channel_handle_t channel, void *buffer, size_t buffer_
     rmt_ll_rx_reset_pointer(hal->regs, channel_id);
     rmt_ll_rx_set_mem_owner(hal->regs, channel_id, RMT_LL_MEM_OWNER_HW);
     // set sampling parameters of incoming signals
-    rmt_ll_rx_set_filter_thres(hal->regs, channel_id, ((uint64_t)group->resolution_hz * config->signal_range_min_ns) / 1000000000UL);
+    rmt_ll_rx_set_filter_thres(hal->regs, channel_id, filter_reg_value);
     rmt_ll_rx_enable_filter(hal->regs, channel_id, config->signal_range_min_ns != 0);
-    rmt_ll_rx_set_idle_thres(hal->regs, channel_id, ((uint64_t)channel->resolution_hz * config->signal_range_max_ns) / 1000000000UL);
+    rmt_ll_rx_set_idle_thres(hal->regs, channel_id, idle_reg_value);
     // turn on RMT RX machine
     rmt_ll_rx_enable(hal->regs, channel_id, true);
     portEXIT_CRITICAL(&channel->spinlock);
@@ -404,7 +411,7 @@ static esp_err_t rmt_rx_demodulate_carrier(rmt_channel_handle_t channel, const r
     portEXIT_CRITICAL(&channel->spinlock);
 
     if (real_frequency > 0) {
-        ESP_LOGD(TAG, "enable carrier demodulation for channel(%d,%d), freq=%uHz", group_id, channel_id, real_frequency);
+        ESP_LOGD(TAG, "enable carrier demodulation for channel(%d,%d), freq=%"PRIu32"Hz", group_id, channel_id, real_frequency);
     } else {
         ESP_LOGD(TAG, "disable carrier demodulation for channel(%d, %d)", group_id, channel_id);
     }
@@ -499,7 +506,7 @@ static bool IRAM_ATTR rmt_isr_handle_rx_done(rmt_rx_channel_t *rx_chan)
     rmt_ll_rx_enable(hal->regs, channel_id, false);
     uint32_t offset = rmt_ll_rx_get_memory_writer_offset(hal->regs, channel_id);
     // sanity check
-    assert(offset > rx_chan->mem_off);
+    assert(offset >= rx_chan->mem_off);
     rmt_ll_rx_set_mem_owner(hal->regs, channel_id, RMT_LL_MEM_OWNER_SW);
     // copy the symbols to user space
     size_t stream_symbols = offset - rx_chan->mem_off;

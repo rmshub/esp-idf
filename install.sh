@@ -4,7 +4,7 @@ set -e
 set -u
 
 basedir=$(dirname "$0")
-IDF_PATH=$(cd "${basedir}"; pwd)
+IDF_PATH=$(cd "${basedir}"; pwd -P)
 export IDF_PATH
 
 echo "Detecting the Python interpreter"
@@ -12,6 +12,14 @@ echo "Detecting the Python interpreter"
 
 echo "Checking Python compatibility"
 "${ESP_PYTHON}" "${IDF_PATH}/tools/python_version_checker.py"
+
+while getopts ":h" option; do
+    case $option in
+        h)
+            "${ESP_PYTHON}" "${IDF_PATH}/tools/install_util.py" print_help sh
+            exit;;
+    esac
+done
 
 TARGETS=`"${ESP_PYTHON}" "${IDF_PATH}/tools/install_util.py" extract targets "$@"`
 

@@ -60,6 +60,8 @@ If :ref:`CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE` option is not enabled (by defaul
 
 An option in Kconfig :ref:`CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE` allows you to track the first boot of a new application. In this case, the application must confirm its operability by calling :cpp:func:`esp_ota_mark_app_valid_cancel_rollback` function, otherwise the application will be rolled back upon reboot. It allows you to control the operability of the application during the boot phase. Thus, a new application has only one attempt to boot successfully.
 
+.. _ota_rollback:
+
 Rollback Process
 ^^^^^^^^^^^^^^^^
 
@@ -293,7 +295,8 @@ See also
 --------
 
 * :doc:`Partition Table documentation <../../api-guides/partition-tables>`
-* :doc:`Lower-Level SPI Flash/Partition API <../storage/spi_flash>`
+* :doc:`Partition API <../storage/partition>`
+* :doc:`Lower-Level SPI Flash API <../peripherals/spi_flash/index>`
 * :doc:`ESP HTTPS OTA <esp_https_ota>`
 
 Application Example

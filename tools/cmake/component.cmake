@@ -237,6 +237,7 @@ function(__component_get_requirements)
             "-m"
             "idf_component_manager.prepare_components"
             "--project_dir=${project_dir}"
+            "--lock_path=${DEPENDENCIES_LOCK}"
             "--interface_version=${component_manager_interface_version}"
             "inject_requirements"
             "--idf_path=${idf_path}"
@@ -453,6 +454,7 @@ function(idf_component_register)
     # idf_build_process
     idf_build_get_property(include_directories INCLUDE_DIRECTORIES GENERATOR_EXPRESSION)
     idf_build_get_property(compile_options COMPILE_OPTIONS GENERATOR_EXPRESSION)
+    idf_build_get_property(compile_definitions COMPILE_DEFINITIONS GENERATOR_EXPRESSION)
     idf_build_get_property(c_compile_options C_COMPILE_OPTIONS GENERATOR_EXPRESSION)
     idf_build_get_property(cxx_compile_options CXX_COMPILE_OPTIONS GENERATOR_EXPRESSION)
     idf_build_get_property(asm_compile_options ASM_COMPILE_OPTIONS GENERATOR_EXPRESSION)
@@ -460,17 +462,10 @@ function(idf_component_register)
 
     include_directories("${include_directories}")
     add_compile_options("${compile_options}")
+    add_compile_definitions("${compile_definitions}")
     add_c_compile_options("${c_compile_options}")
     add_cxx_compile_options("${cxx_compile_options}")
     add_asm_compile_options("${asm_compile_options}")
-
-    # Unfortunately add_definitions() does not support generator expressions. A new command
-    # add_compile_definition() does but is only available on CMake 3.12 or newer. This uses
-    # add_compile_options(), which can add any option as the workaround.
-    #
-    # TODO: Use add_compile_definitions() once minimum supported version is 3.12 or newer.
-    idf_build_get_property(compile_definitions COMPILE_DEFINITIONS GENERATOR_EXPRESSION)
-    add_compile_options("${compile_definitions}")
 
     if(common_reqs) # check whether common_reqs exists, this may be the case in minimalistic host unit test builds
         list(REMOVE_ITEM common_reqs ${component_lib})
@@ -564,6 +559,8 @@ function(idf_component_mock)
                         INCLUDE_DIRS ${__INCLUDE_DIRS}
                         REQUIRES ${__REQUIRES})
 
+
+    set(COMPONENT_LIB ${COMPONENT_LIB} PARENT_SCOPE)
     add_custom_command(
         OUTPUT ruby_found SYMBOLIC
         COMMAND "ruby" "-v"
@@ -606,6 +603,33 @@ function(idf_component_optional_requires req_type)
         endif()
     endforeach()
 endfunction()
+
+# idf_component_add_link_dependency
+#
+# @brief Specify than an ESP-IDF component library depends on another component
+# library at link time only.
+#
+# @note Almost always it's better to use idf_component_register() REQUIRES or
+# PRIV_REQUIRES for this. However using this function allows adding a dependency
+# from inside a different component, as a last resort.
+#
+# @param[in, required] FROM Component the dependency is from (this component depends on the other component)
+# @param[in, optional] TO Component the dependency is to (this component is depended on by FROM). If omitted
+# then the current component is assumed. For this default value to work, this function must be called after
+# idf_component_register() in the component CMakeLists.txt file.
+function(idf_component_add_link_dependency)
+    set(single_value FROM TO)
+    cmake_parse_arguments(_ "" "${single_value}" "" ${ARGN})
+
+    idf_component_get_property(from_lib ${__FROM} COMPONENT_LIB)
+    if(__TO)
+        idf_component_get_property(to_lib ${__TO} COMPONENT_LIB)
+    else()
+        set(to_lib ${COMPONENT_LIB})
+    endif()
+    set_property(TARGET ${from_lib} APPEND PROPERTY INTERFACE_LINK_LIBRARIES $<LINK_ONLY:${to_lib}>)
+endfunction()
+
 
 #
 # Deprecated functions

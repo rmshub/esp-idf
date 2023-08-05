@@ -3,8 +3,6 @@ Inter-Integrated Circuit (I2C)
 
 :link_to_translation:`zh_CN:[中文]`
 
-{IDF_TARGET_I2C_NUM:default="2", esp32c3="1", esp32h2="1", esp32c2="1"}
-
 Overview
 --------
 
@@ -12,7 +10,7 @@ I2C is a serial, synchronous, half-duplex communication protocol that allows co-
 
 With such advantages as simplicity and low manufacturing cost, I2C is mostly used for communication of low-speed peripheral devices over short distances (within one foot).
 
-{IDF_TARGET_NAME} has {IDF_TARGET_I2C_NUM} I2C controller (also referred to as port), responsible for handling communications on the I2C bus. A single I2C controller can operate as master or slave.
+{IDF_TARGET_NAME} has {IDF_TARGET_SOC_I2C_NUM} I2C controller (also referred to as port), responsible for handling communications on the I2C bus. A single I2C controller can operate as master or slave.
 
 Driver Features
 ---------------
@@ -82,12 +80,12 @@ Configuration example (master):
     int i2c_master_port = 0;
     i2c_config_t conf = {
         .mode = I2C_MODE_MASTER,
-        .sda_io_num = I2C_MASTER_SDA_IO,         // select GPIO specific to your project
+        .sda_io_num = I2C_MASTER_SDA_IO,         // select SDA GPIO specific to your project
         .sda_pullup_en = GPIO_PULLUP_ENABLE,
-        .scl_io_num = I2C_MASTER_SCL_IO,         // select GPIO specific to your project
+        .scl_io_num = I2C_MASTER_SCL_IO,         // select SCL GPIO specific to your project
         .scl_pullup_en = GPIO_PULLUP_ENABLE,
         .master.clk_speed = I2C_MASTER_FREQ_HZ,  // select frequency specific to your project
-        // .clk_flags = 0,          /*!< Optional, you can use I2C_SCLK_SRC_FLAG_* flags to choose i2c source clock here. */
+        .clk_flags = 0,                          // optional; you can use I2C_SCLK_SRC_FLAG_* flags to choose i2c source clock here
     };
 
 .. only:: SOC_I2C_SUPPORT_SLAVE
@@ -98,13 +96,15 @@ Configuration example (master):
 
         int i2c_slave_port = I2C_SLAVE_NUM;
         i2c_config_t conf_slave = {
-            .sda_io_num = I2C_SLAVE_SDA_IO,          // select GPIO specific to your project
+            .sda_io_num = I2C_SLAVE_SDA_IO,            // select SDA GPIO specific to your project
             .sda_pullup_en = GPIO_PULLUP_ENABLE,
-            .scl_io_num = I2C_SLAVE_SCL_IO,          // select GPIO specific to your project
+            .scl_io_num = I2C_SLAVE_SCL_IO,            // select SCL GPIO specific to your project
             .scl_pullup_en = GPIO_PULLUP_ENABLE,
             .mode = I2C_MODE_SLAVE,
             .slave.addr_10bit_en = 0,
-            .slave.slave_addr = ESP_SLAVE_ADDR,      // address of your project
+            .slave.slave_addr = ESP_SLAVE_ADDR,        // slave address of your project
+            .slave.maximum_speed = I2C_SLAVE_MAX_SPEED // expected maximum clock speed
+            .clk_flags = 0,                            // optional; you can use I2C_SCLK_SRC_FLAG_* flags to choose I2C source clock here
         };
 
 At this stage, :cpp:func:`i2c_param_config` also sets a few other I2C configuration parameters to default values that are defined by the I2C specification. For more details on the values and how to modify them, see :ref:`i2c-api-customized-configuration`.
@@ -206,6 +206,12 @@ Explanations for :cpp:member:`i2c_config_t::clk_flags` are as follows:
 
     The clock frequency of SCL in master mode should not be lager than max frequency for SCL mentioned in the table above.
 
+.. note::
+
+    The clock frequency of SCL will be influenced by the pull-up resistors and wire capacitance (or might slave capacitance) together. Therefore, users need to choose correct pull-up resistors by themselves to make the frequency accurate. It is recommended by I2C protocol that the pull-up resistors commonly range from 1KOhms to 10KOhms, but different frequencies need different resistors.
+
+    Generally speaking, the higher frequency is selected, the smaller resistor should be used (but not less than 1KOhms). This is because high resistor will decline the current, which will lengthen the rising time and reduce the frequency. Usually, range 2KOhms to 5KOhms is what we recommend, but users also might need to make some adjustment depends on their reality.
+
 .. _i2c-api-install-driver:
 
 Install Driver
@@ -273,7 +279,7 @@ The example below shows how to build a command link for an I2C master to read *n
     :align: center
 
 
-Compared to writing data, the command link is populated in Step 4 not with ``i2c_master_write...`` functions but with :cpp:func:`i2c_master_read_byte` and / or :cpp:func:`i2c_master_read`. Also, the last read in Step 5 is configured so that the master does not provide the ACK bit.
+Compared to writing data, the command link is populated in Step 4 not with ``i2c_master_write...`` functions but with :cpp:func:`i2c_master_read_byte` and/or :cpp:func:`i2c_master_read`. Also, the last read in Step 5 is configured so that the master does not provide the ACK bit.
 
 
 Indicating Write or Read
@@ -333,9 +339,9 @@ During driver installation, an interrupt handler is installed by default.
 Customized Configuration
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
-As mentioned at the end of Section :ref:`i2c-api-configure-driver`, when the function :cpp:func:`i2c_param_config` initializes the driver configuration for an I2C port, it also sets several I2C communication parameters to default values defined in the `I2C specification <https://www.nxp.com/docs/en/user-guide/UM10204.pdf>`_. Some other related parameters are pre-configured in registers of the I2C controller.
+As mentioned at the end of Section :ref:`i2c-api-configure-driver`, when the function :cpp:func:`i2c_param_config` initializes the driver configuration for an I2C port, it also sets several I2C communication parameters to default values defined in the I2C specification. Some other related parameters are pre-configured in registers of the I2C controller.
 
-All these parameters can be changed to user-defined values by calling dedicated functions given in the table below. Please note that the timing values are defined in APB clock cycles. The frequency of APB is specified in :c:macro:`I2C_APB_CLK_FREQ`.
+All these parameters can be changed to user-defined values by calling dedicated functions given in the table below. Please note that the timing values are defined in APB clock cycles.
 
 .. list-table:: Other Configurable I2C Communication Parameters
    :widths: 65 35
@@ -359,13 +365,13 @@ All these parameters can be changed to user-defined values by calling dedicated 
 
 Each of the above functions has a *_get_* counterpart to check the currently set value. For example, to check the I2C timeout value, call :cpp:func:`i2c_get_timeout`.
 
-To check the default parameter values which are set during the driver configuration process, please refer to the file :component_file:`driver/i2c.c` and look for defines with the suffix ``_DEFAULT``.
+To check the default parameter values which are set during the driver configuration process, please refer to the file :component_file:`driver/i2c/i2c.c` and look for defines with the suffix ``_DEFAULT``.
 
 You can also select different pins for SDA and SCL signals and alter the configuration of pull-ups with the function :cpp:func:`i2c_set_pin`. If you want to modify already entered values, use the function :cpp:func:`i2c_param_config`.
 
 .. note::
 
-    {IDF_TARGET_NAME}'s internal pull-ups are in the range of tens of kOhm, which is, in most cases, insufficient for use as I2C pull-ups. Users are advised to use external pull-ups with values described in the `I2C specification <https://www.nxp.com/docs/en/user-guide/UM10204.pdf>`_.
+    {IDF_TARGET_NAME}'s internal pull-ups are in the range of tens of kOhm, which is, in most cases, insufficient for use as I2C pull-ups. Users are advised to use external pull-ups with values described in the I2C specification. For help with calculating the resistor values see `TI Application Note <https://www.ti.com/lit/an/slva689/slva689.pdf>`_
 
 
 .. _i2c-api-error-handling:
@@ -373,7 +379,7 @@ You can also select different pins for SDA and SCL signals and alter the configu
 Error Handling
 ^^^^^^^^^^^^^^
 
-The majority of I2C driver functions either return ``ESP_OK`` on successful completion or a specific error code on failure. It is a good practice to always check the returned values and implement error handling. The driver also prints out log messages that contain error details, e.g., when checking the validity of entered configuration. For details please refer to the file :component_file:`driver/i2c.c` and look for defines with the suffix ``_ERR_STR``.
+The majority of I2C driver functions either return ``ESP_OK`` on successful completion or a specific error code on failure. It is a good practice to always check the returned values and implement error handling. The driver also prints out log messages that contain error details, e.g., when checking the validity of entered configuration. For details please refer to the file :component_file:`driver/i2c/i2c.c` and look for defines with the suffix ``_ERR_STR``.
 
 Use dedicated interrupts to capture communication failures. For instance, if a slave stretches the clock for too long while preparing the data to send back to master, the interrupt ``I2C_TIME_OUT_INT`` will be triggered. For detailed information, see :ref:`i2c-api-interrupt-handling`.
 

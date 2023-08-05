@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -17,16 +17,19 @@
 #include <esp_err.h>
 #include "sdkconfig.h"
 
-#if !CONFIG_IDF_TARGET_ESP32C3 && !CONFIG_IDF_TARGET_ESP32H2 && !CONFIG_IDF_TARGET_ESP32C2
 #include "soc/soc_caps.h"
+#if SOC_RTCIO_PIN_COUNT > 0
 #include "hal/rtc_io_ll.h"
+#if SOC_RTCIO_INPUT_OUTPUT_SUPPORTED
+#include "hal/rtc_io_types.h"
 #endif
+#endif //SOC_RTCIO_PIN_COUNT > 0
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#if SOC_RTCIO_INPUT_OUTPUT_SUPPORTED
+#if SOC_RTCIO_PIN_COUNT > 0
 /**
  * Select the rtcio function.
  *
@@ -36,6 +39,7 @@ extern "C" {
  */
 #define rtcio_hal_function_select(rtcio_num, func) rtcio_ll_function_select(rtcio_num, func)
 
+#if SOC_RTCIO_INPUT_OUTPUT_SUPPORTED
 /**
  * Enable rtcio output.
  *
@@ -162,12 +166,20 @@ void rtcio_hal_set_direction_in_sleep(int rtcio_num, rtc_gpio_mode_t mode);
  */
 #define rtcio_hal_pulldown_disable(rtcio_num) rtcio_ll_pulldown_disable(rtcio_num)
 
+/**
+ * Select a RTC IOMUX function for the RTC IO
+ *
+ * @param rtcio_num The index of rtcio. 0 ~ SOC_RTCIO_PIN_COUNT.
+ * @param func Function to assign to the pin
+ */
+#define rtcio_hal_iomux_func_sel(rtcio_num, func) rtcio_ll_iomux_func_sel(rtcio_num, func)
+
 #endif // SOC_RTCIO_INPUT_OUTPUT_SUPPORTED
 
 #if SOC_RTCIO_HOLD_SUPPORTED
 
 /**
- * Enable force hold function for RTC IO pad.
+ * Enable force hold function on an RTC IO pad.
  *
  * Enabling HOLD function will cause the pad to lock current status, such as,
  * input/output enable, input/output value, function, drive strength values.
@@ -179,7 +191,7 @@ void rtcio_hal_set_direction_in_sleep(int rtcio_num, rtc_gpio_mode_t mode);
 #define rtcio_hal_hold_enable(rtcio_num) rtcio_ll_force_hold_enable(rtcio_num)
 
 /**
- * Disable hold function on an RTC IO pad
+ * Disable hold function on an RTC IO pad.
  *
  * @note If disable the pad hold, the status of pad maybe changed in sleep mode.
  * @param rtcio_num The index of rtcio. 0 ~ SOC_RTCIO_PIN_COUNT.
@@ -187,7 +199,7 @@ void rtcio_hal_set_direction_in_sleep(int rtcio_num, rtc_gpio_mode_t mode);
 #define rtcio_hal_hold_disable(rtcio_num) rtcio_ll_force_hold_disable(rtcio_num)
 
 /**
- * Enable force hold function for RTC IO pads.
+ * Enable force hold function on all RTC IO pads.
  *
  * Enabling HOLD function will cause the pad to lock current status, such as,
  * input/output enable, input/output value, function, drive strength values.
@@ -199,7 +211,7 @@ void rtcio_hal_set_direction_in_sleep(int rtcio_num, rtc_gpio_mode_t mode);
 #define rtcio_hal_hold_all() rtcio_ll_force_hold_all()
 
 /**
- * Disable hold function on an RTC IO pads.
+ * Disable hold function on all RTC IO pads.
  *
  * @note If disable the pad hold, the status of pad maybe changed in sleep mode.
  * @param rtcio_num The index of rtcio. 0 ~ SOC_RTCIO_PIN_COUNT.
@@ -234,7 +246,7 @@ void rtcio_hal_set_direction_in_sleep(int rtcio_num, rtc_gpio_mode_t mode);
 
 #endif
 
-#if SOC_RTCIO_HOLD_SUPPORTED || SOC_RTCIO_INPUT_OUTPUT_SUPPORTED
+#if SOC_RTCIO_HOLD_SUPPORTED && SOC_RTCIO_INPUT_OUTPUT_SUPPORTED
 
 /**
  * Helper function to disconnect internal circuits from an RTC IO
@@ -252,6 +264,39 @@ void rtcio_hal_set_direction_in_sleep(int rtcio_num, rtc_gpio_mode_t mode);
 void rtcio_hal_isolate(int rtc_num);
 
 #endif
+
+#endif //SOC_RTCIO_PIN_COUNT > 0
+
+#if SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP && (SOC_RTCIO_PIN_COUNT > 0)
+
+#define gpio_hal_deepsleep_wakeup_enable(hal, gpio_num, intr_type)  rtcio_hal_wakeup_enable(gpio_num, intr_type)
+#define gpio_hal_deepsleep_wakeup_disable(hal, gpio_num)            rtcio_hal_wakeup_disable(gpio_num)
+#define gpio_hal_deepsleep_wakeup_is_enabled(hal, gpio_num)         rtcio_hal_wakeup_is_enabled(gpio_num)
+#define rtc_hal_gpio_get_wakeup_status()                            rtcio_hal_get_interrupt_status()
+#define rtc_hal_gpio_clear_wakeup_status()                          rtcio_hal_clear_interrupt_status()
+
+/**
+ * @brief Get the status of whether an IO is used for sleep wake-up.
+ *
+ * @param hw Peripheral GPIO hardware instance address.
+ * @param rtcio_num GPIO number
+ * @return True if the pin is enabled to wake up from deep-sleep
+ */
+#define rtcio_hal_wakeup_is_enabled(rtcio_num) rtcio_ll_wakeup_is_enabled(rtcio_num)
+
+/**
+ * @brief Get the rtc io interrupt status
+ *
+ * @return  bit 0~7 corresponding to 0 ~ SOC_RTCIO_PIN_COUNT.
+ */
+#define rtcio_hal_get_interrupt_status()        rtcio_ll_get_interrupt_status()
+
+/**
+ * @brief Clear all LP IO pads status
+ */
+#define rtcio_hal_clear_interrupt_status()      rtcio_ll_clear_interrupt_status()
+
+#endif //SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP && (SOC_RTCIO_PIN_COUNT > 0)
 
 #ifdef __cplusplus
 }

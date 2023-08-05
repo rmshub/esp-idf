@@ -1,11 +1,11 @@
 Device Firmware Upgrade via USB
-========================================
+===============================
 
 :link_to_translation:`zh_CN:[中文]`
 
 Typically, the firmware of the {IDF_TARGET_NAME} is flashed via the chip's serial port. However, flashing via the serial port requires a USB to serial converter chip (e.g., CP210x or FTDI) to be connected to the {IDF_TARGET_NAME} (see :doc:`Establish Serial Connection with {IDF_TARGET_NAME} <../get-started/establish-serial-connection>` for more details). The {IDF_TARGET_NAME} contains a USB OTG peripheral making it possible to connect the {IDF_TARGET_NAME} to the host directly via USB (thus not requiring a USB to serial converter chip).
 
-Device Firmware Upgrade (DFU) is a mechanism for upgrading the firmware of the {IDF_TARGET_NAME} directly via the Universal Serial Bus (USB).
+Device Firmware Upgrade (DFU) is a mechanism for upgrading the firmware of the {IDF_TARGET_NAME} directly via the Universal Serial Bus (USB). However, enabling Secure Boot or flash encryption disables the USB-OTG USB stack in the ROM, disallowing updates via the serial emulation or DFU on that port.
 
 - :ref:`get-started-get-prerequisites` of the Getting Started Guide introduces the software requirements of DFU.
 - Section :ref:`api_guide_dfu_build` describes how to build firmware for DFU with ESP-IDF.
@@ -65,7 +65,7 @@ The command below will create a DFU image named ``dfu.bin`` that is placed in th
 .. _api_guide_dfu_flash:
 
 Flashing the DFU Image
-====================================
+======================
 
 The command below will download the DFU image into the {IDF_TARGET_NAME}::
 
@@ -90,7 +90,7 @@ See :ref:`api_guide_dfu_flash_errors` and their solutions.
 
 .. _api_guide_dfu_flash_udev:
 
-Udev Rule (Linux only)
+Udev Rule (Linux Only)
 ----------------------
 
 Udev is a device manager for the Linux kernel. It allows us to run ``dfu-util`` (and ``idf.py dfu-flash``) without ``sudo`` for gaining access to the chip.
@@ -106,7 +106,7 @@ Restart your computer so the previous setting could take into affect or run ``su
 
 .. _api_guide_dfu_flash_win:
 
-USB Drivers (Windows only)
+USB Drivers (Windows Only)
 --------------------------
 
 ``dfu-util`` uses `libusb` to access the device. You have to register on Windows the device with the `WinUSB` driver.
@@ -128,3 +128,10 @@ Common Errors and Known Issues
 - The reason for ``No DFU capable USB device available`` could be that the USB driver wasn't properly installed on Windows (see :ref:`api_guide_dfu_flash_win`), udev rule was not setup on Linux (see :ref:`api_guide_dfu_flash_udev`) or the device isn't in bootloader mode.
 
 - Flashing with ``dfu-util`` on Windows fails on the first attempt with error ``Lost device after RESET?``. Please retry the flashing and it should succeed the next time.
+
+.. only:: SOC_SUPPORTS_SECURE_DL_MODE
+
+    Secure Download Mode
+    --------------------
+
+    When Secure Download Mode is enabled, DFU is no longer possible. Please see :doc:`Flash Encryption <../security/flash-encryption>` guide for more details.

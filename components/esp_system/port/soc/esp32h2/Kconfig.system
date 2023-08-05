@@ -1,7 +1,7 @@
 menu "Brownout Detector"
-
     config ESP_BROWNOUT_DET
         bool "Hardware brownout detect & reset"
+        depends on !IDF_ENV_FPGA
         default y
         help
             The ESP32-H2 has a built-in brownout detector which can detect if the voltage is lower than

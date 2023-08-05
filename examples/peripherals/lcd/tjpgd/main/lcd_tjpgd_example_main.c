@@ -16,7 +16,7 @@
 #include "driver/gpio.h"
 #include "pretty_effect.h"
 
-// Using SPI2 in the example, as it aslo supports octal modes on some targets
+// Using SPI2 in the example, as it also supports octal modes on some targets
 #define LCD_HOST       SPI2_HOST
 // To speed up transfers, every SPI transfer sends a bunch of lines. This define specifies how many.
 // More means more memory use, but less overhead for setting up / finishing transfers. Make sure 240
@@ -28,10 +28,10 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////// Please update the following configuration according to your LCD spec //////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-#define EXAMPLE_LCD_PIXEL_CLOCK_HZ (10 * 1000 * 1000)
+#define EXAMPLE_LCD_PIXEL_CLOCK_HZ (20 * 1000 * 1000)
 #define EXAMPLE_LCD_BK_LIGHT_ON_LEVEL  0
 #define EXAMPLE_LCD_BK_LIGHT_OFF_LEVEL !EXAMPLE_LCD_BK_LIGHT_ON_LEVEL
-#define EXAMPLE_PIN_NUM_DATA0          23  /*!< for 1-line SPI, this also refered as MOSI */
+#define EXAMPLE_PIN_NUM_DATA0          23  /*!< for 1-line SPI, this also refereed as MOSI */
 #define EXAMPLE_PIN_NUM_PCLK           19
 #define EXAMPLE_PIN_NUM_CS             22
 #define EXAMPLE_PIN_NUM_DC             21
@@ -130,7 +130,7 @@ void app_main(void)
     esp_lcd_panel_handle_t panel_handle = NULL;
     esp_lcd_panel_dev_config_t panel_config = {
         .reset_gpio_num = EXAMPLE_PIN_NUM_RST,
-        .color_space = ESP_LCD_COLOR_SPACE_BGR,
+        .rgb_endian = LCD_RGB_ENDIAN_BGR,
         .bits_per_pixel = 16,
     };
     // Initialize the LCD configuration

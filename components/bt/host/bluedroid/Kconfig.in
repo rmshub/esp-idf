@@ -47,6 +47,13 @@ config BT_CLASSIC_ENABLED
     help
         For now this option needs "SMP_ENABLE" to be set to yes
 
+config BT_CLASSIC_BQB_ENABLED
+    bool "Host Qualitifcation support for Classic Bluetooth"
+    depends on BT_CLASSIC_ENABLED
+    default n
+    help
+        This enables functionalities of Host qualification for Classic Bluetooth.
+
 config BT_A2DP_ENABLE
     bool "A2DP"
     depends on BT_CLASSIC_ENABLED
@@ -173,6 +180,13 @@ config BT_GATT_MAX_SR_PROFILES
     help
         Maximum GATT Server Profiles Count
 
+config BT_GATT_MAX_SR_ATTRIBUTES
+    int "Max GATT Service Attributes"
+    depends on BT_GATTS_ENABLE && BT_BLUEDROID_ENABLED
+    range 1 500
+    default 100
+    help
+        Maximum GATT Service Attributes Count
 
 
 choice BT_GATTS_SEND_SERVICE_CHANGE_MODE
@@ -201,12 +215,41 @@ config BT_GATTS_SEND_SERVICE_CHANGE_MODE
     default 1 if BT_GATTS_SEND_SERVICE_CHANGE_MANUAL
     default 0
 
+config BT_GATTS_ROBUST_CACHING_ENABLED
+    bool "Enable Robust Caching on Server Side"
+    depends on BT_GATTS_ENABLE
+    default n
+    help
+        This option enable gatt robust caching feature on server
+
+config BT_GATTS_DEVICE_NAME_WRITABLE
+    bool "Allow to write device name by GATT clients"
+    depends on BT_GATTS_ENABLE
+    default n
+    help
+        Enabling this option allows remote GATT clients to write device name
+
+config BT_GATTS_APPEARANCE_WRITABLE
+    bool "Allow to write appearance by GATT clients"
+    depends on BT_GATTS_ENABLE
+    default n
+    help
+        Enabling this option allows remote GATT clients to write appearance
+
 config BT_GATTC_ENABLE
     bool "Include GATT client module(GATTC)"
     depends on BT_BLE_ENABLED
     default y
     help
         This option can be close when the app work only on gatt server mode
+
+config BT_GATTC_MAX_CACHE_CHAR
+    int "Max gattc cache characteristic for discover"
+    depends on BT_GATTC_ENABLE
+    range 1 500
+    default 40
+    help
+        Maximum GATTC cache characteristic count
 
 config BT_GATTC_CACHE_NVS_FLASH
     bool "Save gattc cache data to nvs flash"
@@ -986,12 +1029,16 @@ menu "BT DEBUG LOG LEVEL"
 endmenu #BT DEBUG LOG LEVEL
 
 config BT_ACL_CONNECTIONS
-    int "BT/BLE MAX ACL CONNECTIONS(1~7)"
+    int "BT/BLE MAX ACL CONNECTIONS(1~9)"
     depends on BT_BLUEDROID_ENABLED
-    range 1 7
+    range 1 9
     default 4
     help
-        Maximum BT/BLE connection count
+        Maximum BT/BLE connection count. The ESP32-C3/S3 chip supports a maximum of 10 instances,
+        including ADV, SCAN and connections. The ESP32-C3/S3 chip can connect up to 9 devices if
+        ADV or SCAN uses only one. If ADV and SCAN are both used, The ESP32-C3/S3 chip is connected
+        to a maximum of 8 devices. Because Bluetooth cannot reclaim used instances once ADV or SCAN
+        is used.
 
 config BT_MULTI_CONNECTION_ENBALE
     bool "Enable BLE multi-conections"
@@ -1030,7 +1077,7 @@ config BT_SMP_ENABLE
 
 config BT_BLE_ACT_SCAN_REP_ADV_SCAN
     bool "Report adv data and scan response individually when BLE active scan"
-    depends on BT_BLUEDROID_ENABLED && (BTDM_CTRL_MODE_BTDM || BTDM_CTRL_MODE_BLE_ONLY)
+    depends on BT_BLUEDROID_ENABLED && BT_BLE_ENABLED
     default n
     help
         Originally, when doing BLE active scan, Bluedroid will not report adv to application layer
@@ -1060,9 +1107,8 @@ config BT_MAX_DEVICE_NAME_LEN
 
 config BT_BLE_RPA_SUPPORTED
     bool "Update RPA to Controller"
-    depends on BT_BLUEDROID_ENABLED
-    default n if IDF_TARGET_ESP32
-    default y
+    depends on BT_BLUEDROID_ENABLED && !SOC_BLE_DEVICE_PRIVACY_SUPPORTED
+    default n
     help
         This enables controller RPA list function.
         For ESP32, ESP32 only support network privacy mode. If this option is enabled, ESP32 will only accept
@@ -1072,8 +1118,17 @@ config BT_BLE_RPA_SUPPORTED
         cannot be used. This option is disabled by default on ESP32, please enable or disable this option according
         to your own needs.
 
-        For ESP32C3, ESP32S3, ESP32H2 and ESP32C2, devices support network privacy mode and device privacy mode,
+        For other BLE chips, devices support network privacy mode and device privacy mode,
         users can switch the two modes according to their own needs. So this option is enabled by default.
+
+config BT_BLE_RPA_TIMEOUT
+    int "Timeout of resolvable private address"
+    depends on BT_BLUEDROID_ENABLED
+    range 1 3600
+    default 900
+    help
+        This set RPA timeout of Controller and Host.
+        Default is 900 s (15 minutes). Range is 1 s to 1 hour (3600 s).
 
 config BT_BLE_50_FEATURES_SUPPORTED
     bool "Enable BLE 5.0 features"
@@ -1088,3 +1143,10 @@ config BT_BLE_42_FEATURES_SUPPORTED
     default n
     help
         This enables BLE 4.2 features.
+
+config BT_BLE_FEAT_PERIODIC_ADV_SYNC_TRANSFER
+    bool "Enable BLE periodic advertising sync transfer feature"
+    depends on (BT_BLUEDROID_ENABLED && BT_BLE_50_FEATURES_SUPPORTED && SOC_ESP_NIMBLE_CONTROLLER)
+    default n
+    help
+        This enables BLE periodic advertising sync transfer feature

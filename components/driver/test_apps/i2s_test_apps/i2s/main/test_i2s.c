@@ -1,11 +1,12 @@
 /*
- * SPDX-FileCopyrightText: 2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
 #include <stdio.h>
 #include <string.h>
+#include <inttypes.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
@@ -32,7 +33,7 @@
 #include "soc/pcnt_periph.h"
 #endif
 
-#include "test_inc/test_i2s.h"
+#include "../../test_inc/test_i2s.h"
 
 #define I2S_TEST_MODE_SLAVE_TO_MASTER 0
 #define I2S_TEST_MODE_MASTER_TO_SLAVE 1
@@ -167,7 +168,7 @@ TEST_CASE("I2S_basic_channel_allocation_reconfig_deleting_test", "[i2s]")
     i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_AUTO, I2S_ROLE_MASTER);
     i2s_std_config_t std_cfg = {
         .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(SAMPLE_RATE),
-        .slot_cfg = I2S_STD_PHILIP_SLOT_DEFAULT_CONFIG(SAMPLE_BITS, I2S_SLOT_MODE_STEREO),
+        .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(SAMPLE_BITS, I2S_SLOT_MODE_STEREO),
         .gpio_cfg = I2S_TEST_MASTER_DEFAULT_PIN,
     };
 
@@ -226,7 +227,7 @@ static void i2s_read_task(void *args) {
     while (task_run_flag) {
         ret = i2s_channel_read(rx_handle, recv_buf, 2000, &recv_size, 300);
         if (ret == ESP_ERR_TIMEOUT) {
-            printf("Read timeout count: %d\n", cnt++);
+            printf("Read timeout count: %"PRIu32"\n", cnt++);
         }
     }
 
@@ -245,7 +246,7 @@ static void i2s_write_task(void *args) {
     while (task_run_flag) {
         ret = i2s_channel_write(tx_handle, send_buf, 2000, &send_size, 300);
         if (ret == ESP_ERR_TIMEOUT) {
-            printf("Write timeout count: %d\n", cnt++);
+            printf("Write timeout count: %"PRIu32"\n", cnt++);
         }
     }
 
@@ -262,7 +263,7 @@ static void i2s_reconfig_task(void *args) {
 
     while (task_run_flag) {
         /* Reconfig the slot while reading / writing */
-        i2s_std_slot_config_t slot_cfg = I2S_STD_PHILIP_SLOT_DEFAULT_CONFIG(SAMPLE_BITS, I2S_SLOT_MODE_STEREO);
+        i2s_std_slot_config_t slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(SAMPLE_BITS, I2S_SLOT_MODE_STEREO);
         TEST_ESP_OK(i2s_channel_disable(tx_handle));
         TEST_ESP_OK(i2s_channel_disable(rx_handle));
         printf("[%d] Reconfiguring the slot...\n", cnt);
@@ -364,18 +365,26 @@ TEST_CASE("I2S_thread_concurrent_safety_test", "[i2s]")
     TEST_ESP_OK(i2s_del_channel(rx_handle));
 }
 
-static uint32_t get_start_index(uint16_t *buf, uint32_t len, uint32_t start_val)
+static bool whether_contains_exapected_data(uint16_t *src, uint32_t src_len, uint32_t src_step, uint32_t start_val, uint32_t val_step)
 {
-    uint32_t i = 0;
-    for (i = 0; i < len; i++) {
-        if (buf[i] == start_val) {
-            printf("%d %d %d %d %d %d %d %d\n",
-                buf[i], buf[i+1], buf[i+2], buf[i+3],
-                buf[i+4], buf[i+5], buf[i+6], buf[i+7]);
-            break;
+    uint32_t val = start_val;
+    uint32_t index_step = 1;
+    for (int i = 0; val < 100 && i < src_len; i += index_step) {
+        if (src[i] == val) {
+            if (val == start_val && i < src_len - 8) {
+                printf("start index: %d ---> \n%d %d %d %d %d %d %d %d\n", i,
+                        src[i], src[i+1], src[i+2], src[i+3],
+                        src[i+4], src[i+5], src[i+6], src[i+7]);
+            }
+            index_step = src_step;
+            val += val_step;
+        } else {
+            index_step = 1;
+            val = start_val;
         }
     }
-    return i;
+
+    return val >= 100;
 }
 
 /**
@@ -393,6 +402,8 @@ TEST_CASE("I2S_mono_stereo_loopback_test", "[i2s]")
 
     i2s_chan_handle_t tx_handle;
     i2s_chan_handle_t rx_handle;
+
+    bool is_failed = false;
 
     i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
     chan_cfg.dma_desc_num = 8;
@@ -416,7 +427,7 @@ TEST_CASE("I2S_mono_stereo_loopback_test", "[i2s]")
     };
     i2s_std_config_t rx_std_cfg = tx_std_cfg;
     rx_std_cfg.slot_cfg.slot_mode = I2S_SLOT_MODE_MONO;
-    rx_std_cfg.slot_cfg.slot_mask = I2S_STD_SLOT_ONLY_RIGHT;
+    rx_std_cfg.slot_cfg.slot_mask = I2S_STD_SLOT_RIGHT;
 
     /* TX channel basic test */
     TEST_ESP_OK(i2s_new_channel(&chan_cfg, &tx_handle, &rx_handle));
@@ -429,7 +440,6 @@ TEST_CASE("I2S_mono_stereo_loopback_test", "[i2s]")
     uint16_t *r_buf = calloc(1, READ_BUF_LEN);
     size_t w_bytes = 0;
     size_t r_bytes = 0;
-    uint32_t index = 0;
     uint32_t retry = 0;
     for (int n = 0; n < WRITE_BUF_LEN / 2; n++) {
         w_buf[n] = n%100;
@@ -439,7 +449,7 @@ TEST_CASE("I2S_mono_stereo_loopback_test", "[i2s]")
      * tx format: 0x00[L] 0x01[R] 0x02[L] 0x03[R] ...
      * rx receive: 0x01[R] 0x03[R] ... */
     TEST_ESP_OK(i2s_channel_write(tx_handle, w_buf, WRITE_BUF_LEN, &w_bytes, portMAX_DELAY));
-    for (retry = 0, index = READ_BUF_LEN / 2; (retry < RETEY_TIMES) && (index >= READ_BUF_LEN / 2 - 50); retry++) {
+    for (retry = 0; retry < RETEY_TIMES; retry++) {
         TEST_ESP_OK(i2s_channel_read(rx_handle, r_buf, READ_BUF_LEN, &r_bytes, portMAX_DELAY));
 #if CONFIG_IDF_TARGET_ESP32
         /* The data of tx/rx channels are flipped on ESP32 */
@@ -449,12 +459,15 @@ TEST_CASE("I2S_mono_stereo_loopback_test", "[i2s]")
             r_buf[n+1] = temp;
         }
 #endif
-        index = get_start_index(r_buf, READ_BUF_LEN / 2, 1);
+        /* Expected: 1 3 5 7 9 ... 97 99 */
+        if (whether_contains_exapected_data(r_buf, READ_BUF_LEN / 2, 1, 1, 2)) {
+            break;
+        }
     }
-    printf("Data start index: %d\n", index);
-    TEST_ASSERT(index < READ_BUF_LEN / 2 - 50);
-    for (int16_t j = 1; j < 100; j += 2) {
-        TEST_ASSERT_EQUAL_INT16(r_buf[index++], j);
+    if (retry >= RETEY_TIMES) {
+        printf("rx right mono test failed\n");
+        is_failed = true;
+        goto err;
     }
     printf("rx right mono test passed\n");
 
@@ -463,12 +476,12 @@ TEST_CASE("I2S_mono_stereo_loopback_test", "[i2s]")
      * rx receive: 0x00[R] 0x02[R] ... */
     TEST_ESP_OK(i2s_channel_disable(tx_handle));
     TEST_ESP_OK(i2s_channel_disable(rx_handle));
-    rx_std_cfg.slot_cfg.slot_mask = I2S_STD_SLOT_ONLY_LEFT;
+    rx_std_cfg.slot_cfg.slot_mask = I2S_STD_SLOT_LEFT;
     TEST_ESP_OK(i2s_channel_reconfig_std_slot(rx_handle, &rx_std_cfg.slot_cfg));
     TEST_ESP_OK(i2s_channel_enable(tx_handle));
     TEST_ESP_OK(i2s_channel_enable(rx_handle));
     TEST_ESP_OK(i2s_channel_write(tx_handle, w_buf, WRITE_BUF_LEN, &w_bytes, portMAX_DELAY));
-    for (retry = 0, index = READ_BUF_LEN / 2; (retry < RETEY_TIMES) && (index >= READ_BUF_LEN / 2 - 50); retry++) {
+    for (retry = 0; retry < RETEY_TIMES; retry++) {
         TEST_ESP_OK(i2s_channel_read(rx_handle, r_buf, READ_BUF_LEN, &r_bytes, portMAX_DELAY));
 #if CONFIG_IDF_TARGET_ESP32
         /* The data of tx/rx channels are flipped on ESP32 */
@@ -478,12 +491,15 @@ TEST_CASE("I2S_mono_stereo_loopback_test", "[i2s]")
             r_buf[n+1] = temp;
         }
 #endif
-        index = get_start_index(r_buf, READ_BUF_LEN / 2, 2);
+        /* Expected: 2 4 6 8 10 ... 96 98 */
+        if (whether_contains_exapected_data(r_buf, READ_BUF_LEN / 2, 1, 2, 2)) {
+            break;
+        }
     }
-    printf("Data start index: %d\n", index);
-    TEST_ASSERT(index < READ_BUF_LEN / 2 - 50);
-    for (int16_t j = 2; j < 100; j += 2) {
-        TEST_ASSERT_EQUAL_INT16(r_buf[index++], j);
+    if (retry >= RETEY_TIMES) {
+        printf("rx left mono test failed\n");
+        is_failed = true;
+        goto err;
     }
     printf("rx left mono test passed\n");
 
@@ -493,20 +509,22 @@ TEST_CASE("I2S_mono_stereo_loopback_test", "[i2s]")
     TEST_ESP_OK(i2s_channel_disable(tx_handle));
     TEST_ESP_OK(i2s_channel_disable(rx_handle));
     rx_std_cfg.slot_cfg.slot_mode = I2S_SLOT_MODE_STEREO;
-    rx_std_cfg.slot_cfg.slot_mask = I2S_STD_SLOT_LEFT_RIGHT;
+    rx_std_cfg.slot_cfg.slot_mask = I2S_STD_SLOT_BOTH;
     TEST_ESP_OK(i2s_channel_reconfig_std_slot(rx_handle, &rx_std_cfg.slot_cfg));
     TEST_ESP_OK(i2s_channel_enable(tx_handle));
     TEST_ESP_OK(i2s_channel_enable(rx_handle));
     TEST_ESP_OK(i2s_channel_write(tx_handle, w_buf, WRITE_BUF_LEN, &w_bytes, portMAX_DELAY));
-    for (retry = 0, index = READ_BUF_LEN / 2; (retry < RETEY_TIMES) && (index >= READ_BUF_LEN / 2 - 100); retry++) {
+    for (retry = 0; retry < RETEY_TIMES; retry++) {
         TEST_ESP_OK(i2s_channel_read(rx_handle, r_buf, READ_BUF_LEN, &r_bytes, portMAX_DELAY));
-        index = get_start_index(r_buf, READ_BUF_LEN / 2, 1);
+        /* Expected: 1 2 3 4 ... 98 99 */
+        if (whether_contains_exapected_data(r_buf, READ_BUF_LEN / 2, 1, 1, 1)) {
+            break;
+        }
     }
-
-    printf("Data start index: %d\n", index);
-    TEST_ASSERT(index < READ_BUF_LEN / 2 - 100);
-    for (int16_t j = 1; j < 100; j ++) {
-        TEST_ASSERT_EQUAL_INT16(r_buf[index++], j); // receive all number
+    if (retry >= RETEY_TIMES) {
+        printf("tx/rx stereo test failed\n");
+        is_failed = true;
+        goto err;
     }
     printf("tx/rx stereo test passed\n");
 
@@ -522,25 +540,35 @@ TEST_CASE("I2S_mono_stereo_loopback_test", "[i2s]")
     TEST_ESP_OK(i2s_channel_enable(tx_handle));
     TEST_ESP_OK(i2s_channel_enable(rx_handle));
     TEST_ESP_OK(i2s_channel_write(tx_handle, w_buf, WRITE_BUF_LEN, &w_bytes, portMAX_DELAY));
-    for (retry = 0, index = READ_BUF_LEN / 2; (retry < RETEY_TIMES) && (index >= READ_BUF_LEN / 2 - 100); retry++) {
+    for (retry = 0; retry < RETEY_TIMES; retry++) {
         TEST_ESP_OK(i2s_channel_read(rx_handle, r_buf, READ_BUF_LEN, &r_bytes, portMAX_DELAY));
-        index = get_start_index(r_buf, READ_BUF_LEN / 2, 1);
+        /* Expected: 1 x 2 x 3 x ... 98 x 99 */
+        if (whether_contains_exapected_data(r_buf, READ_BUF_LEN / 2, 2, 1, 1)) {
+            break;
+        }
     }
-    printf("Data start index: %d\n", index);
-    TEST_ASSERT(index < READ_BUF_LEN / 2 - 200);
-    for (int16_t j = 1; j < 100; j ++) {
-        TEST_ASSERT_EQUAL_INT16(r_buf[index], j);
-        index += 2;
+    if (retry >= RETEY_TIMES) {
+        printf("tx mono rx stereo test failed\n");
+        is_failed = true;
+        goto err;
     }
     printf("tx mono rx stereo test passed\n");
 #endif
 
+err:
+    if (is_failed) {
+        for (int i = 0; i < READ_BUF_LEN / 2; i++) {
+            printf("%x ", r_buf[i]);
+        }
+        printf("\n");
+    }
     free(w_buf);
     free(r_buf);
     TEST_ESP_OK(i2s_channel_disable(tx_handle));
     TEST_ESP_OK(i2s_channel_disable(rx_handle));
     TEST_ESP_OK(i2s_del_channel(tx_handle));
     TEST_ESP_OK(i2s_del_channel(rx_handle));
+    TEST_ASSERT_FALSE(is_failed);
 }
 
 TEST_CASE("I2S_memory_leak_test", "[i2s]")
@@ -551,7 +579,7 @@ TEST_CASE("I2S_memory_leak_test", "[i2s]")
     i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_AUTO, I2S_ROLE_MASTER);
     i2s_std_config_t std_cfg = {
         .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(SAMPLE_RATE),
-        .slot_cfg = I2S_STD_PHILIP_SLOT_DEFAULT_CONFIG(SAMPLE_BITS, I2S_SLOT_MODE_STEREO),
+        .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(SAMPLE_BITS, I2S_SLOT_MODE_STEREO),
         .gpio_cfg = I2S_TEST_MASTER_DEFAULT_PIN,
     };
 
@@ -580,7 +608,7 @@ TEST_CASE("I2S_memory_leak_test", "[i2s]")
         TEST_ESP_OK(i2s_del_channel(rx_handle));
         TEST_ASSERT(memory_left == esp_get_free_heap_size());
     }
-    printf("\r\nHeap size after: %d\n", esp_get_free_heap_size());
+    printf("\r\nHeap size after: %"PRIu32"\n", esp_get_free_heap_size());
 }
 
 TEST_CASE("I2S_loopback_test", "[i2s]")
@@ -591,7 +619,7 @@ TEST_CASE("I2S_loopback_test", "[i2s]")
     i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
     i2s_std_config_t std_cfg = {
         .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(SAMPLE_RATE),
-        .slot_cfg = I2S_STD_PHILIP_SLOT_DEFAULT_CONFIG(SAMPLE_BITS, I2S_SLOT_MODE_STEREO),
+        .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(SAMPLE_BITS, I2S_SLOT_MODE_STEREO),
         .gpio_cfg = I2S_TEST_MASTER_DEFAULT_PIN,
     };
     TEST_ESP_OK(i2s_new_channel(&chan_cfg, &tx_handle, &rx_handle));
@@ -621,13 +649,13 @@ TEST_CASE("I2S_master_write_slave_read_test", "[i2s]")
 
     i2s_std_config_t std_mst_cfg = {
         .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(SAMPLE_RATE),
-        .slot_cfg = I2S_STD_PHILIP_SLOT_DEFAULT_CONFIG(SAMPLE_BITS, I2S_SLOT_MODE_STEREO),
+        .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(SAMPLE_BITS, I2S_SLOT_MODE_STEREO),
         .gpio_cfg = I2S_TEST_MASTER_DEFAULT_PIN,
     };
 
     i2s_std_config_t std_slv_cfg = {
         .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(SAMPLE_RATE),
-        .slot_cfg = I2S_STD_PHILIP_SLOT_DEFAULT_CONFIG(SAMPLE_BITS, I2S_SLOT_MODE_STEREO),
+        .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(SAMPLE_BITS, I2S_SLOT_MODE_STEREO),
         .gpio_cfg = I2S_TEST_SLAVE_DEFAULT_PIN,
     };
 
@@ -657,13 +685,13 @@ TEST_CASE("I2S_master_read_slave_write_test", "[i2s]")
     i2s_chan_config_t slv_chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_1, I2S_ROLE_SLAVE);
     i2s_std_config_t std_mst_cfg = {
         .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(SAMPLE_RATE),
-        .slot_cfg = I2S_STD_PHILIP_SLOT_DEFAULT_CONFIG(SAMPLE_BITS, I2S_SLOT_MODE_STEREO),
+        .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(SAMPLE_BITS, I2S_SLOT_MODE_STEREO),
         .gpio_cfg = I2S_TEST_MASTER_DEFAULT_PIN,
     };
 
     i2s_std_config_t std_slv_cfg = {
         .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(SAMPLE_RATE),
-        .slot_cfg = I2S_STD_PHILIP_SLOT_DEFAULT_CONFIG(SAMPLE_BITS, I2S_SLOT_MODE_STEREO),
+        .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(SAMPLE_BITS, I2S_SLOT_MODE_STEREO),
         .gpio_cfg = I2S_TEST_SLAVE_DEFAULT_PIN,
     };
 
@@ -718,12 +746,27 @@ static void i2s_test_common_sample_rate(i2s_chan_handle_t rx_chan, i2s_std_clk_c
     esp_rom_gpio_connect_out_signal(MASTER_WS_IO, i2s_periph_signal[0].m_rx_ws_sig, 0, 0);
     esp_rom_gpio_connect_in_signal(MASTER_WS_IO, pcnt_periph_signals.groups[0].units[0].channels[0].pulse_sig, 0);
 
-    // Test common sample rate
-    uint32_t test_freq[15] = {8000,  11025, 12000, 16000, 22050, 24000,
-                            32000, 44100, 48000, 64000, 88200, 96000,
-                            128000, 144000, 196000};
+    const uint32_t test_freq[] = {
+        8000,  10000, 11025, 12000, 16000, 22050,
+        24000, 32000, 44100, 48000, 64000, 88200,
+        96000, 128000,144000,196000};
     int real_pulse = 0;
-    for (int i = 0; i < 15; i++) {
+    int case_cnt = sizeof(test_freq) / sizeof(uint32_t);
+#if SOC_I2S_SUPPORTS_PLL_F96M
+    // 196000 Hz sample rate doesn't support on PLL_96M target
+    case_cnt = 15;
+#endif
+#if SOC_I2S_SUPPORTS_XTAL
+    // Can't support a very high sample rate while using XTAL as clock source
+    if (clk_cfg->clk_src == I2S_CLK_SRC_XTAL) {
+        case_cnt = 10;
+    }
+#endif
+#if CONFIG_IDF_ENV_FPGA
+    // Limit the test sample rate on FPGA platform due to the low frequency it supports.
+    case_cnt = 10;
+#endif
+    for (int i = 0; i < case_cnt; i++) {
         int expt_pulse = (int)((float)test_freq[i] * (TEST_I2S_PERIOD_MS / 1000.0));
         clk_cfg->sample_rate_hz = test_freq[i];
         TEST_ESP_OK(i2s_channel_reconfig_std_clock(rx_chan, clk_cfg));
@@ -735,7 +778,7 @@ static void i2s_test_common_sample_rate(i2s_chan_handle_t rx_chan, i2s_std_clk_c
         vTaskDelay(pdMS_TO_TICKS(TEST_I2S_PERIOD_MS));
         TEST_ESP_OK(pcnt_unit_stop(pcnt_unit));
         TEST_ESP_OK(pcnt_unit_get_count(pcnt_unit, &real_pulse));
-        printf("[%d Hz] %d pulses, expected %d, err %d\n", test_freq[i], real_pulse, expt_pulse, real_pulse - expt_pulse);
+        printf("[%"PRIu32" Hz] %d pulses, expected %d, err %d\n", test_freq[i], real_pulse, expt_pulse, real_pulse - expt_pulse);
         TEST_ESP_OK(i2s_channel_disable(rx_chan));
         // Check if the error between real pulse number and expected pulse number is within 1%
         TEST_ASSERT_INT_WITHIN(expt_pulse * 0.01, expt_pulse, real_pulse);
@@ -753,7 +796,7 @@ TEST_CASE("I2S_default_PLL_clock_test", "[i2s]")
     i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
     i2s_std_config_t std_cfg = {
         .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(SAMPLE_RATE),
-        .slot_cfg = I2S_STD_PHILIP_SLOT_DEFAULT_CONFIG(SAMPLE_BITS, I2S_SLOT_MODE_STEREO),
+        .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(SAMPLE_BITS, I2S_SLOT_MODE_STEREO),
         .gpio_cfg = I2S_TEST_MASTER_DEFAULT_PIN,
     };
 
@@ -761,6 +804,10 @@ TEST_CASE("I2S_default_PLL_clock_test", "[i2s]")
     TEST_ESP_OK(i2s_channel_init_std_mode(rx_handle, &std_cfg));
 
     i2s_test_common_sample_rate(rx_handle, &std_cfg.clk_cfg);
+#if SOC_I2S_SUPPORTS_XTAL
+    std_cfg.clk_cfg.clk_src = I2S_CLK_SRC_XTAL;
+    i2s_test_common_sample_rate(rx_handle, &std_cfg.clk_cfg);
+#endif
     TEST_ESP_OK(i2s_del_channel(rx_handle));
 }
 
@@ -772,7 +819,7 @@ TEST_CASE("I2S_APLL_clock_test", "[i2s]")
     i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
     i2s_std_config_t std_cfg = {
         .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(SAMPLE_RATE),
-        .slot_cfg = I2S_STD_PHILIP_SLOT_DEFAULT_CONFIG(SAMPLE_BITS, I2S_SLOT_MODE_STEREO),
+        .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(SAMPLE_BITS, I2S_SLOT_MODE_STEREO),
         .gpio_cfg = I2S_TEST_MASTER_DEFAULT_PIN,
     };
     std_cfg.clk_cfg.clk_src = I2S_CLK_SRC_APLL;
@@ -810,7 +857,7 @@ TEST_CASE("I2S_package_lost_test", "[i2s]")
     chan_cfg.dma_frame_num = 511;
     i2s_std_config_t std_cfg = {
         .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(SAMPLE_RATE),
-        .slot_cfg = I2S_STD_PHILIP_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_32BIT, I2S_SLOT_MODE_STEREO),
+        .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_32BIT, I2S_SLOT_MODE_STEREO),
         .gpio_cfg = I2S_TEST_MASTER_DEFAULT_PIN,
     };
 
@@ -831,7 +878,7 @@ TEST_CASE("I2S_package_lost_test", "[i2s]")
     size_t bytes_read = 0;
     int i;
     for (i = 0; i < test_num; i++) {
-        printf("Testing %d Hz sample rate\n", test_freq[i]);
+        printf("Testing %"PRIu32" Hz sample rate\n", test_freq[i]);
         std_cfg.clk_cfg.sample_rate_hz = test_freq[i];
         std_cfg.clk_cfg.sample_rate_hz = test_freq[i];
         TEST_ESP_OK(i2s_channel_reconfig_std_clock(rx_handle, &std_cfg.clk_cfg));
@@ -843,7 +890,7 @@ TEST_CASE("I2S_package_lost_test", "[i2s]")
         }
         TEST_ESP_OK(i2s_channel_disable(rx_handle));
         if (count > 0) {
-            printf("package lost detected at %d Hz\n", test_freq[i]);
+            printf("package lost detected at %"PRIu32" Hz\n", test_freq[i]);
             goto finish;
         }
     }

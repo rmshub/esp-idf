@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# SPDX-FileCopyrightText: 2019-2022 Espressif Systems (Shanghai) CO LTD
+# SPDX-FileCopyrightText: 2019-2023 Espressif Systems (Shanghai) CO LTD
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -13,21 +13,18 @@
 # check_environment() function below. If possible, avoid importing
 # any external libraries here - put in external script, or import in
 # their specific function instead.
-from __future__ import annotations
-
 import codecs
 import json
 import locale
 import os
 import os.path
-import signal
+import shlex
 import subprocess
 import sys
 from collections import Counter, OrderedDict, _OrderedDictKeysView
 from importlib import import_module
 from pkgutil import iter_modules
-from types import FrameType
-from typing import Any, Callable, Dict, List, Optional, TextIO, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 # pyc files remain in the filesystem when switching between branches which might raise errors for incompatible
 # idf.py extensions. Therefore, pyc file generation is turned off:
@@ -37,8 +34,10 @@ import python_version_checker  # noqa: E402
 
 try:
     from idf_py_actions.errors import FatalError  # noqa: E402
-    from idf_py_actions.tools import (PropertyDict, executable_exists, idf_version, merge_action_lists,  # noqa: E402
-                                      realpath)
+    from idf_py_actions.tools import (PROG, SHELL_COMPLETE_RUN, SHELL_COMPLETE_VAR, PropertyDict,  # noqa: E402
+                                      debug_print_idf_version, get_target, merge_action_lists, print_warning)
+    if os.getenv('IDF_COMPONENT_MANAGER') != '0':
+        from idf_component_manager import idf_extensions
 except ImportError:
     # For example, importing click could cause this.
     print('Please use idf.py only in an ESP-IDF shell environment.', file=sys.stderr)
@@ -51,23 +50,6 @@ PYTHON = sys.executable
 # you have to pass env=os.environ explicitly anywhere that we create a process
 os.environ['PYTHON'] = sys.executable
 
-# Name of the program, normally 'idf.py'.
-# Can be overridden from idf.bat using IDF_PY_PROGRAM_NAME
-PROG = os.getenv('IDF_PY_PROGRAM_NAME', 'idf.py')
-
-# environment variable used during click shell completion run
-SHELL_COMPLETE_VAR = '_IDF.PY_COMPLETE'
-
-# was shell completion invoked?
-SHELL_COMPLETE_RUN = SHELL_COMPLETE_VAR in os.environ
-
-
-# function prints warning when autocompletion is not being performed
-# set argument stream to sys.stderr for errors and exceptions
-def print_warning(message: str, stream: TextIO=None) -> None:
-    if not SHELL_COMPLETE_RUN:
-        print(message, file=stream or sys.stderr)
-
 
 def check_environment() -> List:
     """
@@ -77,15 +59,11 @@ def check_environment() -> List:
     """
     checks_output = []
 
-    if not executable_exists(['cmake', '--version']):
-        debug_print_idf_version()
-        raise FatalError("'cmake' must be available on the PATH to use %s" % PROG)
-
     # verify that IDF_PATH env variable is set
     # find the directory idf.py is in, then the parent directory of this, and assume this is IDF_PATH
-    detected_idf_path = realpath(os.path.join(os.path.dirname(__file__), '..'))
+    detected_idf_path = os.path.realpath(os.path.join(os.path.dirname(__file__), '..'))
     if 'IDF_PATH' in os.environ:
-        set_idf_path = realpath(os.environ['IDF_PATH'])
+        set_idf_path = os.path.realpath(os.environ['IDF_PATH'])
         if set_idf_path != detected_idf_path:
             print_warning(
                 'WARNING: IDF_PATH environment variable is set to %s but %s path indicates IDF directory %s. '
@@ -133,14 +111,6 @@ def _safe_relpath(path: str, start: Optional[str]=None) -> str:
         return os.path.relpath(path, os.curdir if start is None else start)
     except ValueError:
         return os.path.abspath(path)
-
-
-def debug_print_idf_version() -> None:
-    version = idf_version()
-    if version:
-        print_warning('ESP-IDF %s' % version)
-    else:
-        print_warning('ESP-IDF version unknown')
 
 
 def init_cli(verbose_output: List=None) -> Any:
@@ -310,7 +280,7 @@ def init_cli(verbose_output: List=None) -> Any:
 
         SCOPES = ('default', 'global', 'shared')
 
-        def __init__(self, scope: Union['Scope', str]=None) -> None:
+        def __init__(self, scope: Union['Scope', str]=None) -> None:  # noqa: F821
             if scope is None:
                 self._scope = 'default'
             elif isinstance(scope, str) and scope in self.SCOPES:
@@ -376,6 +346,7 @@ def init_cli(verbose_output: List=None) -> Any:
                 chain=True,
                 invoke_without_command=True,
                 result_callback=self.execute_tasks,
+                no_args_is_help=True,
                 context_settings={'max_content_width': 140},
                 help=help,
             )
@@ -471,7 +442,7 @@ def init_cli(verbose_output: List=None) -> Any:
                 with open(os.path.join(args.build_dir, 'flasher_args.json')) as file:
                     flasher_args: Dict[str, Any] = json.load(file)
 
-                def flasher_path(f: Union[str, os.PathLike[str]]) -> str:
+                def flasher_path(f: Union[str, 'os.PathLike[str]']) -> str:
                     if type(args.build_dir) is bytes:
                         args.build_dir = args.build_dir.decode()
                     return _safe_relpath(os.path.join(args.build_dir, f))
@@ -496,25 +467,35 @@ def init_cli(verbose_output: List=None) -> Any:
                     for o, f in flash_items:
                         cmd += o + ' ' + flasher_path(f) + ' '
 
-                print('\n%s build complete. To flash, run this command:' % title)
+                flash_target = 'flash' if key == 'project' else f'{key}-flash'
+                print(f'{os.linesep}{title} build complete. To flash, run:')
+                print(f' idf.py {flash_target}')
+                if args.port:
+                    print('or')
+                    print(f' idf.py -p {args.port} {flash_target}')
+                print('or')
+                print(f' idf.py -p PORT {flash_target}')
 
-                print(
-                    '%s %s -p %s -b %s --before %s --after %s --chip %s %s write_flash %s' % (
-                        PYTHON,
-                        _safe_relpath('%s/components/esptool_py/esptool/esptool.py' % os.environ['IDF_PATH']),
-                        args.port or '(PORT)',
-                        args.baud,
-                        flasher_args['extra_esptool_args']['before'],
-                        flasher_args['extra_esptool_args']['after'],
-                        flasher_args['extra_esptool_args']['chip'],
-                        '--no-stub' if not flasher_args['extra_esptool_args']['stub'] else '',
-                        cmd.strip(),
-                    ))
-                print(
-                    "or run 'idf.py -p %s %s'" % (
-                        args.port or '(PORT)',
-                        key + '-flash' if key != 'project' else 'flash',
-                    ))
+                esptool_cmd = ['python -m esptool',
+                               '--chip {}'.format(flasher_args['extra_esptool_args']['chip']),
+                               f'-b {args.baud}',
+                               '--before {}'.format(flasher_args['extra_esptool_args']['before']),
+                               '--after {}'.format(flasher_args['extra_esptool_args']['after'])]
+
+                if not flasher_args['extra_esptool_args']['stub']:
+                    esptool_cmd += ['--no-stub']
+
+                if args.port:
+                    esptool_cmd += [f'-p {args.port}']
+
+                esptool_cmd += ['write_flash']
+
+                print('or')
+                print(' {}'.format(' '.join(esptool_cmd + [cmd.strip()])))
+
+                if os.path.exists(os.path.join(args.build_dir, 'flash_args')):
+                    print(f'or from the "{args.build_dir}" directory')
+                    print(' {}'.format(' '.join(esptool_cmd + ['@flash_args'])))
 
             if 'all' in actions or 'build' in actions:
                 print_flashing_message('Project', 'project')
@@ -530,10 +511,6 @@ def init_cli(verbose_output: List=None) -> Any:
             ctx = click.get_current_context()
             global_args = PropertyDict(kwargs)
 
-            def _help_and_exit() -> None:
-                print(ctx.get_help())
-                ctx.exit()
-
             # Show warning if some tasks are present several times in the list
             dupplicated_tasks = sorted(
                 [item for item, count in Counter(task.name for task in tasks).items() if count > 1])
@@ -546,10 +523,6 @@ def init_cli(verbose_output: List=None) -> Any:
                     'Only first occurrence will be executed.')
 
             for task in tasks:
-                # Show help and exit if help is in the list of commands
-                if task.name == 'help':
-                    _help_and_exit()
-
                 # Set propagated global options.
                 # These options may be set on one subcommand, but available in the list of global arguments
                 for key in list(task.action_args):
@@ -561,9 +534,14 @@ def init_cli(verbose_output: List=None) -> Any:
                         default = () if option.multiple else option.default
 
                         if global_value != default and local_value != default and global_value != local_value:
-                            raise FatalError(
-                                'Option "%s" provided for "%s" is already defined to a different value. '
-                                'This option can appear at most once in the command line.' % (key, task.name))
+                            if hasattr(option, 'envvar') and option.envvar and os.getenv(option.envvar) != default:
+                                msg = (f'This option cannot be set in command line if the {option.envvar} '
+                                       'environment variable is set to a different value.')
+                            else:
+                                msg = 'This option can appear at most once in the command line.'
+
+                            raise FatalError(f'Option "{key}" provided for "{task.name}" is already defined to '
+                                             f'a different value. {msg}')
                         if local_value != default:
                             global_args[key] = local_value
 
@@ -576,10 +554,6 @@ def init_cli(verbose_output: List=None) -> Any:
             # Execute all global action callback - first from idf.py itself, then from extensions
             for action_callback in ctx.command.global_action_callbacks:
                 action_callback(ctx, global_args, tasks)
-
-            # Always show help when command is not provided
-            if not tasks:
-                _help_and_exit()
 
             # Build full list of tasks to and deal with dependencies and order dependencies
             tasks_to_run: OrderedDict = OrderedDict()
@@ -634,7 +608,9 @@ def init_cli(verbose_output: List=None) -> Any:
                     if task.aliases:
                         name_with_aliases += ' (aliases: %s)' % ', '.join(task.aliases)
 
-                    print('Executing action: %s' % name_with_aliases)
+                    # When machine-readable json format for help is printed, don't show info about executing action so the output is deserializable
+                    if name_with_aliases != 'help' or not task.action_args.get('json_option', False):
+                        print('Executing action: %s' % name_with_aliases)
                     task(ctx, global_args, task.action_args)
 
                 self._print_closing_message(global_args, tasks_to_run.keys())
@@ -652,7 +628,7 @@ def init_cli(verbose_output: List=None) -> Any:
     )
     @click.option('-C', '--project-dir', default=os.getcwd(), type=click.Path())
     def parse_project_dir(project_dir: str) -> Any:
-        return realpath(project_dir)
+        return os.path.realpath(project_dir)
 
     # Set `complete_var` to not existing environment variable name to prevent early cmd completion
     project_dir = parse_project_dir(standalone_mode=False, complete_var='_IDF.PY_COMPLETE_NOT_EXISTING')
@@ -660,11 +636,11 @@ def init_cli(verbose_output: List=None) -> Any:
     all_actions: Dict = {}
     # Load extensions from components dir
     idf_py_extensions_path = os.path.join(os.environ['IDF_PATH'], 'tools', 'idf_py_actions')
-    extension_dirs = [realpath(idf_py_extensions_path)]
+    extension_dirs = [os.path.realpath(idf_py_extensions_path)]
     extra_paths = os.environ.get('IDF_EXTRA_ACTIONS_PATH')
     if extra_paths is not None:
         for path in extra_paths.split(';'):
-            path = realpath(path)
+            path = os.path.realpath(path)
             if path not in extension_dirs:
                 extension_dirs.append(path)
 
@@ -681,7 +657,6 @@ def init_cli(verbose_output: List=None) -> Any:
 
     # Load component manager idf.py extensions if not explicitly disabled
     if os.getenv('IDF_COMPONENT_MANAGER') != '0':
-        from idf_component_manager import idf_extensions
         extensions.append(('component_manager_ext', idf_extensions))
 
     # Optional load `pyclang` for additional clang-tidy related functionalities
@@ -715,22 +690,21 @@ def init_cli(verbose_output: List=None) -> Any:
 
     cli_help = (
         'ESP-IDF CLI build management tool. '
-        'For commands that are not known to idf.py an attempt to execute it as a build system target will be made.')
+        'For commands that are not known to idf.py an attempt to execute it as a build system target will be made. '
+        'Selected target: {}'.format(get_target(project_dir)))
 
     return CLI(help=cli_help, verbose_output=verbose_output, all_actions=all_actions)
 
 
-def signal_handler(_signal: int, _frame: Optional[FrameType]) -> None:
-    # The Ctrl+C processed by other threads inside
-    pass
-
-
-def main() -> None:
-    # Processing of Ctrl+C event for all threads made by main()
-    signal.signal(signal.SIGINT, signal_handler)
-
+def main(argv: List[Any] = None) -> None:
     # Check the environment only when idf.py is invoked regularly from command line.
     checks_output = None if SHELL_COMPLETE_RUN else check_environment()
+
+    # Check existance of the current working directory to prevent exceptions from click cli.
+    try:
+        os.getcwd()
+    except FileNotFoundError as e:
+        raise FatalError(f'ERROR: {e}. Working directory cannot be established. Check its existence.')
 
     try:
         cli = init_cli(verbose_output=checks_output)
@@ -740,7 +714,54 @@ def main() -> None:
         else:
             raise
     else:
-        cli(sys.argv[1:], prog_name=PROG, complete_var=SHELL_COMPLETE_VAR)
+        argv = expand_file_arguments(argv or sys.argv[1:])
+
+        cli(argv, prog_name=PROG, complete_var=SHELL_COMPLETE_VAR)
+
+
+def expand_file_arguments(argv: List[Any]) -> List[Any]:
+    """
+    Any argument starting with "@" gets replaced with all values read from a text file.
+    Text file arguments can be split by newline or by space.
+    Values are added "as-is", as if they were specified in this order
+    on the command line.
+    """
+    visited = set()
+    expanded = False
+
+    def expand_args(args: List[Any], parent_path: str, file_stack: List[str]) -> List[str]:
+        expanded_args = []
+        for arg in args:
+            if not arg.startswith('@'):
+                expanded_args.append(arg)
+            else:
+                nonlocal expanded, visited
+                expanded = True
+
+                file_name = arg[1:]
+                rel_path = os.path.normpath(os.path.join(parent_path, file_name))
+
+                if rel_path in visited:
+                    file_stack_str = ' -> '.join(['@' + f for f in file_stack + [file_name]])
+                    raise FatalError(f'Circular dependency in file argument expansion: {file_stack_str}')
+                visited.add(rel_path)
+
+                try:
+                    with open(rel_path, 'r') as f:
+                        for line in f:
+                            expanded_args.extend(expand_args(shlex.split(line), os.path.dirname(rel_path), file_stack + [file_name]))
+                except IOError:
+                    file_stack_str = ' -> '.join(['@' + f for f in file_stack + [file_name]])
+                    raise FatalError(f"File '{rel_path}' (expansion of {file_stack_str}) could not be opened. "
+                                     'Please ensure the file exists and you have the necessary permissions to read it.')
+        return expanded_args
+
+    argv = expand_args(argv, os.getcwd(), [])
+
+    if expanded:
+        print(f'Running: idf.py {" ".join(argv)}')
+
+    return argv
 
 
 def _valid_unicode_config() -> Union[codecs.CodecInfo, bool]:

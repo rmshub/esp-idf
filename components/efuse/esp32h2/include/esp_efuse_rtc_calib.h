@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2020-2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -11,6 +11,11 @@
 extern "C" {
 #endif
 
+//This is the ADC calibration value version burnt in efuse
+#define ESP_EFUSE_ADC_CALIB_VER      1
+#define ESP_EFUSE_ADC_CALIB_VER_MIN  ESP_EFUSE_ADC_CALIB_VER
+#define ESP_EFUSE_ADC_CALIB_VER_MAX  ESP_EFUSE_ADC_CALIB_VER
+
 /**
  * @brief Get the RTC calibration efuse version
  *
@@ -21,11 +26,12 @@ int esp_efuse_rtc_calib_get_ver(void);
 /**
  * @brief Get the init code in the efuse, for the corresponding attenuation.
  *
- * @param version Version of the stored efuse
- * @param atten  Attenuation of the init code
+ * @param version   Version of the stored efuse
+ * @param adc_unit  ADC unit. Not used, for compatibility. On esp32h2, for calibration v1, both ADC units use the same init code (calibrated by ADC1)
+ * @param atten     Attenuation of the init code
  * @return The init code stored in efuse
  */
-uint16_t esp_efuse_rtc_calib_get_init_code(int version, int atten);
+uint32_t esp_efuse_rtc_calib_get_init_code(int version, uint32_t adc_unit, int atten);
 
 /**
  * @brief Get the calibration digits stored in the efuse, and the corresponding voltage.

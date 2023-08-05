@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2020-2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -24,6 +24,9 @@
 #include "hal/assert.h"
 #include "hal/spi_types.h"
 #include "hal/spi_flash_types.h"
+#include "soc/pcr_struct.h"
+#include "soc/clk_tree_defs.h"
+#include "hal/misc.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -31,6 +34,8 @@ extern "C" {
 
 #define spimem_flash_ll_get_hw(host_id)  (((host_id)==SPI1_HOST ?  &SPIMEM1 : NULL ))
 #define spimem_flash_ll_hw_get_id(dev)   ((dev) == (void*)&SPIMEM1? SPI1_HOST: -1)
+
+#define SPIMEM_FLASH_LL_SPI0_MAX_LOCK_VAL_MSPI_TICKS  (0x1f)
 
 typedef typeof(SPIMEM1.clock.val) spimem_flash_ll_clock_reg_t;
 
@@ -112,7 +117,7 @@ static inline void spimem_flash_ll_resume(spi_mem_dev_t *dev)
 }
 
 /**
- * Initialize auto suspend mode, and esp32h2 doesn't support disable auto-suspend.
+ * Initialize auto suspend mode, and esp32H2 doesn't support disable auto-suspend.
  *
  * @param dev Beginning address of the peripheral registers.
  * @param auto_sus Enable/disable Flash Auto-Suspend.
@@ -155,7 +160,7 @@ static inline void spimem_flash_ll_suspend_cmd_setup(spi_mem_dev_t *dev, uint32_
  */
 static inline void spimem_flash_ll_resume_cmd_setup(spi_mem_dev_t *dev, uint32_t res_cmd)
 {
-    HAL_FORCE_MODIFY_U32_REG_FIELD(dev->flash_sus_cmd, flash_per_command, res_cmd);
+    HAL_FORCE_MODIFY_U32_REG_FIELD(dev->sus_status, flash_per_command, res_cmd);
 }
 
 /**
@@ -208,6 +213,30 @@ static inline void spimem_flash_ll_set_read_sus_status(spi_mem_dev_t *dev, uint3
 }
 
 /**
+ * Configure the delay after Suspend/Resume
+ *
+ * @param dev Beginning address of the peripheral registers.
+ * @param dly_val delay time
+ */
+static inline void spimem_flash_ll_set_sus_delay(spi_mem_dev_t *dev, uint32_t dly_val)
+{
+    dev->ctrl1.cs_hold_dly_res = dly_val;
+    dev->sus_status.flash_per_dly_128 = 1;
+    dev->sus_status.flash_pes_dly_128 = 1;
+}
+
+/**
+ * Configure the cs hold delay time(used to set the minimum CS high time tSHSL)
+ *
+ * @param dev Beginning address of the peripheral registers.
+ * @param cs_hold_delay cs hold delay time
+ */
+static inline void spimem_flash_set_cs_hold_delay(spi_mem_dev_t *dev, uint32_t cs_hold_delay)
+{
+    SPIMEM0.ctrl2.cs_hold_delay = cs_hold_delay;
+}
+
+/**
  * Initialize auto wait idle mode
  *
  * @param dev Beginning address of the peripheral registers.
@@ -230,6 +259,35 @@ static inline void spimem_flash_ll_auto_wait_idle_init(spi_mem_dev_t *dev, bool 
 static inline bool spimem_flash_ll_sus_status(spi_mem_dev_t *dev)
 {
     return dev->sus_status.flash_sus;
+}
+
+/**
+ * @brief Set lock for SPI0 so that spi0 can request new cache request after a cache transfer.
+ *
+ * @param dev Beginning address of the peripheral registers.
+ * @param lock_time Lock delay time
+ */
+static inline void spimem_flash_ll_sus_set_spi0_lock_trans(spi_mem_dev_t *dev, uint32_t lock_time)
+{
+    dev->sus_status.spi0_lock_en = 1;
+    SPIMEM0.fsm.lock_delay_time = lock_time;
+}
+
+/**
+ * @brief Get tsus unit values in SPI_CLK cycles
+ *
+ * @param dev Beginning address of the peripheral registers.
+ * @return uint32_t tsus unit values
+ */
+static inline uint32_t spimem_flash_ll_get_tsus_unit_in_cycles(spi_mem_dev_t *dev)
+{
+    uint32_t tsus_unit = 0;
+    if (dev->sus_status.flash_pes_dly_128 == 1) {
+        tsus_unit = 128;
+    } else {
+        tsus_unit = 4;
+    }
+    return tsus_unit;
 }
 
 /**
@@ -321,6 +379,17 @@ static inline void spimem_flash_ll_user_start(spi_mem_dev_t *dev)
 }
 
 /**
+ * In user mode, it is set to indicate that program/erase operation will be triggered.
+ * This function is combined with `spimem_flash_ll_user_start`. The pe_bit will be cleared automatically once the operation done.
+ *
+ * @param dev Beginning address of the peripheral registers.
+ */
+static inline void spimem_flash_ll_set_pe_bit(spi_mem_dev_t *dev)
+{
+    dev->cmd.flash_pe = 1;
+}
+
+/**
  * Check whether the host is idle to perform new commands.
  *
  * @param dev Beginning address of the peripheral registers.
@@ -329,7 +398,7 @@ static inline void spimem_flash_ll_user_start(spi_mem_dev_t *dev)
  */
 static inline bool spimem_flash_ll_host_idle(const spi_mem_dev_t *dev)
 {
-    return dev->fsm.spi0_mst_st == 0;
+    return dev->cmd.mst_st == 0;
 }
 
 /**
@@ -396,6 +465,27 @@ static inline void spimem_flash_ll_set_read_mode(spi_mem_dev_t *dev, esp_flash_i
         abort();
     }
     dev->ctrl = ctrl;
+}
+
+__attribute__((always_inline))
+static inline void spimem_flash_ll_set_clock_source(soc_periph_mspi_clk_src_t clk_src)
+{
+    switch (clk_src) {
+    case MSPI_CLK_SRC_XTAL:
+        PCR.mspi_conf.mspi_clk_sel = 0;
+        break;
+    case MSPI_CLK_SRC_RC_FAST:
+        PCR.mspi_conf.mspi_clk_sel = 1;
+        break;
+    case MSPI_CLK_SRC_PLL_F64M:
+        PCR.mspi_conf.mspi_clk_sel = 2;
+        break;
+    case MSPI_CLK_SRC_PLL_F48M:
+        PCR.mspi_conf.mspi_clk_sel = 3;
+        break;
+    default:
+        HAL_ASSERT(false);
+    }
 }
 
 /**
@@ -475,6 +565,18 @@ static inline void spimem_flash_ll_set_addr_bitlen(spi_mem_dev_t *dev, uint32_t 
 }
 
 /**
+ * Set extra address for bits M0-M7 in DIO/QIO mode.
+ *
+ * @param dev Beginning address of the peripheral registers.
+ * @param extra_addr extra address(M0-M7) to send.
+ */
+static inline void spimem_flash_ll_set_extra_address(spi_mem_dev_t *dev, uint32_t extra_addr)
+{
+    dev->cache_fctrl.usr_addr_4byte = 0;
+    dev->rd_status.wb_mode = extra_addr;
+}
+
+/**
  * Set the address to send. Should be called before commands that requires the address e.g. erase sector, read, write...
  *
  * @param dev Beginning address of the peripheral registers.
@@ -510,20 +612,6 @@ static inline void spimem_flash_ll_set_dummy(spi_mem_dev_t *dev, uint32_t dummy_
 }
 
 /**
- * Set D/Q output level during dummy phase
- *
- * @param dev Beginning address of the peripheral registers.
- * @param out_en whether to enable IO output for dummy phase
- * @param out_level dummy output level
- */
-static inline void spimem_flash_ll_set_dummy_out(spi_mem_dev_t *dev, uint32_t out_en, uint32_t out_lev)
-{
-    dev->ctrl.fdummy_out = out_en;
-    dev->ctrl.q_pol = out_lev;
-    dev->ctrl.d_pol = out_lev;
-}
-
-/**
  * Set CS hold time.
  *
  * @param dev Beginning address of the peripheral registers.
@@ -551,15 +639,22 @@ static inline void spimem_flash_ll_set_cs_setup(spi_mem_dev_t *dev, uint32_t cs_
  */
 static inline uint8_t spimem_flash_ll_get_source_freq_mhz(void)
 {
-    // TODO: Default is PLL480M, this is hard-coded.
-    // In the future, we can get the CPU clock source by calling interface.
     uint8_t clock_val = 0;
-    switch (SPIMEM0.core_clk_sel.spi01_clk_sel) {
-        case 0:
-            clock_val = 48;
-            break;
-        default:
-            abort();
+    switch (PCR.mspi_conf.mspi_clk_sel) {
+    case 0:
+        clock_val = 32;
+        break;
+    case 1:
+        clock_val = 8;
+        break;
+    case 2:
+        clock_val = 64;
+        break;
+    case 3:
+        clock_val = 32;
+        break;
+    default:
+        HAL_ASSERT(false);
     }
     return clock_val;
 }

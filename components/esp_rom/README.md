@@ -17,8 +17,6 @@ When using ROM functions in esp-idf, the including convention is `<target>/rom/<
 #include "esp32c3/rom/uart.h"
 #elif CONFIG_IDF_TARGET_ESP32S3
 #include "esp32s3/rom/uart.h"
-#elif CONFIG_IDF_TARGET_ESP32H2
-#include "esp32h2/rom/uart.h"
 ...
 ```
 

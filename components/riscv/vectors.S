@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2017-2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2017-2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -102,6 +102,9 @@
     .global rtos_int_enter
     .global rtos_int_exit
     .global _global_interrupt_handler
+#ifdef CONFIG_ESP_SYSTEM_GDBSTUB_RUNTIME
+    .global gdbstub_handle_debug_int
+#endif
 
     .section .exception_vectors.text
     /* This is the vector table. MTVEC points here.
@@ -114,29 +117,79 @@
      * only uses the 24 MSBs of the MTVEC, i.e. (MTVEC & 0xffffff00).
      */
 
+     /**
+      * TODO: IDF-7863, P4, see jira to know what changed and what need to be checked
+      */
+
+#if SOC_INT_CLIC_SUPPORTED
+    .balign 0x40
+#else
     .balign 0x100
+#endif
     .global _vector_table
     .type _vector_table, @function
 _vector_table:
     .option push
     .option norvc
+#if SOC_INT_CLIC_SUPPORTED
+    j _trap_handler
+#else
     j _panic_handler			/* exception handler, entry 0 */
-    .rept (ETS_T1_WDT_INUM - 1)
-    j _interrupt_handler		/* 24 identical entries, all pointing to the interrupt handler */
+#if ETS_INT_WDT_INUM != 24
+    #error "ETS_INT_WDT_INUM expected to be 24"
+#endif
+    .rept (ETS_INT_WDT_INUM - 1)
+    j _interrupt_handler		/* 23 identical entries, all pointing to the interrupt handler */
     .endr
-    j _panic_handler			/* Call panic handler for ETS_T1_WDT_INUM interrupt (soc-level panic)*/
-    j _panic_handler			/* Call panic handler for ETS_CACHEERR_INUM interrupt (soc-level panic)*/
-    #ifdef CONFIG_ESP_SYSTEM_MEMPROT_FEATURE
-    j _panic_handler			/* Call panic handler for ETS_MEMPROT_ERR_INUM interrupt (soc-level panic)*/
-    .rept (ETS_MAX_INUM - ETS_MEMPROT_ERR_INUM)
-    #else
-    .rept (ETS_MAX_INUM - ETS_CACHEERR_INUM)
-    #endif //CONFIG_ESP_SYSTEM_MEMPROT_FEATURE
-    j _interrupt_handler		/* 6 identical entries, all pointing to the interrupt handler */
+    j _panic_handler			/* 24: ETS_INT_WDT_INUM panic-interrupt (soc-level panic) */
+    j _panic_handler			/* 25: ETS_CACHEERR_INUM panic-interrupt (soc-level panic) */
+#if CONFIG_ESP_SYSTEM_MEMPROT_FEATURE
+    j _panic_handler			/* 26: ETS_MEMPROT_ERR_INUM panic-interrupt (soc-level panic) */
+#else
+    j _interrupt_handler		/* 26: interrupt-handler */
+#endif // CONFIG_ESP_SYSTEM_MEMPROT_FEATURE
+#if CONFIG_ESP_SYSTEM_HW_STACK_GUARD
+    j _panic_handler			/* 27: ETS_ASSIST_DEBUG_INUM panic-interrupt (soc-level panic) */
+#else
+    j _interrupt_handler		/* 27: interrupt-handler */
+#endif // CONFIG_ESP_SYSTEM_HW_STACK_GUARD
+    .rept (ETS_MAX_INUM - ETS_ASSIST_DEBUG_INUM)
+    j _interrupt_handler		/* remain entries are identical, all pointing to the interrupt handler */
     .endr
-
+#endif
     .option pop
     .size _vector_table, .-_vector_table
+
+#if SOC_INT_CLIC_SUPPORTED
+    .balign 0x40
+    .global _mtvt_table
+    .type _mtvt_table, @function
+_mtvt_table:
+    .option push
+    .option norvc
+    .rept 48
+    .word _interrupt_handler
+    .endr
+    .option pop
+    .size _mtvt_table, .-_mtvt_table
+#endif
+
+#if SOC_INT_CLIC_SUPPORTED
+    .type _trap_handler, @function
+_trap_handler:
+    addi sp, sp, -RV_STK_FRMSZ
+    sw   t0, RV_STK_T0(sp)
+    sw   t1, RV_STK_T1(sp)
+    csrr t0, mcause
+    li t1, 0x80000000
+    bltu t0, t1, _panic_handler
+    lw   t0, RV_STK_T0(sp)
+    lw   t1, RV_STK_T1(sp)
+    addi sp, sp, RV_STK_FRMSZ
+    //ESP32P4-TODO: ETS_T1_WDT_INUM/ETS_CACHEERR_INUM/ETS_MEMPROT_ERR_INUM
+    j _interrupt_handler
+    .size _trap_handler, .-_trap_handler
+#endif
 
     /* Exception handler.*/
     .type _panic_handler, @function
@@ -170,15 +223,35 @@ _panic_handler:
      * have an pseudo excause */
     mv    a0, sp
     csrr  a1, mcause
+
+    /*
+     * MINHV[30]: CPU is fetching vector interrupt entry address or not
+     * MPP[29:28]: MSTATUS.MPP[1:0]
+     * MPIL[23:16]: interrupt level before entrering interrupt isr
+     */
+#if SOC_INT_CLIC_SUPPORTED
+    la t1, 0x80000fff
+    and a1, a1, t1
+#endif
     /* Branches instructions don't accept immediates values, so use t1 to
      * store our comparator */
     li    t0, 0x80000000
     bgeu  a1, t0, _call_panic_handler
     sw    a1, RV_STK_MCAUSE(sp)
+#ifdef CONFIG_ESP_SYSTEM_GDBSTUB_RUNTIME
+    li    t0, 3
+    beq   a1, t0, _call_gdbstub_handler
+#endif
     /* exception_from_panic never returns */
     jal panic_from_exception
     /* We arrive here if the exception handler has returned. */
     j _return_from_exception
+
+#ifdef CONFIG_ESP_SYSTEM_GDBSTUB_RUNTIME
+_call_gdbstub_handler:
+    call  gdbstub_handle_debug_int
+    j     _return_from_exception
+#endif
 
 _call_panic_handler:
     /* Remove highest bit from mcause (a1) register and save it in the
@@ -227,9 +300,12 @@ _interrupt_handler:
     /* Save SP */
     sw    t0, RV_STK_SP(sp)
 
+#if CONFIG_IDF_TARGET_ESP32P4
+    //TODO: IDF-7861
     /* Before doing anythig preserve the stack pointer */
     /* It will be saved in current TCB, if needed */
     mv      a0, sp
+#endif  //#if CONFIG_IDF_TARGET_ESP32P4
     call    rtos_int_enter
     /* If this is a non-nested interrupt, SP now points to the interrupt stack */
 
@@ -237,20 +313,22 @@ _interrupt_handler:
     csrr    s1, mcause
     csrr    s2, mstatus
 
+#if !SOC_INT_CLIC_SUPPORTED
     /* Save the interrupt threshold level */
-    la      t0, INTERRUPT_CORE0_CPU_INT_THRESH_REG
+    li      t0, INTERRUPT_CORE0_CPU_INT_THRESH_REG
     lw      s3, 0(t0)
 
     /* Increase interrupt threshold level */
     li      t2, 0x7fffffff
     and     t1, s1, t2       /* t1 = mcause & mask */
     slli    t1, t1, 2        /* t1 = mcause * 4 */
-    la      t2, INTC_INT_PRIO_REG(0)
+    li      t2, INTC_INT_PRIO_REG(0)
     add     t1, t2, t1       /* t1 = INTC_INT_PRIO_REG + 4 * mcause */
     lw      t2, 0(t1)        /* t2 = INTC_INT_PRIO_REG[mcause] */
     addi    t2, t2, 1        /* t2 = t2 +1 */
     sw      t2, 0(t0)        /* INTERRUPT_CORE0_CPU_INT_THRESH_REG = t2 */
     fence
+#endif
 
     li      t0, 0x8
     csrrs   t0, mstatus, t0
@@ -276,7 +354,11 @@ _interrupt_handler:
     mv      a0, sp      /* argument 1, stack pointer */
     mv      a1, s1      /* argument 2, interrupt number (mcause) */
     /* mask off the interrupt flag of mcause */
+#if !SOC_INT_CLIC_SUPPORTED
     li	    t0, 0x7fffffff
+#else
+    li      t0, 0x00000fff
+#endif
     and     a1, a1, t0
     jal     _global_interrupt_handler
 
@@ -286,18 +368,24 @@ _interrupt_handler:
     csrrc   t0, mstatus, t0
     /* MIE cleared. Nested interrupts are disabled */
 
+#if !SOC_INT_CLIC_SUPPORTED
     /* restore the interrupt threshold level */
-    la      t0, INTERRUPT_CORE0_CPU_INT_THRESH_REG
+    li      t0, INTERRUPT_CORE0_CPU_INT_THRESH_REG
     sw      s3, 0(t0)
     fence
+#endif
 
+#if SOC_INT_CLIC_SUPPORTED
     /* Yield to the next task is needed: */
     mv      a0, sp
+#endif
     call    rtos_int_exit
-    /* If this is a non-nested interrupt, context switch called, SP now points to back to task stack. */
 
+#if CONFIG_IDF_TARGET_ESP32P4
+    //TODO: IDF-7861
     /* The next (or current) stack pointer is returned in a0 */
     mv      sp, a0
+#endif  //#if CONFIG_IDF_TARGET_ESP32P4
 
     /* restore the rest of the registers */
     csrw    mcause, s1

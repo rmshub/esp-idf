@@ -13,10 +13,11 @@
 #pragma once
 
 #include <stdlib.h>
-#include "soc/rtc_io_periph.h"
-#include "soc/rtc_io_struct.h"
-#include "hal/rtc_io_types.h"
+#include "soc/rtc_periph.h"
 #include "hal/gpio_types.h"
+#include "soc/io_mux_reg.h"
+#include "soc/usb_serial_jtag_reg.h"
+#include "soc/usb_serial_jtag_struct.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -41,6 +42,17 @@ typedef enum {
 } rtcio_ll_out_mode_t;
 
 /**
+ * @brief Select a RTC IOMUX function for the RTC IO
+ *
+ * @param rtcio_num The index of rtcio. 0 ~ MAX(rtcio).
+ * @param func Function to assign to the pin
+ */
+static inline void rtcio_ll_iomux_func_sel(int rtcio_num, int func)
+{
+    SET_PERI_REG_BITS(rtc_io_desc[rtcio_num].reg, 0x3, func, rtc_io_desc[rtcio_num].func);
+}
+
+/**
  * @brief Select the rtcio function.
  *
  * @note The RTC function must be selected before the pad analog function is enabled.
@@ -50,14 +62,20 @@ typedef enum {
 static inline void rtcio_ll_function_select(int rtcio_num, rtcio_ll_func_t func)
 {
     if (func == RTCIO_FUNC_RTC) {
+        // Disable USB Serial JTAG if pin 19 or pin 20 needs to select the rtc function
+        if (rtcio_num == rtc_io_num_map[USB_DM_GPIO_NUM] || rtcio_num == rtc_io_num_map[USB_DP_GPIO_NUM]) {
+            USB_SERIAL_JTAG.conf0.usb_pad_enable = 0;
+        }
         SENS.sar_peri_clk_gate_conf.iomux_clk_en = 1;
         // 0: GPIO connected to digital GPIO module. 1: GPIO connected to analog RTC module.
         SET_PERI_REG_MASK(rtc_io_desc[rtcio_num].reg, (rtc_io_desc[rtcio_num].mux));
         //0:RTC FUNCTION 1,2,3:Reserved
-        SET_PERI_REG_BITS(rtc_io_desc[rtcio_num].reg, RTC_IO_TOUCH_PAD1_FUN_SEL_V, RTCIO_LL_PIN_FUNC, rtc_io_desc[rtcio_num].func);
+        rtcio_ll_iomux_func_sel(rtcio_num, RTCIO_LL_PIN_FUNC);
     } else if (func == RTCIO_FUNC_DIGITAL) {
         CLEAR_PERI_REG_MASK(rtc_io_desc[rtcio_num].reg, (rtc_io_desc[rtcio_num].mux));
         SENS.sar_peri_clk_gate_conf.iomux_clk_en = 0;
+        // USB Serial JTAG pad re-enable won't be done here (it requires both DM and DP pins not in rtc function)
+        // Instead, USB_SERIAL_JTAG_USB_PAD_ENABLE needs to be guaranteed to be set in usb_serial_jtag driver
     }
 }
 
@@ -181,6 +199,14 @@ static inline void rtcio_ll_pullup_enable(int rtcio_num)
  */
 static inline void rtcio_ll_pullup_disable(int rtcio_num)
 {
+    // The pull-up value of the USB pins are controlled by the pins’ pull-up value together with USB pull-up value
+    // USB DP pin is default to PU enabled
+    // Note that from esp32s3 ECO1, USB_EXCHG_PINS feature has been supported. If this efuse is burnt, the gpio pin
+    // which should be checked is USB_DM_GPIO_NUM instead.
+    if (rtcio_num == USB_DP_GPIO_NUM) {
+        SET_PERI_REG_MASK(USB_SERIAL_JTAG_CONF0_REG, USB_SERIAL_JTAG_PAD_PULL_OVERRIDE);
+        CLEAR_PERI_REG_MASK(USB_SERIAL_JTAG_CONF0_REG, USB_SERIAL_JTAG_DP_PULLUP);
+    }
     if (rtc_io_desc[rtcio_num].pullup) {
         CLEAR_PERI_REG_MASK(rtc_io_desc[rtcio_num].reg, rtc_io_desc[rtcio_num].pullup);
     }
@@ -211,7 +237,7 @@ static inline void rtcio_ll_pulldown_disable(int rtcio_num)
 }
 
 /**
- * Enable force hold function for RTC IO pad.
+ * Enable force hold function on an RTC IO pad.
  *
  * Enabling HOLD function will cause the pad to lock current status, such as,
  * input/output enable, input/output value, function, drive strength values.
@@ -226,7 +252,7 @@ static inline void rtcio_ll_force_hold_enable(int rtcio_num)
 }
 
 /**
- * Disable hold function on an RTC IO pad
+ * Disable hold function on an RTC IO pad.
  *
  * @note If disable the pad hold, the status of pad maybe changed in sleep mode.
  * @param rtcio_num The index of rtcio. 0 ~ MAX(rtcio).
@@ -237,7 +263,7 @@ static inline void rtcio_ll_force_hold_disable(int rtcio_num)
 }
 
 /**
- * Enable force hold function for RTC IO pad.
+ * Enable force hold function on all RTC IO pads.
  *
  * Enabling HOLD function will cause the pad to lock current status, such as,
  * input/output enable, input/output value, function, drive strength values.
@@ -252,7 +278,7 @@ static inline void rtcio_ll_force_hold_all(void)
 }
 
 /**
- * Disable hold function on an RTC IO pad
+ * Disable hold function on all RTC IO pads.
  *
  * @note If disable the pad hold, the status of pad maybe changed in sleep mode.
  * @param rtcio_num The index of rtcio. 0 ~ MAX(rtcio).
@@ -303,7 +329,7 @@ static inline void rtcio_ll_enable_output_in_sleep(gpio_num_t gpio_num)
  *
  * @param rtcio_num The index of rtcio. 0 ~ MAX(rtcio).
  */
-static inline void rtcio_ll_in_sleep_disable_output(gpio_num_t gpio_num)
+static inline void rtcio_ll_disable_output_in_sleep(gpio_num_t gpio_num)
 {
     if (rtc_io_desc[gpio_num].slpoe) {
         CLEAR_PERI_REG_MASK(rtc_io_desc[gpio_num].reg, rtc_io_desc[gpio_num].slpoe);
@@ -315,7 +341,7 @@ static inline void rtcio_ll_in_sleep_disable_output(gpio_num_t gpio_num)
  *
  * @param rtcio_num The index of rtcio. 0 ~ MAX(rtcio).
  */
-static inline void rtcio_ll_in_sleep_enable_input(gpio_num_t gpio_num)
+static inline void rtcio_ll_enable_input_in_sleep(gpio_num_t gpio_num)
 {
     SET_PERI_REG_MASK(rtc_io_desc[gpio_num].reg, rtc_io_desc[gpio_num].slpie);
 }
@@ -325,7 +351,7 @@ static inline void rtcio_ll_in_sleep_enable_input(gpio_num_t gpio_num)
  *
  * @param rtcio_num The index of rtcio. 0 ~ MAX(rtcio).
  */
-static inline void rtcio_ll_in_sleep_disable_input(gpio_num_t gpio_num)
+static inline void rtcio_ll_disable_input_in_sleep(gpio_num_t gpio_num)
 {
     CLEAR_PERI_REG_MASK(rtc_io_desc[gpio_num].reg, rtc_io_desc[gpio_num].slpie);
 }
@@ -350,6 +376,12 @@ static inline void rtcio_ll_disable_sleep_setting(gpio_num_t gpio_num)
     CLEAR_PERI_REG_MASK(rtc_io_desc[gpio_num].reg, rtc_io_desc[gpio_num].slpsel);
 }
 
+/**
+ * Set specific logic level on an RTC IO pin as a wakeup trigger.
+ *
+ * @param rtcio_num The index of rtcio. 0 ~ MAX(rtcio).
+ * @param level Logic level (0)
+ */
 static inline void rtcio_ll_ext0_set_wakeup_pin(int rtcio_num, int level)
 {
     REG_SET_FIELD(RTC_IO_EXT_WAKEUP0_REG, RTC_IO_EXT_WAKEUP0_SEL, rtcio_num);

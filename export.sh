@@ -13,7 +13,7 @@ __realpath() {
 
 
 __verbose() {
-    [ -n "${IDF_EXPORT_QUIET}" ] && return
+    [ -n "${IDF_EXPORT_QUIET-}" ] && return
     echo "$@"
 }
 
@@ -72,7 +72,7 @@ __main() {
     # Since sh or dash shells can't detect script_dir correctly, check if script_dir looks like an IDF directory
     is_script_dir_esp_idf=$(__is_dir_esp_idf "${script_dir}")
 
-    if [ -z "${IDF_PATH}" ]
+    if [ -z "${IDF_PATH-}" ]
     then
         # IDF_PATH not set in the environment.
 
@@ -116,8 +116,8 @@ __main() {
     "$ESP_PYTHON" "${IDF_PATH}/tools/python_version_checker.py"
 
     __verbose "Checking other ESP-IDF version."
-    idf_unset=$("$ESP_PYTHON" "${IDF_PATH}/tools/idf_tools.py" export --unset) || return 1
-    eval "${idf_unset}"
+    idf_deactivate=$("$ESP_PYTHON" "${IDF_PATH}/tools/idf_tools.py" export --deactivate) || return 1
+    eval "${idf_deactivate}"
 
     __verbose "Adding ESP-IDF tools to PATH..."
     # Call idf_tools.py to export tool paths
@@ -125,8 +125,7 @@ __main() {
     export IDF_TOOLS_INSTALL_CMD=${IDF_PATH}/install.sh
     # Allow calling some IDF python tools without specifying the full path
     # ${IDF_PATH}/tools is already added by 'idf_tools.py export'
-    IDF_ADD_PATHS_EXTRAS="${IDF_PATH}/components/esptool_py/esptool"
-    IDF_ADD_PATHS_EXTRAS="${IDF_ADD_PATHS_EXTRAS}:${IDF_PATH}/components/espcoredump"
+    IDF_ADD_PATHS_EXTRAS="${IDF_PATH}/components/espcoredump"
     IDF_ADD_PATHS_EXTRAS="${IDF_ADD_PATHS_EXTRAS}:${IDF_PATH}/components/partition_table"
     IDF_ADD_PATHS_EXTRAS="${IDF_ADD_PATHS_EXTRAS}:${IDF_PATH}/components/app_update"
 
@@ -134,9 +133,8 @@ __main() {
     eval "${idf_exports}"
     export PATH="${IDF_ADD_PATHS_EXTRAS}:${PATH}"
 
-    __verbose "Using Python interpreter in $(which python)"
     __verbose "Checking if Python packages are up to date..."
-    python "${IDF_PATH}/tools/idf_tools.py" check-python-dependencies || return 1
+    "$ESP_PYTHON" "${IDF_PATH}/tools/idf_tools.py" check-python-dependencies || return 1
 
     if [ -n "$BASH" ]
     then
@@ -184,7 +182,7 @@ __cleanup() {
     unset path_entry
     unset IDF_ADD_PATHS_EXTRAS
     unset idf_exports
-    unset idf_unset
+    unset idf_deactivate
     unset ESP_PYTHON
     unset SOURCE_ZSH
     unset SOURCE_BASH

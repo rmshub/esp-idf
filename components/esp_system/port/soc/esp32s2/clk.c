@@ -11,6 +11,7 @@
 #include "sdkconfig.h"
 #include "esp_attr.h"
 #include "esp_log.h"
+#include "esp_cpu.h"
 #include "esp_clk_internal.h"
 #include "esp_rom_uart.h"
 #include "esp_rom_sys.h"
@@ -20,7 +21,6 @@
 #include "soc/rtc.h"
 #include "soc/rtc_periph.h"
 #include "soc/i2s_reg.h"
-#include "hal/cpu_hal.h"
 #include "hal/wdt_hal.h"
 #include "esp_private/periph_ctrl.h"
 #include "esp_private/esp_clk.h"
@@ -41,11 +41,6 @@ static const char *TAG = "clk";
 #else
 #define RTC_XTAL_CAL_RETRY 1
 #endif
-
-/* Lower threshold for a reasonably-looking calibration value for a 32k XTAL.
- * The ideal value (assuming 32768 Hz frequency) is 1000000/32768*(2**19) = 16*10^6.
- */
-#define MIN_32K_XTAL_CAL_VAL  15000000L
 
 /* Indicates that this 32k oscillator gets input from external oscillator, rather
  * than a crystal.
@@ -71,6 +66,12 @@ static void select_rtc_slow_clk(slow_clk_sel_t slow_clk);
     soc_reset_reason_t rst_reas = esp_rom_get_reset_reason(0);
     if (rst_reas == RESET_REASON_CHIP_POWER_ON) {
         cfg.cali_ocode = 1;
+        /* Ocode calibration will switch to XTAL frequency, need to wait for UART FIFO
+         * to be empty, to avoid garbled output.
+         */
+        if (CONFIG_ESP_CONSOLE_UART_NUM >= 0) {
+            esp_rom_uart_tx_wait_idle(CONFIG_ESP_CONSOLE_UART_NUM);
+        }
     }
     rtc_init(cfg);
 
@@ -131,7 +132,7 @@ static void select_rtc_slow_clk(slow_clk_sel_t slow_clk);
     }
 
     // Re calculate the ccount to make time calculation correct.
-    cpu_hal_set_cycle_count( (uint64_t)cpu_hal_get_cycle_count() * new_freq_mhz / old_freq_mhz );
+    esp_cpu_set_cycle_count( (uint64_t)esp_cpu_get_cycle_count() * new_freq_mhz / old_freq_mhz );
 }
 
 static void select_rtc_slow_clk(slow_clk_sel_t slow_clk)
@@ -164,7 +165,7 @@ static void select_rtc_slow_clk(slow_clk_sel_t slow_clk)
             // When SLOW_CLK_CAL_CYCLES is set to 0, clock calibration will not be performed at startup.
             if (SLOW_CLK_CAL_CYCLES > 0) {
                 cal_val = rtc_clk_cal(RTC_CAL_32K_XTAL, SLOW_CLK_CAL_CYCLES);
-                if (cal_val == 0 || cal_val < MIN_32K_XTAL_CAL_VAL) {
+                if (cal_val == 0) {
                     if (retry_32k_xtal-- > 0) {
                         continue;
                     }
@@ -311,4 +312,13 @@ __attribute__((weak)) void esp_perip_clk_init(void)
 
     /* Enable RNG clock. */
     periph_module_enable(PERIPH_RNG_MODULE);
+
+    /* Enable TimerGroup 0 clock to ensure its reference counter will never
+     * be decremented to 0 during normal operation and preventing it from
+     * being disabled.
+     * If the TimerGroup 0 clock is disabled and then reenabled, the watchdog
+     * registers (Flashboot protection included) will be reenabled, and some
+     * seconds later, will trigger an unintended reset.
+     */
+    periph_module_enable(PERIPH_TIMG0_MODULE);
 }

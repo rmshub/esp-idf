@@ -126,6 +126,14 @@ static inline int wpa_key_mgmt_cckm(int akm)
 	return akm == WPA_KEY_MGMT_CCKM;
 }
 
+#ifdef ESP_SUPPLICANT
+static inline int wpa_key_mgmt_supports_caching(int akm)
+{
+        return wpa_key_mgmt_wpa_ieee8021x(akm) ||
+		wpa_key_mgmt_sae(akm) ||
+		wpa_key_mgmt_owe(akm);
+}
+#endif
 
 #define WPA_PROTO_WPA BIT(0)
 #define WPA_PROTO_RSN BIT(1)
@@ -361,6 +369,14 @@ enum set_band {
 	WPA_SETBAND_AUTO,
 	WPA_SETBAND_5G,
 	WPA_SETBAND_2G
+};
+
+enum sae_pwe {
+    SAE_PWE_HUNT_AND_PECK = 0,
+    SAE_PWE_HASH_TO_ELEMENT = 1,
+    SAE_PWE_BOTH = 2,
+    SAE_PWE_FORCE_HUNT_AND_PECK = 3,
+    SAE_PWE_NOT_SET = 4,
 };
 
 #endif /* DEFS_H */

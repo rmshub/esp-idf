@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -7,12 +7,24 @@
 #pragma once
 
 #include "sdkconfig.h"
+
+/* Macros used instead ofsetoff() for better performance of interrupt handler */
+#define PORT_OFFSET_PX_STACK 0x30
+#define PORT_OFFSET_PX_END_OF_STACK (PORT_OFFSET_PX_STACK + \
+                                     /* void * pxDummy6 */ 4 + \
+                                     /* BaseType_t xDummy23[ 2 ] */ 8 + \
+                                     /* uint8_t ucDummy7[ configMAX_TASK_NAME_LEN ] */ CONFIG_FREERTOS_MAX_TASK_NAME_LEN + \
+                                     /* BaseType_t xDummy24 */ 4)
+
+#ifndef __ASSEMBLER__
+
 #include <stdint.h>
 #include "spinlock.h"
-#include "soc/interrupt_core0_reg.h"
+#include "soc/interrupt_reg.h"
 #include "esp_macros.h"
-#include "hal/cpu_hal.h"
+#include "esp_cpu.h"
 #include "esp_private/crosscore_int.h"
+#include "esp_memory_utils.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -204,7 +216,7 @@ extern void vTaskExitCritical( void );
 #define portALT_GET_RUN_TIME_COUNTER_VALUE(x)       do {x = (uint32_t)esp_timer_get_time();} while(0)
 #endif
 
-// ------------------- TCB Cleanup ----------------------
+// --------------------- TCB Cleanup -----------------------
 
 #define portCLEAN_UP_TCB( pxTCB )                   vPortCleanUpTCB( pxTCB )
 
@@ -225,7 +237,7 @@ static inline void __attribute__((always_inline)) vPortYieldCore( BaseType_t xCo
 
 static inline BaseType_t __attribute__((always_inline)) xPortGetCoreID( void )
 {
-    return (BaseType_t) cpu_hal_get_core_id();
+    return (BaseType_t) esp_cpu_get_core_id();
 }
 
 /* ------------------------------------------------ IDF Compatibility --------------------------------------------------
@@ -241,42 +253,6 @@ static inline BaseType_t xPortInIsrContext(void)
 // Added for backward compatibility with IDF
 #define xPortInterruptedFromISRContext()    xPortInIsrContext()
 
-// ---------------------- Spinlocks ------------------------
-
-/**
- * @brief Wrapper for atomic compare-and-set instruction
- *
- * @note Isn't a real atomic CAS.
- * @note [refactor-todo] check if we still need this
- * @note [refactor-todo] Check if this function should be renamed (due to void return type)
- *
- * @param[inout] addr Pointer to target address
- * @param[in] compare Compare value
- * @param[inout] set Pointer to set value
- */
-static inline void __attribute__((always_inline)) uxPortCompareSet(volatile uint32_t *addr, uint32_t compare, uint32_t *set)
-{
-    compare_and_set_native(addr, compare, set);
-}
-
-/**
- * @brief Wrapper for atomic compare-and-set instruction in external RAM
- *
- * @note Isn't a real atomic CAS.
- * @note [refactor-todo] check if we still need this
- * @note [refactor-todo] Check if this function should be renamed (due to void return type)
- *
- * @param[inout] addr Pointer to target address
- * @param[in] compare Compare value
- * @param[inout] set Pointer to set value
- */
-static inline void uxPortCompareSetExtram(volatile uint32_t *addr, uint32_t compare, uint32_t *set)
-{
-#if defined(CONFIG_SPIRAM)
-    compare_and_set_extram(addr, compare, set);
-#endif
-}
-
 // ------------------ Critical Sections --------------------
 
 /*
@@ -291,11 +267,11 @@ void vPortEnterCritical(void);
 void vPortExitCritical(void);
 
 //IDF task critical sections
-#define portTRY_ENTER_CRITICAL(lock, timeout)       {((void) lock; (void) timeout; vPortEnterCritical(); pdPASS;)}
+#define portTRY_ENTER_CRITICAL(lock, timeout)       ({(void) lock; (void) timeout; vPortEnterCritical(); pdPASS;})
 #define portENTER_CRITICAL_IDF(lock)                ({(void) lock; vPortEnterCritical();})
 #define portEXIT_CRITICAL_IDF(lock)                 ({(void) lock; vPortExitCritical();})
 //IDF ISR critical sections
-#define portTRY_ENTER_CRITICAL_ISR(lock, timeout)   {((void) lock; (void) timeout; vPortEnterCritical(); pdPASS;)}
+#define portTRY_ENTER_CRITICAL_ISR(lock, timeout)   ({(void) lock; (void) timeout; vPortEnterCritical(); pdPASS;})
 #define portENTER_CRITICAL_ISR(lock)                ({(void) lock; vPortEnterCritical();})
 #define portEXIT_CRITICAL_ISR(lock)                 ({(void) lock; vPortExitCritical();})
 //IDF safe critical sections (they're the same)
@@ -321,19 +297,36 @@ static inline bool IRAM_ATTR xPortCanYield(void)
 
 void vPortSetStackWatchpoint(void *pxStackStart);
 
-#define portVALID_TCB_MEM(ptr)      (esp_ptr_internal(ptr) && esp_ptr_byte_accessible(ptr))
-#ifdef CONFIG_SPIRAM_ALLOW_STACK_EXTERNAL_MEMORY
-#define portVALID_STACK_MEM(ptr)    (esp_ptr_byte_accessible(ptr))
-#else
-#define portVALID_STACK_MEM(ptr)    (esp_ptr_internal(ptr) && esp_ptr_byte_accessible(ptr))
-#endif
+// -------------------- Heap Related -----------------------
 
-#define portTcbMemoryCaps               (MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT)
-#define portStackMemoryCaps             (MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT)
+/**
+ * @brief Checks if a given piece of memory can be used to store a task's TCB
+ *
+ * - Defined in heap_idf.c
+ *
+ * @param ptr Pointer to memory
+ * @return true Memory can be used to store a TCB
+ * @return false Otherwise
+ */
+bool xPortCheckValidTCBMem(const void *ptr);
+
+/**
+ * @brief Checks if a given piece of memory can be used to store a task's stack
+ *
+ * - Defined in heap_idf.c
+ *
+ * @param ptr Pointer to memory
+ * @return true Memory can be used to store a task stack
+ * @return false Otherwise
+ */
+bool xPortcheckValidStackMem(const void *ptr);
+
+#define portVALID_TCB_MEM(ptr)      xPortCheckValidTCBMem(ptr)
+#define portVALID_STACK_MEM(ptr)    xPortcheckValidStackMem(ptr)
 
 /* ------------------------------------------------------ Misc ---------------------------------------------------------
  * - Miscellaneous porting macros
- * - These are not port of the FreeRTOS porting interface, but are used by other FreeRTOS dependent components
+ * - These are not part of the FreeRTOS porting interface, but are used by other FreeRTOS dependent components
  * ------------------------------------------------------------------------------------------------------------------ */
 
 // --------------------- App-Trace -------------------------
@@ -343,14 +336,6 @@ extern volatile BaseType_t xPortSwitchFlag;
 #define os_task_switch_is_pended(_cpu_) (xPortSwitchFlag)
 #else
 #define os_task_switch_is_pended(_cpu_) (false)
-#endif
-
-// --------------------- Debugging -------------------------
-
-#if CONFIG_FREERTOS_ASSERT_ON_UNTESTED_FUNCTION
-#define UNTESTED_FUNCTION() do{ esp_rom_printf("Untested FreeRTOS function %s\r\n", __FUNCTION__); configASSERT(false); } while(0)
-#else
-#define UNTESTED_FUNCTION()
 #endif
 
 // --------------- Compatibility Includes ------------------
@@ -381,3 +366,5 @@ portmacro.h. Therefore, we need to keep these headers around for now to allow th
 #ifdef __cplusplus
 }
 #endif
+
+#endif // __ASSEMBLER__

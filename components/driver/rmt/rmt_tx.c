@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -24,6 +24,7 @@
 #include "driver/gpio.h"
 #include "driver/rmt_tx.h"
 #include "rmt_private.h"
+#include "esp_memory_utils.h"
 
 static const char *TAG = "rmt";
 
@@ -60,7 +61,9 @@ static esp_err_t rmt_tx_init_dma_link(rmt_tx_channel_t *tx_channel, const rmt_tx
     gdma_channel_alloc_config_t dma_chan_config = {
         .direction = GDMA_CHANNEL_DIRECTION_TX,
     };
-    ESP_RETURN_ON_ERROR(gdma_new_channel(&dma_chan_config, &tx_channel->base.dma_chan), TAG, "allocate TX DMA channel failed");
+#if SOC_GDMA_TRIG_PERIPH_RMT0_BUS == SOC_GDMA_BUS_AHB
+    ESP_RETURN_ON_ERROR(gdma_new_ahb_channel(&dma_chan_config, &tx_channel->base.dma_chan), TAG, "allocate TX DMA channel failed");
+#endif
     gdma_strategy_config_t gdma_strategy_conf = {
         .auto_update_desc = true,
         .owner_check = true,
@@ -119,7 +122,6 @@ static esp_err_t rmt_tx_register_to_group(rmt_tx_channel_t *tx_channel, const rm
         if (channel_id < 0) {
             // didn't find a capable channel in the group, don't forget to release the group handle
             rmt_release_group_handle(group);
-            group = NULL;
         } else {
             tx_channel->base.channel_id = channel_id;
             tx_channel->base.channel_mask = channel_mask;
@@ -165,7 +167,7 @@ static esp_err_t rmt_tx_create_trans_queue(rmt_tx_channel_t *tx_channel, const r
     return ESP_OK;
 }
 
-static esp_err_t rmt_tx_destory(rmt_tx_channel_t *tx_channel)
+static esp_err_t rmt_tx_destroy(rmt_tx_channel_t *tx_channel)
 {
     if (tx_channel->base.intr) {
         ESP_RETURN_ON_ERROR(esp_intr_free(tx_channel->base.intr), TAG, "delete interrupt service failed");
@@ -210,8 +212,9 @@ esp_err_t rmt_new_tx_channel(const rmt_tx_channel_config_t *config, rmt_channel_
                       ESP_ERR_INVALID_ARG, err, TAG, "mem_block_symbols must be even and at least %d", SOC_RMT_MEM_WORDS_PER_CHANNEL);
 #if SOC_RMT_SUPPORT_DMA
     // we only support 2 nodes ping-pong, if the configured memory block size needs more than two DMA descriptors, should treat it as invalid
-    ESP_GOTO_ON_FALSE(config->mem_block_symbols <= RMT_DMA_DESC_BUF_MAX_SIZE * RMT_DMA_NODES_PING_PONG, ESP_ERR_INVALID_ARG, err, TAG,
-                      "mem_block_symbols can't exceed %d", RMT_DMA_DESC_BUF_MAX_SIZE * RMT_DMA_NODES_PING_PONG);
+    ESP_GOTO_ON_FALSE(config->mem_block_symbols <= RMT_DMA_DESC_BUF_MAX_SIZE * RMT_DMA_NODES_PING_PONG / sizeof(rmt_symbol_word_t),
+                      ESP_ERR_INVALID_ARG, err, TAG, "mem_block_symbols can't exceed %d",
+                      RMT_DMA_DESC_BUF_MAX_SIZE * RMT_DMA_NODES_PING_PONG / sizeof(rmt_symbol_word_t));
 #else
     ESP_GOTO_ON_FALSE(config->flags.with_dma == 0, ESP_ERR_NOT_SUPPORTED, err, TAG, "DMA not supported");
 #endif
@@ -259,7 +262,7 @@ esp_err_t rmt_new_tx_channel(const rmt_tx_channel_config_t *config, rmt_channel_
     // resolution lost due to division, calculate the real resolution
     tx_channel->base.resolution_hz = group->resolution_hz / real_div;
     if (tx_channel->base.resolution_hz != config->resolution_hz) {
-        ESP_LOGW(TAG, "channel resolution loss, real=%u", tx_channel->base.resolution_hz);
+        ESP_LOGW(TAG, "channel resolution loss, real=%"PRIu32, tx_channel->base.resolution_hz);
     }
 
     rmt_ll_tx_set_mem_blocks(hal->regs, channel_id, tx_channel->base.mem_block_num);
@@ -267,8 +270,8 @@ esp_err_t rmt_new_tx_channel(const rmt_tx_channel_config_t *config, rmt_channel_
     rmt_ll_tx_set_limit(hal->regs, channel_id, tx_channel->ping_pong_symbols);
     // disable carrier modulation by default, can reenable by `rmt_apply_carrier()`
     rmt_ll_tx_enable_carrier_modulation(hal->regs, channel_id, false);
-    // idle level is determind by eof encoder, not set to a fixed value
-    rmt_ll_tx_fix_idle_level(hal->regs, channel_id, 0, false);
+    // idle level is determined by register value
+    rmt_ll_tx_fix_idle_level(hal->regs, channel_id, 0, true);
     // always enable tx wrap, both DMA mode and ping-pong mode rely this feature
     rmt_ll_tx_enable_wrap(hal->regs, channel_id, true);
 
@@ -276,8 +279,8 @@ esp_err_t rmt_new_tx_channel(const rmt_tx_channel_config_t *config, rmt_channel_
     tx_channel->base.gpio_num = config->gpio_num;
     gpio_config_t gpio_conf = {
         .intr_type = GPIO_INTR_DISABLE,
-        // also enable the input path is `io_loop_back` is on, this is useful for debug
-        .mode = GPIO_MODE_OUTPUT | (config->flags.io_loop_back ? GPIO_MODE_INPUT : 0),
+        // also enable the input path if `io_loop_back` is on, this is useful for bi-directional buses
+        .mode = (config->flags.io_od_mode ? GPIO_MODE_OUTPUT_OD : GPIO_MODE_OUTPUT) | (config->flags.io_loop_back ? GPIO_MODE_INPUT : 0),
         .pull_down_en = false,
         .pull_up_en = true,
         .pin_bit_mask = 1ULL << config->gpio_num,
@@ -299,14 +302,14 @@ esp_err_t rmt_new_tx_channel(const rmt_tx_channel_config_t *config, rmt_channel_
     tx_channel->base.disable = rmt_tx_disable;
     // return general channel handle
     *ret_chan = &tx_channel->base;
-    ESP_LOGD(TAG, "new tx channel(%d,%d) at %p, gpio=%d, res=%uHz, hw_mem_base=%p, dma_mem_base=%p, ping_pong_size=%zu, queue_depth=%zu",
+    ESP_LOGD(TAG, "new tx channel(%d,%d) at %p, gpio=%d, res=%"PRIu32"Hz, hw_mem_base=%p, dma_mem_base=%p, ping_pong_size=%zu, queue_depth=%zu",
              group_id, channel_id, tx_channel, config->gpio_num, tx_channel->base.resolution_hz,
              tx_channel->base.hw_mem_base, tx_channel->base.dma_mem_base, tx_channel->ping_pong_symbols, tx_channel->queue_size);
     return ESP_OK;
 
 err:
     if (tx_channel) {
-        rmt_tx_destory(tx_channel);
+        rmt_tx_destroy(tx_channel);
     }
     return ret;
 }
@@ -319,7 +322,7 @@ static esp_err_t rmt_del_tx_channel(rmt_channel_handle_t channel)
     int channel_id = channel->channel_id;
     ESP_LOGD(TAG, "del tx channel(%d,%d)", group_id, channel_id);
     // recycle memory resource
-    ESP_RETURN_ON_ERROR(rmt_tx_destory(tx_chan), TAG, "destory tx channel failed");
+    ESP_RETURN_ON_ERROR(rmt_tx_destroy(tx_chan), TAG, "destroy tx channel failed");
     return ESP_OK;
 }
 
@@ -379,7 +382,7 @@ esp_err_t rmt_new_sync_manager(const rmt_sync_manager_config_t *config, rmt_sync
 
 
     *ret_synchro = synchro;
-    ESP_LOGD(TAG, "new sync manager at %p, with channel mask:%02x", synchro, synchro->channel_mask);
+    ESP_LOGD(TAG, "new sync manager at %p, with channel mask:%02"PRIx32, synchro, synchro->channel_mask);
     return ESP_OK;
 
 err:
@@ -565,7 +568,7 @@ static void IRAM_ATTR rmt_tx_mark_eof(rmt_tx_channel_t *tx_chan)
 
 static size_t IRAM_ATTR rmt_encode_check_result(rmt_tx_channel_t *tx_chan, rmt_tx_trans_desc_t *t)
 {
-    rmt_encode_state_t encode_state = 0;
+    rmt_encode_state_t encode_state = RMT_ENCODING_RESET;
     rmt_encoder_handle_t encoder = t->encoder;
     size_t encoded_symbols = encoder->encode(encoder, &tx_chan->base, t->payload, t->payload_bytes, &encode_state);
     if (encode_state & RMT_ENCODING_COMPLETE) {
@@ -661,6 +664,7 @@ static void IRAM_ATTR rmt_tx_do_transaction(rmt_tx_channel_t *tx_chan, rmt_tx_tr
 #endif
     // turn on the TX machine
     portENTER_CRITICAL_ISR(&channel->spinlock);
+    rmt_ll_tx_fix_idle_level(hal->regs, channel_id, t->flags.eot_level, true);
     rmt_ll_tx_start(hal->regs, channel_id);
     portEXIT_CRITICAL_ISR(&channel->spinlock);
 }
@@ -719,9 +723,6 @@ static esp_err_t rmt_tx_disable(rmt_channel_handle_t channel)
     int channel_id = channel->channel_id;
 
     portENTER_CRITICAL(&channel->spinlock);
-    // when this function called, the transaction might be middle-way, the output level when we stop the transmitter is nondeterministic,
-    // so we fix the idle level temporarily
-    rmt_ll_tx_fix_idle_level(hal->regs, channel->channel_id, tx_chan->cur_trans ? tx_chan->cur_trans->flags.eot_level : 0, true);
     rmt_ll_tx_enable_loop(hal->regs, channel->channel_id, false);
 #if SOC_RMT_SUPPORT_TX_ASYNC_STOP
     rmt_ll_tx_stop(hal->regs, channel->channel_id);
@@ -738,11 +739,6 @@ static esp_err_t rmt_tx_disable(rmt_channel_handle_t channel)
 #endif
     rmt_ll_clear_interrupt_status(hal->regs, RMT_LL_EVENT_TX_MASK(channel_id));
     portEXIT_CRITICAL(&group->spinlock);
-
-    portENTER_CRITICAL(&channel->spinlock);
-    // restore the idle level selection, to be determind by eof symbol
-    rmt_ll_tx_fix_idle_level(hal->regs, channel_id, 0, false);
-    portEXIT_CRITICAL(&channel->spinlock);
 
 #if SOC_RMT_SUPPORT_DMA
     if (channel->dma_chan) {
@@ -803,7 +799,7 @@ static esp_err_t rmt_tx_modulate_carrier(rmt_channel_handle_t channel, const rmt
     portEXIT_CRITICAL(&channel->spinlock);
 
     if (real_frequency > 0) {
-        ESP_LOGD(TAG, "enable carrier modulation for channel(%d,%d), freq=%uHz", group_id, channel_id, real_frequency);
+        ESP_LOGD(TAG, "enable carrier modulation for channel(%d,%d), freq=%"PRIu32"Hz", group_id, channel_id, real_frequency);
     } else {
         ESP_LOGD(TAG, "disable carrier modulation for channel(%d,%d)", group_id, channel_id);
     }

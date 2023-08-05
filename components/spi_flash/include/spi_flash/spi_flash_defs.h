@@ -47,6 +47,8 @@
 #define CMD_SUSPEND             0x75
 #define CMD_RESUME              0x7A
 #define CMD_HPMEN               0xA3 /* Enable High Performance mode on flash */
+#define CMD_WRAP                0x77
+#define CMD_BURST_RD            0xC0 /* wrap(0x77) and burst read are functionally same. But commands and formats is different */
 
 #define CMD_RST_EN      0x66
 #define CMD_RST_DEV     0x99
@@ -67,3 +69,5 @@
 #define SPI_FLASH_OPISTR_DUMMY_BITLEN   20
 #define SPI_FLASH_OPIDTR_ADDR_BITLEN    32
 #define SPI_FLASH_OPIDTR_DUMMY_BITLEN   40
+#define SPI_FLASH_QIO_HPM_DUMMY_BITLEN  10
+#define SPI_FLASH_DIO_HPM_DUMMY_BITLEN  8

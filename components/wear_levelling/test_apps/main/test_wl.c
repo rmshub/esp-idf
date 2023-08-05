@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2021 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2021-2022 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -12,6 +12,9 @@
 #include "freertos/semphr.h"
 #include "esp_private/esp_clk.h"
 #include "sdkconfig.h"
+#include "esp_cpu.h"
+#include "esp_system.h"
+#include "spi_flash_mmap.h"
 
 
 TEST_GROUP(wear_levelling);
@@ -41,10 +44,10 @@ TEST(wear_levelling, wl_unmount_doesnt_leak_memory)
     wl_unmount(handle);
 
     // test that we didn't leak any memory on the next init/deinit
-    size_t size_before = xPortGetFreeHeapSize();
+    size_t size_before = esp_get_free_heap_size();
     TEST_ESP_OK(wl_mount(partition, &handle));
     wl_unmount(handle);
-    size_t size_after = xPortGetFreeHeapSize();
+    size_t size_after = esp_get_free_heap_size();
 
     TEST_ASSERT_EQUAL(size_before, size_after);
 }
@@ -62,21 +65,21 @@ TEST(wear_levelling, wl_mount_checks_partition_params)
     // test small partition: result should be error
     for (int i = 0; i < 5; i++) {
         fake_partition.size = SPI_FLASH_SEC_SIZE * (i);
-        size_before = xPortGetFreeHeapSize();
+        size_before = esp_get_free_heap_size();
         TEST_ESP_ERR(ESP_ERR_INVALID_ARG, wl_mount(&fake_partition, &handle));
         // test that we didn't leak any memory
-        size_after = xPortGetFreeHeapSize();
+        size_after = esp_get_free_heap_size();
         TEST_ASSERT_EQUAL_HEX32(size_before, size_after);
     }
 
     // test minimum size partition: result should be OK
     fake_partition.size = SPI_FLASH_SEC_SIZE * 5;
-    size_before = xPortGetFreeHeapSize();
+    size_before = esp_get_free_heap_size();
     TEST_ESP_OK(wl_mount(&fake_partition, &handle));
     wl_unmount(handle);
 
     // test that we didn't leak any memory
-    size_after = xPortGetFreeHeapSize();
+    size_after = esp_get_free_heap_size();
     TEST_ASSERT_EQUAL_HEX32(size_before, size_after);
 }
 
@@ -238,7 +241,7 @@ TEST(wear_levelling, write_doesnt_touch_other_sectors)
     check_mem_data(handle, init_val, buff);
 
     uint32_t start;
-    start = cpu_hal_get_cycle_count();
+    start = esp_cpu_get_cycle_count();
 
 
     for (int m = 0; m < 100000; m++) {
@@ -251,7 +254,7 @@ TEST(wear_levelling, write_doesnt_touch_other_sectors)
         check_mem_data(handle, init_val, buff);
 
         uint32_t end;
-        end = cpu_hal_get_cycle_count();
+        end = esp_cpu_get_cycle_count();
         uint32_t ms = (end - start) / (esp_clk_cpu_freq() / 1000);
         printf("loop %4i pass, time= %ims\n", m, ms);
         if (ms > 10000) {

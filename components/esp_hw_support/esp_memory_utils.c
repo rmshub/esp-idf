@@ -23,10 +23,7 @@ bool esp_ptr_dma_ext_capable(const void *p)
     return false;
 #endif  //!SOC_PSRAM_DMA_CAPABLE
 #if CONFIG_SPIRAM
-    intptr_t vaddr_start = 0;
-    intptr_t vaddr_end = 0;
-    esp_psram_extram_get_mapped_range(&vaddr_start, &vaddr_end);
-    return (intptr_t)p >= vaddr_start && (intptr_t)p < vaddr_end;
+    return esp_psram_check_ptr_addr(p);
 #else
     return false;
 #endif  //CONFIG_SPIRAM
@@ -44,10 +41,16 @@ bool esp_ptr_byte_accessible(const void *p)
     r |= (ip >= SOC_RTC_DRAM_LOW && ip < SOC_RTC_DRAM_HIGH);
 #endif
 #if CONFIG_SPIRAM
-    intptr_t vaddr_start = 0;
-    intptr_t vaddr_end = 0;
-    esp_psram_extram_get_mapped_range(&vaddr_start, &vaddr_end);
-    r |= (ip >= vaddr_start && ip < vaddr_end);
+    r |= esp_psram_check_ptr_addr(p);
+#endif
+#if CONFIG_ESP32S3_DATA_CACHE_16KB
+    /* For ESP32-S3, when the DCACHE size is set to 16 kB, the unused 48 kB is
+     * added to the heap in 2 blocks of 32 kB (from 0x3FCF0000) and 16 kB
+     * (from 0x3C000000 (SOC_DROM_LOW) - 0x3C004000).
+     * Though this memory lies in the external memory vaddr, it is no different
+     * from the internal RAM in terms of hardware attributes. It is a part of
+     * the internal RAM when added to the heap and is byte-accessible .*/
+    r |= (ip >= SOC_DROM_LOW && ip < (SOC_DROM_LOW + 0x4000));
 #endif
     return r;
 }
@@ -58,10 +61,7 @@ bool esp_ptr_external_ram(const void *p)
     return false;
 #endif  //!SOC_SPIRAM_SUPPORTED
 #if CONFIG_SPIRAM
-    intptr_t vaddr_start = 0;
-    intptr_t vaddr_end = 0;
-    esp_psram_extram_get_mapped_range(&vaddr_start, &vaddr_end);
-    return (intptr_t)p >= vaddr_start && (intptr_t)p < vaddr_end;
+    return esp_psram_check_ptr_addr(p);
 #else
     return false;
 #endif  //CONFIG_SPIRAM
@@ -70,10 +70,7 @@ bool esp_ptr_external_ram(const void *p)
 #if CONFIG_SPIRAM_ALLOW_STACK_EXTERNAL_MEMORY
 bool esp_stack_ptr_in_extram(uint32_t sp)
 {
-    intptr_t vaddr_start = 0;
-    intptr_t vaddr_end = 0;
-    esp_psram_extram_get_mapped_range(&vaddr_start, &vaddr_end);
-    //Check if stack ptr is in between SOC_EXTRAM_DATA_LOW and SOC_EXTRAM_DATA_HIGH, and 16 byte aligned.
-    return !(sp < vaddr_start + 0x10 || sp > vaddr_end - 0x10 || ((sp & 0xF) != 0));
+    //Check if stack ptr is on PSRAM, and 16 byte aligned.
+    return (esp_psram_check_ptr_addr((void *)sp) && ((sp & 0xF) == 0));
 }
 #endif

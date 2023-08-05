@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2021 Espressif Systems (Shanghai) CO LTD
- * All rights reserved.
+ * SPDX-FileCopyrightText: 2021-2023 Espressif Systems (Shanghai) CO LTD
  *
+ * SPDX-License-Identifier: LicenseRef-Included
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -36,14 +36,29 @@
  */
 
 #include "esp_err.h"
-#include "zboss_api.h"
+#include "esp_zigbee_core.h"
 
 /* Zigbee Configuration */
-#define IEEE_CHANNEL_MASK               (1l << 13)  /* ZigBee default setting is channel 13 for light example usage */
-#define ERASE_PERSISTENT_CONFIG         ZB_TRUE     /* erase network devices before running example */
 #define MAX_CHILDREN                    10          /* the max amount of connected devices */
+#define INSTALLCODE_POLICY_ENABLE       false       /* enable the install code policy for security */
+#define ESP_ZB_PRIMARY_CHANNEL_MASK     (1l << 13)  /* Zigbee primary channel mask use in the example */
 
-#define ZB_ESP_DEFAULT_RADIO_CONFIG()                           \
+#define ESP_ZB_ZC_CONFIG()                                                              \
+    {                                                                                   \
+        .esp_zb_role = ESP_ZB_DEVICE_TYPE_COORDINATOR,                                  \
+        .install_code_policy = INSTALLCODE_POLICY_ENABLE,                               \
+        .nwk_cfg.zczr_cfg = {                                                           \
+            .max_children = MAX_CHILDREN,                                               \
+        },                                                                              \
+    }
+
+#if CONFIG_ZB_RADIO_NATIVE
+#define ESP_ZB_DEFAULT_RADIO_CONFIG()                           \
+    {                                                           \
+        .radio_mode = RADIO_MODE_NATIVE,                        \
+    }
+#else
+#define ESP_ZB_DEFAULT_RADIO_CONFIG()                           \
     {                                                           \
         .radio_mode = RADIO_MODE_UART_RCP,                      \
             .radio_uart_config = {                              \
@@ -62,8 +77,9 @@
             .tx_pin = 5,                                        \
         },                                                      \
     }
+#endif
 
-#define ZB_ESP_DEFAULT_HOST_CONFIG()                            \
+#define ESP_ZB_DEFAULT_HOST_CONFIG()                            \
     {                                                           \
         .host_connection_mode = HOST_CONNECTION_MODE_NONE,      \
     }

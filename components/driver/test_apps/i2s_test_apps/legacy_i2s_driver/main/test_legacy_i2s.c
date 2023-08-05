@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -13,6 +13,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <inttypes.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
@@ -29,8 +30,11 @@
 #include "driver/pulse_cnt.h"
 #include "soc/pcnt_periph.h"
 #endif
+#ifdef CONFIG_PM_ENABLE
+#include "esp_pm.h"
+#endif
 
-#include "test_inc/test_i2s.h"
+#include "../../test_inc/test_i2s.h"
 
 #define PERCENT_DIFF 0.0001
 
@@ -211,6 +215,28 @@ TEST_CASE("I2S_basic_driver_installation_uninstallation_and_settings_test", "[i2
     TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, i2s_driver_uninstall(I2S_NUM_0));
 }
 
+static bool whether_contains_exapected_data(uint16_t *src, uint32_t src_len, uint32_t src_step, uint32_t start_val, uint32_t val_step)
+{
+    uint32_t val = start_val;
+    uint32_t index_step = 1;
+    for (int i = 0; val < 100 && i < src_len; i += index_step) {
+        if (src[i] == val) {
+            if (val == start_val && i < src_len - 8) {
+                printf("start index: %d ---> \n%d %d %d %d %d %d %d %d\n", i,
+                        src[i], src[i+1], src[i+2], src[i+3],
+                        src[i+4], src[i+5], src[i+6], src[i+7]);
+            }
+            index_step = src_step;
+            val += val_step;
+        } else {
+            index_step = 1;
+            val = start_val;
+        }
+    }
+
+    return val >= 100;
+}
+
 /**
  * @brief Test mono and stereo mode of I2S by loopback
  * @note  Only rx channel distinguish left mono and right mono, tx channel does not
@@ -218,10 +244,11 @@ TEST_CASE("I2S_basic_driver_installation_uninstallation_and_settings_test", "[i2
  *        2. Check rx right mono and left mono (requiring tx works in stereo mode)
  *        3. Check tx mono (requiring rx works in stereo mode)
  */
-TEST_CASE("I2S_mono_stereo_loopback_test", "[i2s_legacy]")
+TEST_CASE("I2S_legacy_mono_stereo_loopback_test", "[i2s_legacy]")
 {
 #define WRITE_BUF_LEN  2000
 #define READ_BUF_LEN   4000
+#define RETEY_TIMES    3
     // master driver installed and send data
     i2s_config_t master_i2s_config = {
         .mode = I2S_MODE_MASTER | I2S_MODE_TX | I2S_MODE_RX,
@@ -254,9 +281,9 @@ TEST_CASE("I2S_mono_stereo_loopback_test", "[i2s_legacy]")
     TEST_ESP_OK(i2s_stop(I2S_NUM_0));
     /* Config TX as stereo channel directly, because legacy driver can't support config tx&rx separately */
 #if SOC_I2S_HW_VERSION_1
-    i2s_ll_tx_select_slot(&I2S0, I2S_STD_SLOT_LEFT_RIGHT, true);
+    i2s_ll_tx_select_std_slot(&I2S0, I2S_STD_SLOT_BOTH, false);
 #else
-    i2s_ll_tx_select_slot(&I2S0, I2S_STD_SLOT_LEFT_RIGHT);
+    i2s_ll_tx_select_std_slot(&I2S0, I2S_STD_SLOT_BOTH);
 #endif
     i2s_ll_tx_enable_mono_mode(&I2S0, false);
 
@@ -269,6 +296,8 @@ TEST_CASE("I2S_mono_stereo_loopback_test", "[i2s_legacy]")
     uint16_t *r_buf = calloc(1, READ_BUF_LEN);
     size_t w_bytes = 0;
     size_t r_bytes = 0;
+    uint32_t retry = 0;
+    bool is_failed = false;
     for (int n = 0; n < WRITE_BUF_LEN / 2; n++) {
         w_buf[n] = n%100;
     }
@@ -276,28 +305,25 @@ TEST_CASE("I2S_mono_stereo_loopback_test", "[i2s_legacy]")
      * tx format: 0x00[L] 0x01[R] 0x02[L] 0x03[R] ...
      * rx receive: 0x01[R] 0x03[R] ... */
     TEST_ESP_OK(i2s_write(I2S_NUM_0, w_buf, WRITE_BUF_LEN, &w_bytes, portMAX_DELAY));
-    TEST_ESP_OK(i2s_read(I2S_NUM_0, r_buf, READ_BUF_LEN, &r_bytes, portMAX_DELAY));
-#if CONFIG_IDF_TARGET_ESP32
-    /* The data of tx/rx channels are flipped on ESP32 */
-    for (int n = 0; n < READ_BUF_LEN / 2; n += 2) {
-        int16_t temp = r_buf[n];
-        r_buf[n] = r_buf[n+1];
-        r_buf[n+1] = temp;
-    }
-#endif
-    int i = 0;
-    for (i = 0; (i < READ_BUF_LEN / 2); i++) {
-        if (r_buf[i] == 1) {
-            printf("%d %d %d %d\n%d %d %d %d\n",
-                r_buf[i], r_buf[i+1], r_buf[i+2], r_buf[i+3],
-                r_buf[i+4], r_buf[i+5], r_buf[i+6], r_buf[i+7]);
+    for (retry = 0; retry < RETEY_TIMES; retry++) {
+        TEST_ESP_OK(i2s_read(I2S_NUM_0, r_buf, READ_BUF_LEN, &r_bytes, portMAX_DELAY));
+    #if CONFIG_IDF_TARGET_ESP32
+        /* The data of tx/rx channels are flipped on ESP32 */
+        for (int n = 0; n < READ_BUF_LEN / 2; n += 2) {
+            int16_t temp = r_buf[n];
+            r_buf[n] = r_buf[n+1];
+            r_buf[n+1] = temp;
+        }
+    #endif
+        /* Expected: 1 3 5 7 9 ... 97 99 */
+        if (whether_contains_exapected_data(r_buf, READ_BUF_LEN / 2, 1, 1, 2)) {
             break;
         }
     }
-    printf("Data start index: %d\n", i);
-    TEST_ASSERT(i < READ_BUF_LEN / 2 - 50);
-    for (int16_t j = 1; j < 100; j += 2) {
-        TEST_ASSERT_EQUAL_INT16(r_buf[i++], j);
+    if (retry >= RETEY_TIMES) {
+        printf("rx right mono test failed\n");
+        is_failed = true;
+        goto err;
     }
     printf("rx right mono test passed\n");
 
@@ -306,21 +332,17 @@ TEST_CASE("I2S_mono_stereo_loopback_test", "[i2s_legacy]")
      * rx receive: 0x00[L] 0x01[R] 0x02[L] 0x03[R] ... */
     TEST_ESP_OK(i2s_set_clk(I2S_NUM_0, SAMPLE_RATE, SAMPLE_BITS, I2S_CHANNEL_STEREO));
     TEST_ESP_OK(i2s_write(I2S_NUM_0, w_buf, WRITE_BUF_LEN, &w_bytes, portMAX_DELAY));
-    TEST_ESP_OK(i2s_read(I2S_NUM_0, r_buf, READ_BUF_LEN, &r_bytes, portMAX_DELAY));
-
-    for (i = 0; (i < READ_BUF_LEN / 2); i++) {
-        if (r_buf[i] == 1) {
-            printf("%d %d %d %d\n%d %d %d %d\n",
-                r_buf[i], r_buf[i+1], r_buf[i+2], r_buf[i+3],
-                r_buf[i+4], r_buf[i+5], r_buf[i+6], r_buf[i+7]);
+    for (retry = 0; retry < RETEY_TIMES; retry++) {
+        TEST_ESP_OK(i2s_read(I2S_NUM_0, r_buf, READ_BUF_LEN, &r_bytes, portMAX_DELAY));
+        /* Expected: 1 2 3 4 ... 98 99 */
+        if (whether_contains_exapected_data(r_buf, READ_BUF_LEN / 2, 1, 1, 1)) {
             break;
         }
     }
-    printf("Data start index: %d\n", i);
-    TEST_ASSERT(i < READ_BUF_LEN / 2 - 100);
-    TEST_ASSERT(i % 2);
-    for (int16_t j = 1; j < 100; j ++) {
-        TEST_ASSERT_EQUAL_INT16(r_buf[i++], j); // receive all number
+    if (retry >= RETEY_TIMES) {
+        printf("tx/rx stereo test failed\n");
+        is_failed = true;
+        goto err;
     }
     printf("tx/rx stereo test passed\n");
 
@@ -329,20 +351,17 @@ TEST_CASE("I2S_mono_stereo_loopback_test", "[i2s_legacy]")
      * rx receive: 0x01[R] 0x02[R] ... */
     TEST_ESP_OK(i2s_set_clk(I2S_NUM_0, SAMPLE_RATE, I2S_BITS_PER_SAMPLE_32BIT, I2S_CHANNEL_MONO));
     TEST_ESP_OK(i2s_write(I2S_NUM_0, w_buf, WRITE_BUF_LEN, &w_bytes, portMAX_DELAY));
-    TEST_ESP_OK(i2s_read(I2S_NUM_0, r_buf, READ_BUF_LEN, &r_bytes, portMAX_DELAY));
-
-    for (i = 0; i < READ_BUF_LEN / 2; i++) {
-        if (r_buf[i] == 1) {
-            printf("%d %d %d %d\n%d %d %d %d\n",
-                r_buf[i], r_buf[i+1], r_buf[i+2], r_buf[i+3],
-                r_buf[i+4], r_buf[i+5], r_buf[i+6], r_buf[i+7]);
+    for (retry = 0; retry < RETEY_TIMES; retry++) {
+        TEST_ESP_OK(i2s_read(I2S_NUM_0, r_buf, READ_BUF_LEN, &r_bytes, portMAX_DELAY));
+        /* Expected: 1 2 3 4 ... 98 99 */
+        if (whether_contains_exapected_data(r_buf, READ_BUF_LEN / 2, 1, 1, 1)) {
             break;
         }
     }
-    printf("Data start index: %d\n", i);
-    TEST_ASSERT(i < READ_BUF_LEN / 2 - 100);
-    for (int16_t j = 1; j < 100; j ++) {
-        TEST_ASSERT_EQUAL_INT16(r_buf[i++], j);
+    if (retry >= RETEY_TIMES) {
+        printf("tx/rx mono test failed\n");
+        is_failed = true;
+        goto err;
     }
     printf("tx/rx mono test passed\n");
 
@@ -352,9 +371,9 @@ TEST_CASE("I2S_mono_stereo_loopback_test", "[i2s_legacy]")
     TEST_ESP_OK(i2s_driver_install(I2S_NUM_0, &master_i2s_config, 0, NULL));
     TEST_ESP_OK(i2s_stop(I2S_NUM_0));
 #if SOC_I2S_HW_VERSION_1
-    i2s_ll_tx_select_slot(&I2S0, I2S_STD_SLOT_LEFT_RIGHT, true);
+    i2s_ll_tx_select_std_slot(&I2S0, I2S_STD_SLOT_BOTH, false);
 #else
-    i2s_ll_tx_select_slot(&I2S0, I2S_STD_SLOT_LEFT_RIGHT);
+    i2s_ll_tx_select_std_slot(&I2S0, I2S_STD_SLOT_BOTH);
 #endif
     i2s_ll_tx_enable_mono_mode(&I2S0, false);
 
@@ -364,33 +383,39 @@ TEST_CASE("I2S_mono_stereo_loopback_test", "[i2s_legacy]")
      * tx format: 0x00[L] 0x01[R] 0x02[L] 0x03[R] ...
      * rx receive: 0x00[R] 0x02[R] ... */
     TEST_ESP_OK(i2s_write(I2S_NUM_0, w_buf, WRITE_BUF_LEN, &w_bytes, portMAX_DELAY));
-    TEST_ESP_OK(i2s_read(I2S_NUM_0, r_buf, READ_BUF_LEN, &r_bytes, portMAX_DELAY));
-#if CONFIG_IDF_TARGET_ESP32
-    /* The data of tx/rx channels are flipped on ESP32 */
-    for (int n = 0; n < READ_BUF_LEN / 2; n += 2) {
-        int16_t temp = r_buf[n];
-        r_buf[n] = r_buf[n+1];
-        r_buf[n+1] = temp;
-    }
-#endif
-    for (i = 0; (i < READ_BUF_LEN / 2); i++) {
-        if (r_buf[i] == 2) {
-            printf("%d %d %d %d\n%d %d %d %d\n",
-                r_buf[i], r_buf[i+1], r_buf[i+2], r_buf[i+3],
-                r_buf[i+4], r_buf[i+5], r_buf[i+6], r_buf[i+7]);
+    for (retry = 0; retry < RETEY_TIMES; retry++) {
+        TEST_ESP_OK(i2s_read(I2S_NUM_0, r_buf, READ_BUF_LEN, &r_bytes, portMAX_DELAY));
+    #if CONFIG_IDF_TARGET_ESP32
+        /* The data of tx/rx channels are flipped on ESP32 */
+        for (int n = 0; n < READ_BUF_LEN / 2; n += 2) {
+            int16_t temp = r_buf[n];
+            r_buf[n] = r_buf[n+1];
+            r_buf[n+1] = temp;
+        }
+    #endif
+        /* Expected: 2 4 6 8 10 ... 96 98 */
+        if (whether_contains_exapected_data(r_buf, READ_BUF_LEN / 2, 1, 2, 2)) {
             break;
         }
     }
-    printf("Data start index: %d\n", i);
-    TEST_ASSERT(i < READ_BUF_LEN / 2 - 50);
-    for (int16_t j = 2; j < 100; j += 2) {
-        TEST_ASSERT_EQUAL_INT16(r_buf[i++], j);
+    if (retry >= RETEY_TIMES) {
+        printf("rx left mono test failed\n");
+        is_failed = true;
+        goto err;
     }
     printf("rx left mono test passed\n");
 
+err:
+    if (is_failed) {
+        for (int i = 0; i < READ_BUF_LEN / 2; i++) {
+            printf("%x ", r_buf[i]);
+        }
+        printf("\n");
+    }
     free(w_buf);
     free(r_buf);
     TEST_ESP_OK(i2s_driver_uninstall(I2S_NUM_0));
+    TEST_ASSERT_FALSE(is_failed);
 }
 
 #if SOC_I2S_SUPPORTS_TDM
@@ -420,7 +445,7 @@ TEST_CASE("I2S_TDM_loopback_test_with_master_tx_and_rx", "[i2s_legacy]")
     TEST_ESP_OK(i2s_driver_install(I2S_NUM_0, &master_i2s_config, 0, NULL));
     TEST_ESP_OK(i2s_set_pin(I2S_NUM_0, &master_pin_config));
     i2s_test_io_config(I2S_TEST_MODE_LOOPBACK);
-    printf("\r\nheap size: %d\n", esp_get_free_heap_size());
+    printf("\r\nheap size: %"PRIu32"\n", esp_get_free_heap_size());
 
     uint8_t *data_wr = (uint8_t *)malloc(sizeof(uint8_t) * 400);
     size_t i2s_bytes_write = 0;
@@ -495,7 +520,7 @@ TEST_CASE("I2S_write_and_read_test_with_master_tx_and_slave_rx", "[i2s_legacy]")
     TEST_ESP_OK(i2s_driver_install(I2S_NUM_0, &master_i2s_config, 0, NULL));
     TEST_ESP_OK(i2s_set_pin(I2S_NUM_0, &master_pin_config));
     i2s_test_io_config(I2S_TEST_MODE_MASTER_TO_SLAVE);
-    printf("\r\nheap size: %d\n", esp_get_free_heap_size());
+    printf("\r\nheap size: %"PRIu32"\n", esp_get_free_heap_size());
 
     i2s_config_t slave_i2s_config = {
         .mode = I2S_MODE_SLAVE | I2S_MODE_RX,
@@ -527,7 +552,7 @@ TEST_CASE("I2S_write_and_read_test_with_master_tx_and_slave_rx", "[i2s_legacy]")
     TEST_ESP_OK(i2s_driver_install(I2S_NUM_1, &slave_i2s_config, 0, NULL));
     TEST_ESP_OK(i2s_set_pin(I2S_NUM_1, &slave_pin_config));
     i2s_test_io_config(I2S_TEST_MODE_MASTER_TO_SLAVE);
-    printf("\r\nheap size: %d\n", esp_get_free_heap_size());
+    printf("\r\nheap size: %"PRIu32"\n", esp_get_free_heap_size());
 
     uint8_t *data_wr = (uint8_t *)malloc(sizeof(uint8_t) * 400);
     size_t i2s_bytes_write = 0;
@@ -599,7 +624,7 @@ TEST_CASE("I2S_write_and_read_test_master_rx_and_slave_tx", "[i2s_legacy]")
     TEST_ESP_OK(i2s_driver_install(I2S_NUM_0, &master_i2s_config, 0, NULL));
     TEST_ESP_OK(i2s_set_pin(I2S_NUM_0, &master_pin_config));
     i2s_test_io_config(I2S_TEST_MODE_SLAVE_TO_MASTER);
-    printf("\r\nheap size: %d\n", esp_get_free_heap_size());
+    printf("\r\nheap size: %"PRIu32"\n", esp_get_free_heap_size());
 
     i2s_config_t slave_i2s_config = {
         .mode = I2S_MODE_SLAVE | I2S_MODE_TX,                                  // Only RX
@@ -631,7 +656,7 @@ TEST_CASE("I2S_write_and_read_test_master_rx_and_slave_tx", "[i2s_legacy]")
     TEST_ESP_OK(i2s_driver_install(I2S_NUM_1, &slave_i2s_config, 0, NULL));
     TEST_ESP_OK(i2s_set_pin(I2S_NUM_1, &slave_pin_config));
     i2s_test_io_config(I2S_TEST_MODE_SLAVE_TO_MASTER);
-    printf("\r\nheap size: %d\n", esp_get_free_heap_size());
+    printf("\r\nheap size: %"PRIu32"\n", esp_get_free_heap_size());
 
     uint8_t *data_wr = (uint8_t *)malloc(sizeof(uint8_t) * 400);
     size_t i2s_bytes_write = 0;
@@ -676,7 +701,7 @@ TEST_CASE("I2S_write_and_read_test_master_rx_and_slave_tx", "[i2s_legacy]")
 TEST_CASE("I2S_memory_leaking_test", "[i2s_legacy]")
 {
     i2s_config_t master_i2s_config = {
-        .mode = I2S_MODE_MASTER | I2S_MODE_RX,
+        .mode = I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_TX,
         .sample_rate = SAMPLE_RATE,
         .bits_per_sample = SAMPLE_BITS,
         .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
@@ -701,20 +726,33 @@ TEST_CASE("I2S_memory_leaking_test", "[i2s_legacy]")
         .data_out_num = -1,
         .data_in_num = DATA_IN_IO
     };
+    uint8_t *w_buf = calloc(1, 2000);
+    TEST_ASSERT(w_buf);
+    uint8_t *r_buf = calloc(1, 2000);
+    TEST_ASSERT(r_buf);
+    size_t w_bytes = 0;
+    size_t r_bytes = 0;
 
     TEST_ESP_OK(i2s_driver_install(I2S_NUM_0, &master_i2s_config, 0, NULL));
     TEST_ESP_OK(i2s_set_pin(I2S_NUM_0, &master_pin_config));
+    TEST_ESP_OK(i2s_write(I2S_NUM_0, w_buf, 2000, &w_bytes, portMAX_DELAY));
+    TEST_ESP_OK(i2s_read(I2S_NUM_0, r_buf, 2000, &r_bytes, portMAX_DELAY));
     i2s_driver_uninstall(I2S_NUM_0);
     int initial_size = esp_get_free_heap_size();
 
-    for (int i = 0; i < 100; i++) {
+    for (int i = 0; i < 50; i++) {
         TEST_ESP_OK(i2s_driver_install(I2S_NUM_0, &master_i2s_config, 0, NULL));
         TEST_ESP_OK(i2s_set_pin(I2S_NUM_0, &master_pin_config));
+        TEST_ESP_OK(i2s_write(I2S_NUM_0, w_buf, 2000, &w_bytes, portMAX_DELAY));
+        TEST_ESP_OK(i2s_read(I2S_NUM_0, r_buf, 2000, &r_bytes, portMAX_DELAY));
         i2s_driver_uninstall(I2S_NUM_0);
         TEST_ASSERT(initial_size == esp_get_free_heap_size());
     }
     vTaskDelay(100 / portTICK_PERIOD_MS);
     TEST_ASSERT(initial_size == esp_get_free_heap_size());
+
+    free(w_buf);
+    free(r_buf);
 }
 
 #if SOC_I2S_SUPPORTS_APLL
@@ -836,12 +874,31 @@ static void i2s_test_common_sample_rate(i2s_port_t id)
     esp_rom_gpio_connect_out_signal(MASTER_WS_IO, i2s_periph_signal[0].m_tx_ws_sig, 0, 0);
     esp_rom_gpio_connect_in_signal(MASTER_WS_IO, pcnt_periph_signals.groups[0].units[0].channels[0].pulse_sig, 0);
 
-    // Test common sample rate
-    uint32_t test_freq[15] = {8000,  11025, 12000, 16000, 22050, 24000,
-                            32000, 44100, 48000, 64000, 88200, 96000,
-                            128000, 144000, 196000};
+    const uint32_t test_freq[] = {
+        8000,  10000,  11025, 12000, 16000, 22050,
+        24000, 32000,  44100, 48000, 64000, 88200,
+        96000, 128000, 144000,196000};
     int real_pulse = 0;
-    for (int i = 0; i < 15; i++) {
+#if CONFIG_IDF_ENV_FPGA
+    // Limit the test sample rate on FPGA platform due to the low frequency it supports.
+    int case_cnt = 10;
+#else
+    int case_cnt = sizeof(test_freq) / sizeof(uint32_t);
+#endif
+
+#if SOC_I2S_SUPPORTS_PLL_F96M
+    // 196000 Hz sample rate doesn't support on PLL_96M target
+    case_cnt = 15;
+#endif
+
+    // Acquire the PM lock incase Dynamic Frequency Scaling(DFS) lower the frequency
+#ifdef CONFIG_PM_ENABLE
+    esp_pm_lock_handle_t pm_lock;
+    esp_pm_lock_type_t pm_type = ESP_PM_APB_FREQ_MAX;
+    TEST_ESP_OK(esp_pm_lock_create(pm_type, 0, "legacy_i2s_test", &pm_lock));
+    esp_pm_lock_acquire(pm_lock);
+#endif
+    for (int i = 0; i < case_cnt; i++) {
         int expt_pulse = (int16_t)((float)test_freq[i] * (TEST_I2S_PERIOD_MS / 1000.0));
         TEST_ESP_OK(i2s_set_clk(id, test_freq[i], SAMPLE_BITS, I2S_CHANNEL_STEREO));
         vTaskDelay(1); // Waiting for hardware totally started
@@ -851,10 +908,14 @@ static void i2s_test_common_sample_rate(i2s_port_t id)
         vTaskDelay(pdMS_TO_TICKS(TEST_I2S_PERIOD_MS));
         TEST_ESP_OK(pcnt_unit_stop(pcnt_unit));
         TEST_ESP_OK(pcnt_unit_get_count(pcnt_unit, &real_pulse));
-        printf("[%d Hz] %d pulses, expected %d, err %d\n", test_freq[i], real_pulse, expt_pulse, real_pulse - expt_pulse);
+        printf("[%"PRIu32" Hz] %d pulses, expected %d, err %d\n", test_freq[i], real_pulse, expt_pulse, real_pulse - expt_pulse);
         // Check if the error between real pulse number and expected pulse number is within 1%
         TEST_ASSERT_INT_WITHIN(expt_pulse * 0.01, expt_pulse, real_pulse);
     }
+#ifdef CONFIG_PM_ENABLE
+    esp_pm_lock_release(pm_lock);
+    esp_pm_lock_delete(pm_lock);
+#endif
     TEST_ESP_OK(pcnt_del_channel(pcnt_chan));
     TEST_ESP_OK(pcnt_unit_stop(pcnt_unit));
     TEST_ESP_OK(pcnt_unit_disable(pcnt_unit));

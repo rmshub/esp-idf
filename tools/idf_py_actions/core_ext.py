@@ -1,6 +1,7 @@
-# SPDX-FileCopyrightText: 2022 Espressif Systems (Shanghai) CO LTD
+# SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
 import fnmatch
+import json
 import locale
 import os
 import re
@@ -17,8 +18,8 @@ from click.core import Context
 from idf_py_actions.constants import GENERATORS, PREVIEW_TARGETS, SUPPORTED_TARGETS, URL_TO_DOC
 from idf_py_actions.errors import FatalError
 from idf_py_actions.global_options import global_options
-from idf_py_actions.tools import (PropertyDict, TargetChoice, ensure_build_directory, get_target, idf_version,
-                                  merge_action_lists, realpath, run_target)
+from idf_py_actions.tools import (PropertyDict, TargetChoice, ensure_build_directory, generate_hints, get_target,
+                                  idf_version, merge_action_lists, run_target, yellow_print)
 
 
 def action_extensions(base_actions: Dict, project_path: str) -> Any:
@@ -30,21 +31,26 @@ def action_extensions(base_actions: Dict, project_path: str) -> Any:
         directory (with the specified generator) as needed.
         """
         ensure_build_directory(args, ctx.info_name)
-        run_target(target_name, args)
+        run_target(target_name, args, force_progression=GENERATORS[args.generator].get('force_progression', False))
 
-    def size_target(target_name: str, ctx: Context, args: PropertyDict) -> None:
+    def size_target(target_name: str, ctx: Context, args: PropertyDict, output_format: str, output_file: str) -> None:
         """
         Builds the app and then executes a size-related target passed in 'target_name'.
         `tool_error_handler` handler is used to suppress errors during the build,
         so size action can run even in case of overflow.
-
         """
 
-        def tool_error_handler(e: int) -> None:
-            pass
+        def tool_error_handler(e: int, stdout: str, stderr: str) -> None:
+            for hint in generate_hints(stdout, stderr):
+                yellow_print(hint)
+
+        os.environ['SIZE_OUTPUT_FORMAT'] = output_format
+        if output_file:
+            os.environ['SIZE_OUTPUT_FILE'] = os.path.abspath(output_file)
 
         ensure_build_directory(args, ctx.info_name)
-        run_target('all', args, custom_error_handler=tool_error_handler)
+        run_target('all', args, force_progression=GENERATORS[args.generator].get('force_progression', False),
+                   custom_error_handler=tool_error_handler)
         run_target(target_name, args)
 
     def list_build_system_targets(target_name: str, ctx: Context, args: PropertyDict) -> None:
@@ -56,11 +62,19 @@ def action_extensions(base_actions: Dict, project_path: str) -> Any:
         Menuconfig target is build_target extended with the style argument for setting the value for the environment
         variable.
         """
+        if sys.platform != 'win32':
+            try:
+                import curses  # noqa: F401
+            except ImportError:
+                raise FatalError('\n'.join(
+                    ['', "menuconfig failed to import the standard Python 'curses' library.",
+                     'Please re-run the install script which might be able to fix the issue.']))
         if sys.version_info[0] < 3:
             # The subprocess lib cannot accept environment variables as "unicode".
             # This encoding step is required only in Python 2.
             style = style.encode(sys.getfilesystemencoding() or 'utf-8')
         os.environ['MENUCONFIG_STYLE'] = style
+        args.no_hints = True
         build_target(target_name, ctx, args)
 
     def fallback_target(target_name: str, ctx: Context, args: PropertyDict) -> None:
@@ -148,27 +162,22 @@ def action_extensions(base_actions: Dict, project_path: str) -> Any:
                 "%s is still in preview. You have to append '--preview' option after idf.py to use any preview feature."
                 % idf_target)
         args.define_cache_entry.append('IDF_TARGET=' + idf_target)
-        sdkconfig_path = os.path.join(args.project_dir, 'sdkconfig')
-        sdkconfig_old = sdkconfig_path + '.old'
-        if os.path.exists(sdkconfig_old):
-            os.remove(sdkconfig_old)
-        if os.path.exists(sdkconfig_path):
-            os.rename(sdkconfig_path, sdkconfig_old)
-        print('Set Target to: %s, new sdkconfig created. Existing sdkconfig renamed to sdkconfig.old.' % idf_target)
-        ensure_build_directory(args, ctx.info_name, True)
+        print(f'Set Target to: {idf_target}, new sdkconfig will be created.')
+        env = {'_IDF_PY_SET_TARGET_ACTION': '1'}
+        ensure_build_directory(args, ctx.info_name, True, env)
 
     def reconfigure(action: str, ctx: Context, args: PropertyDict) -> None:
         ensure_build_directory(args, ctx.info_name, True)
 
     def validate_root_options(ctx: Context, args: PropertyDict, tasks: List) -> None:
-        args.project_dir = realpath(args.project_dir)
-        if args.build_dir is not None and args.project_dir == realpath(args.build_dir):
+        args.project_dir = os.path.realpath(args.project_dir)
+        if args.build_dir is not None and args.project_dir == os.path.realpath(args.build_dir):
             raise FatalError(
                 'Setting the build directory to the project directory is not supported. Suggest dropping '
                 "--build-dir option, the default is a 'build' subdirectory inside the project directory.")
         if args.build_dir is None:
             args.build_dir = os.path.join(args.project_dir, 'build')
-        args.build_dir = realpath(args.build_dir)
+        args.build_dir = os.path.realpath(args.build_dir)
 
     def idf_version_callback(ctx: Context, param: str, value: str) -> None:
         if not value or ctx.resilient_parsing:
@@ -189,7 +198,7 @@ def action_extensions(base_actions: Dict, project_path: str) -> Any:
         for target in SUPPORTED_TARGETS:
             print(target)
 
-        if 'preview' in ctx.params:
+        if ctx.params.get('preview'):
             for target in PREVIEW_TARGETS:
                 print(target)
 
@@ -233,6 +242,24 @@ def action_extensions(base_actions: Dict, project_path: str) -> Any:
         except ValueError:
             language = 'en'
         return language
+
+    def help_and_exit(action: str, ctx: Context, param: List, json_option: bool, add_options: bool) -> None:
+        if json_option:
+            output_dict = {}
+            output_dict['target'] = get_target(param.project_dir)  # type: ignore
+            output_dict['actions'] = []
+            actions = ctx.to_info_dict().get('command').get('commands')
+            for a in actions:
+                action_info = {}
+                action_info['name'] = a
+                action_info['description'] = actions[a].get('help')
+                if add_options:
+                    action_info['options'] = actions[a].get('params')
+                output_dict['actions'].append(action_info)
+            print(json.dumps(output_dict, sort_keys=True, indent=4))
+        else:
+            print(ctx.get_help())
+        ctx.exit()
 
     root_options = {
         'global_options': [
@@ -282,6 +309,7 @@ def action_extensions(base_actions: Dict, project_path: str) -> Any:
             {
                 'names': ['--preview'],
                 'help': 'Enable IDF features that are still in preview.',
+                'is_eager': True,
                 'is_flag': True,
                 'default': False,
             },
@@ -304,9 +332,25 @@ def action_extensions(base_actions: Dict, project_path: str) -> Any:
                 'hidden': True,
                 'default': False,
             },
+            {
+                'names': ['--no-hints'],
+                'help': 'Disable hints on how to resolve errors and logging.',
+                'is_flag': True,
+                'default': False
+            }
         ],
         'global_action_callbacks': [validate_root_options],
     }
+
+    # 'default' is introduced instead of simply setting 'text' as the default so that we know
+    # if the user explicitly specified the format or not. If the format is not specified, then
+    # the legacy OUTPUT_JSON CMake variable will be taken into account.
+    size_options = [{'names': ['--format', 'output_format'],
+                     'type': click.Choice(['default', 'text', 'csv', 'json']),
+                     'help': 'Specify output format: text (same as "default"), csv or json.',
+                     'default': 'default'},
+                    {'names': ['--output-file', 'output_file'],
+                     'help': 'Print output to the specified file instead of to the standard output'}]
 
     build_actions = {
         'actions': {
@@ -360,17 +404,17 @@ def action_extensions(base_actions: Dict, project_path: str) -> Any:
             'size': {
                 'callback': size_target,
                 'help': 'Print basic size information about the app.',
-                'options': global_options,
+                'options': global_options + size_options,
             },
             'size-components': {
                 'callback': size_target,
                 'help': 'Print per-component size information.',
-                'options': global_options,
+                'options': global_options + size_options,
             },
             'size-files': {
                 'callback': size_target,
                 'help': 'Print per-source-file size information.',
-                'options': global_options,
+                'options': global_options + size_options,
             },
             'bootloader': {
                 'callback': build_target,
@@ -520,4 +564,26 @@ def action_extensions(base_actions: Dict, project_path: str) -> Any:
         }
     }
 
-    return merge_action_lists(root_options, build_actions, clean_actions)
+    help_action = {
+        'actions': {
+            'help': {
+                'callback': help_and_exit,
+                'help': 'Show help message and exit.',
+                'hidden': True,
+                'options': [
+                    {
+                        'names': ['--json', 'json_option'],
+                        'is_flag': True,
+                        'help': 'Print out actions in machine-readable format for selected target.'
+                    },
+                    {
+                        'names': ['--add-options'],
+                        'is_flag': True,
+                        'help': 'Add options about actions to machine-readable format.'
+                    }
+                ],
+            }
+        }
+    }
+
+    return merge_action_lists(root_options, build_actions, clean_actions, help_action)

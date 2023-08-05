@@ -43,14 +43,25 @@ else()
     list(APPEND serial_tool_cmd -b ${ESPBAUD})
 endif()
 
+# SERIAL_TOOL_ARGS is defined during the first cmake run
+# SERIAL_TOOL_EXTRA_ARGS is used for additional arguments from the command line during run-time
 list(APPEND serial_tool_cmd ${SERIAL_TOOL_ARGS})
+list(APPEND serial_tool_cmd $ENV{SERIAL_TOOL_EXTRA_ARGS})
 
-execute_process(COMMAND ${serial_tool_cmd}
-    WORKING_DIRECTORY "${WORKING_DIRECTORY}"
-    RESULT_VARIABLE result
+if(${SERIAL_TOOL_SILENT})
+    execute_process(COMMAND ${serial_tool_cmd}
+        WORKING_DIRECTORY "${WORKING_DIRECTORY}"
+        RESULT_VARIABLE result
+        OUTPUT_VARIABLE SERIAL_TOOL_OUTPUT_LOG
     )
+else()
+    execute_process(COMMAND ${serial_tool_cmd}
+        WORKING_DIRECTORY "${WORKING_DIRECTORY}"
+        RESULT_VARIABLE result
+    )
+endif()
 
 if(${result})
     # No way to have CMake silently fail, unfortunately
-    message(FATAL_ERROR "${SERIAL_TOOL} failed")
+    message(FATAL_ERROR "${SERIAL_TOOL} failed. \n${SERIAL_TOOL_OUTPUT_LOG}")
 endif()

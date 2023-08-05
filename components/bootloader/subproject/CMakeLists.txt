@@ -57,7 +57,7 @@ idf_build_set_property(__COMPONENT_REQUIRES_COMMON "${common_req}")
 idf_build_set_property(__OUTPUT_SDKCONFIG 0)
 project(bootloader)
 
-idf_build_set_property(COMPILE_DEFINITIONS "-DBOOTLOADER_BUILD=1" APPEND)
+idf_build_set_property(COMPILE_DEFINITIONS "BOOTLOADER_BUILD=1" APPEND)
 idf_build_set_property(COMPILE_OPTIONS "-fno-stack-protector" APPEND)
 
 idf_component_get_property(main_args esptool_py FLASH_ARGS)
@@ -202,7 +202,11 @@ elseif(CONFIG_SECURE_BOOTLOADER_REFLASHABLE)
             "* Not recommended to re-use the same secure boot keyfile on multiple production devices."
         DEPENDS gen_secure_bootloader_key gen_bootloader_digest_bin
         VERBATIM)
-elseif(CONFIG_SECURE_BOOT_V2_ENABLED AND (CONFIG_IDF_TARGET_ESP32S2 OR CONFIG_IDF_TARGET_ESP32C3))
+elseif(
+        CONFIG_SECURE_BOOT_V2_ENABLED AND
+        (CONFIG_SOC_EFUSE_SECURE_BOOT_KEY_DIGESTS GREATER 1) AND
+        NOT CONFIG_SECURE_BOOT_FLASH_BOOTLOADER_DEFAULT
+    )
     add_custom_command(TARGET bootloader.elf POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E echo
         "=============================================================================="
@@ -221,7 +225,7 @@ elseif(CONFIG_SECURE_BOOT_V2_ENABLED AND (CONFIG_IDF_TARGET_ESP32S2 OR CONFIG_ID
         "=============================================================================="
     DEPENDS gen_signed_bootloader
     VERBATIM)
-elseif(CONFIG_SECURE_BOOT_V2_ENABLED)
+elseif(CONFIG_SECURE_BOOT_V2_ENABLED AND NOT CONFIG_SECURE_BOOT_FLASH_BOOTLOADER_DEFAULT)
     add_custom_command(TARGET bootloader.elf POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E echo
         "=============================================================================="

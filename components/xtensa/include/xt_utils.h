@@ -116,7 +116,7 @@ FORCE_INLINE_ATTR uint32_t xt_utils_intr_get_enabled_mask(void)
 FORCE_INLINE_ATTR void xt_utils_set_breakpoint(int bp_num, uint32_t bp_addr)
 {
     //Set the breakpoint's address
-    if (bp_num == 0) {
+    if (bp_num == 1) {
         WSR(IBREAKA_1, bp_addr);
     } else {
         WSR(IBREAKA_0, bp_addr);
@@ -137,7 +137,7 @@ FORCE_INLINE_ATTR void xt_utils_clear_breakpoint(int bp_num)
     WSR(IBREAKENABLE, bp_en);
     // Zero the break address register
     uint32_t bp_addr = 0;
-    if (bp_num == 0) {
+    if (bp_num == 1) {
         WSR(IBREAKA_1, bp_addr);
     } else {
         WSR(IBREAKA_0, bp_addr);
@@ -152,7 +152,7 @@ FORCE_INLINE_ATTR void xt_utils_set_watchpoint(int wp_num,
 {
     // Initialize DBREAKC bits (see Table 4–143 or isa_rm.pdf)
     uint32_t dbreakc_reg = 0x3F;
-    dbreakc_reg = dbreakc_reg << (__builtin_ffs(size) - 1);
+    dbreakc_reg = dbreakc_reg << (__builtin_ffsll(size) - 1);
     dbreakc_reg = dbreakc_reg & 0x3F;
     if (on_read) {
         dbreakc_reg |= BIT(30);
@@ -161,7 +161,7 @@ FORCE_INLINE_ATTR void xt_utils_set_watchpoint(int wp_num,
         dbreakc_reg |= BIT(31);
     }
     // Enable break address and break control register
-    if (wp_num == 0) {
+    if (wp_num == 1) {
         WSR(DBREAKA_1, (uint32_t) wp_addr);
         WSR(DBREAKC_1, dbreakc_reg);
     } else {
@@ -173,7 +173,7 @@ FORCE_INLINE_ATTR void xt_utils_set_watchpoint(int wp_num,
 FORCE_INLINE_ATTR void xt_utils_clear_watchpoint(int wp_num)
 {
     // Clear both break control and break address register
-    if (wp_num == 0) {
+    if (wp_num == 1) {
         WSR(DBREAKC_1, 0);
         WSR(DBREAKA_1, 0);
     } else {

@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2021 Espressif Systems (Shanghai) CO LTD
- * All rights reserved.
+ * SPDX-FileCopyrightText: 2021-2023 Espressif Systems (Shanghai) CO LTD
  *
+ * SPDX-License-Identifier: LicenseRef-Included
  *
  * Redistribution and use in source and binary forms, with or without modification,
  * are permitted provided that the following conditions are met:
@@ -34,15 +34,14 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#include "esp_zigbee_core.h"
 
-#include "zboss_api.h"
-
-#define ZB_ESP_DEFAULT_RADIO_CONFIG()                           \
+#define ESP_ZB_DEFAULT_RADIO_CONFIG()                           \
     {                                                           \
         .radio_mode = RADIO_MODE_NATIVE,                        \
     }
 
-#define ZB_ESP_DEFAULT_HOST_CONFIG()                            \
+#define ESP_ZB_DEFAULT_HOST_CONFIG()                            \
     {                                                           \
         .host_connection_mode = HOST_CONNECTION_MODE_RCP_UART,  \
         .host_uart_config = {                                   \

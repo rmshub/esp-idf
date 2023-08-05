@@ -8,6 +8,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include "hal/assert.h"
+#include "hal/ecc_types.h"
 #include "soc/ecc_mult_reg.h"
 
 #ifdef __cplusplus
@@ -40,9 +41,6 @@ static inline void ecc_ll_set_mode(ecc_mode_t mode)
     switch(mode) {
         case ECC_MODE_POINT_MUL:
             REG_SET_FIELD(ECC_MULT_CONF_REG, ECC_MULT_WORK_MODE, 0);
-            break;
-        case ECC_MODE_INVERSE_MUL:
-            REG_SET_FIELD(ECC_MULT_CONF_REG, ECC_MULT_WORK_MODE, 1);
             break;
         case ECC_MODE_VERIFY:
             REG_SET_FIELD(ECC_MULT_CONF_REG, ECC_MULT_WORK_MODE, 2);

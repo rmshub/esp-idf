@@ -11,14 +11,15 @@
 #include "esp_types.h"
 #include "esp_log.h"
 #include "esp_check.h"
-#include "soc/rtc_cntl_reg.h"
+#include "freertos/FreeRTOS.h"
 #include "esp_private/regi2c_ctrl.h"
-#include "regi2c_saradc.h"
+#include "soc/regi2c_saradc.h"
 #include "esp_log.h"
 #include "esp_efuse_rtc_calib.h"
 #include "hal/temperature_sensor_ll.h"
 #include "driver/temp_sensor_types_legacy.h"
 #include "esp_private/periph_ctrl.h"
+#include "esp_private/sar_periph_ctrl.h"
 
 static const char *TAG = "tsens";
 
@@ -62,8 +63,8 @@ esp_err_t temp_sensor_set_config(temp_sensor_config_t tsens)
         err = ESP_ERR_INVALID_STATE;
     }
     temperature_sensor_ll_set_clk_div(tsens.clk_div);
+    temp_sensor_sync_tsens_idx(tsens.dac_offset);
     temperature_sensor_ll_set_range(dac_offset[tsens.dac_offset].reg_val);
-    temperature_sensor_ll_enable(true);
     ESP_LOGI(TAG, "Config range [%d°C ~ %d°C], error < %d°C",
              dac_offset[tsens.dac_offset].range_min,
              dac_offset[tsens.dac_offset].range_max,
@@ -93,8 +94,9 @@ esp_err_t temp_sensor_start(void)
         ESP_LOGE(TAG, "Is already running or not be configured");
         err = ESP_ERR_INVALID_STATE;
     }
+    regi2c_saradc_enable();
     periph_module_enable(PERIPH_TEMPSENSOR_MODULE);
-    temperature_sensor_ll_enable(true);
+    temperature_sensor_power_acquire();
     temperature_sensor_ll_clk_enable(true);
     temperature_sensor_ll_clk_sel(TEMPERATURE_SENSOR_CLK_SRC_DEFAULT);
     tsens_hw_state = TSENS_HW_STATE_STARTED;
@@ -103,7 +105,8 @@ esp_err_t temp_sensor_start(void)
 
 esp_err_t temp_sensor_stop(void)
 {
-    temperature_sensor_ll_enable(false);
+    regi2c_saradc_disable();
+    temperature_sensor_power_release();
     tsens_hw_state = TSENS_HW_STATE_CONFIGURED;
     return ESP_OK;
 }
@@ -122,12 +125,12 @@ static esp_err_t read_delta_t_from_efuse(void)
     return ESP_OK;
 }
 
-static float parse_temp_sensor_raw_value(uint32_t tsens_raw, const int dac_offset)
+static float parse_temp_sensor_raw_value(uint32_t tsens_raw)
 {
     if (isnan(s_deltaT)) { //suggests that the value is not initialized
         read_delta_t_from_efuse();
     }
-    float result = (TEMPERATURE_SENSOR_LL_ADC_FACTOR * (float)tsens_raw - TEMPERATURE_SENSOR_LL_DAC_FACTOR * dac_offset - TEMPERATURE_SENSOR_LL_OFFSET_FACTOR) - s_deltaT / 10.0;
+    float result = tsens_raw - s_deltaT / 10.0;
     return result;
 }
 
@@ -139,15 +142,16 @@ esp_err_t temp_sensor_read_celsius(float *celsius)
         return ESP_ERR_INVALID_STATE;
     }
     temp_sensor_config_t tsens;
-    uint32_t tsens_out = 0;
     temp_sensor_get_config(&tsens);
-    temp_sensor_read_raw(&tsens_out);
-    ESP_LOGV(TAG, "tsens_out %d", tsens_out);
-    const tsens_dac_offset_t *dac = &dac_offset[tsens.dac_offset];
-    *celsius = parse_temp_sensor_raw_value(tsens_out, dac->offset);
-    if (*celsius < dac->range_min || *celsius > dac->range_max) {
-        ESP_LOGW(TAG, "Exceeding the temperature range!");
+    bool range_changed;
+    uint16_t tsens_out = temp_sensor_get_raw_value(&range_changed);
+    *celsius = parse_temp_sensor_raw_value(tsens_out);
+    if (*celsius < TEMPERATURE_SENSOR_LL_MEASURE_MIN || *celsius > TEMPERATURE_SENSOR_LL_MEASURE_MAX) {
+        ESP_LOGE(TAG, "Exceeding temperature measure range.");
         return ESP_ERR_INVALID_STATE;
+    }
+    if (range_changed) {
+        temp_sensor_get_config(&tsens);
     }
     return ESP_OK;
 }

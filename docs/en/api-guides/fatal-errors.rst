@@ -7,7 +7,7 @@ Fatal Errors
 Overview
 --------
 
-In certain situations, execution of the program can not be continued in a well defined way. In ESP-IDF, these situations include:
+In certain situations, the execution of the program can not be continued in a well-defined way. In ESP-IDF, these situations include:
 
 - CPU Exceptions: |CPU_EXCEPTIONS_LIST|
 - System level checks and safeguards:
@@ -17,7 +17,7 @@ In certain situations, execution of the program can not be continued in a well d
      - :doc:`Interrupt watchdog <../api-reference/system/wdts>` timeout
      - :doc:`Task watchdog <../api-reference/system/wdts>` timeout (only fatal if :ref:`CONFIG_ESP_TASK_WDT_PANIC` is set)
      - Cache access error
-     :CONFIG_ESP_SYSTEM_MEMPROT_FEATURE: - Memory protection fault
+     :SOC_MEMPROT_SUPPORTED: - Memory protection fault
      - Brownout detection event
      - Stack overflow
      - Stack smashing protection check
@@ -67,9 +67,9 @@ Subsequent behavior of the panic handler can be set using :ref:`CONFIG_ESP_SYSTE
 
 - Invoke dynamic GDB Stub (``ESP_SYSTEM_GDBSTUB_RUNTIME``)
 
-  Start GDB server which can communicate with GDB over console UART port. This option allows the user to debug a program at run time and set break points, alter the execution, etc. See `GDB Stub`_ for more details.
+  Start the GDB server which can communicate with GDB over the console UART port. This option allows the user to debug a program at run time and set breakpoints, alter the execution, etc. See `GDB Stub`_ for more details.
 
-The behavior of the panic handler is affected by two other configuration options.
+The behavior of the panic handler is affected by three other configuration options.
 
 - If :ref:`CONFIG_ESP_DEBUG_OCDAWARE` is enabled (which is the default), the panic handler will detect whether a JTAG debugger is connected. If it is, execution will be halted and control will be passed to the debugger. In this case, registers and backtrace are not dumped to the console, and GDBStub / Core Dump functions are not used.
 
@@ -78,6 +78,8 @@ The behavior of the panic handler is affected by two other configuration options
 - If :ref:`CONFIG_ESP_PANIC_HANDLER_IRAM` is disabled (disabled by default), the panic handler code is placed in flash memory, not IRAM. This means that if ESP-IDF crashes while flash cache is disabled, the panic handler will automatically re-enable flash cache before running GDB Stub or Core Dump. This adds some minor risk, if the flash cache status is also corrupted during the crash.
 
   If this option is enabled, the panic handler code (including required UART functions) is placed in IRAM, and hence will decrease the usable memory space in SRAM. But this may be necessary to debug some complex issues with crashes while flash cache is disabled (for example, when writing to SPI flash) or when flash cache is corrupted when an exception is triggered.
+
+- If :ref:`CONFIG_ESP_SYSTEM_PANIC_REBOOT_DELAY_SECONDS` is enabled (disabled by default) and set to a number higher than 0, the panic handler will delay the reboot for that amount of time in seconds. This can help if the tool used to monitor serial output does not provide a possibility to stop and examine the serial output. In that case, delaying the reboot will allow users to examine and debug the panic handler output (backtrace, etc.) for the duration of the delay. After the delay, the device will reboot. The reset reason is preserved.
 
 The following diagram illustrates the panic handler behavior:
 
@@ -214,7 +216,7 @@ If :doc:`IDF Monitor <tools/idf-monitor>` is used, Program Counter values will b
         MSTATUS : 0x00001881  MTVEC   : 0x40380001  MCAUSE  : 0x00000007  MTVAL   : 0x00000000
         MHARTID : 0x00000000
 
-    Moreover, the :doc:`IDF Monitor <tools/idf-monitor>` is also capable of generating and printing a backtrace thanks to the stack dump provided by the board in the panic handler.
+    Moreover, :doc:`IDF Monitor <tools/idf-monitor>` is also capable of generating and printing a backtrace thanks to the stack dump provided by the board in the panic handler.
     The output looks like this:
 
     ::
@@ -283,22 +285,16 @@ The GDB prompt can be used to inspect CPU registers, local and static variables,
 
 RTC Watchdog Timeout
 --------------------
+{IDF_TARGET_RTCWDT_RTC_RESET:default="Not updated", esp32="RTCWDT_RTC_RESET", esp32s2="RTCWDT_RTC_RST", esp32s3="RTCWDT_RTC_RST", esp32c3="RTCWDT_RTC_RST", esp32c2="RTCWDT_RTC_RST", esp32c6="LP_WDT_SYS", esp32h2="LP_WDT_SYS"}
 
-The RTC watchdog is used in the startup code to keep track of execution time and also helps to prevent a lock up caused by an unstable power source, it is enabled by default, see :ref:`CONFIG_BOOTLOADER_WDT_ENABLE`. If the execution time is exceeded, the RTC watchdog will restart the system. In this case, the ROM bootloader will print a message with the ``RTC Watchdog Timeout`` reason for the reboot.
+The RTC watchdog is used in the startup code to keep track of execution time and it also helps to prevent a lock-up caused by an unstable power source. It is enabled by default (see :ref:`CONFIG_BOOTLOADER_WDT_ENABLE`). If the execution time is exceeded, the RTC watchdog will restart the system. In this case, the ROM bootloader will print a message with the ``RTC Watchdog Timeout`` reason for the reboot.
 
-.. only:: esp32
+::
 
-    ::
+    rst:0x10 ({IDF_TARGET_RTCWDT_RTC_RESET})
 
-        rst:0x10 (RTCWDT_RTC_RESET)
 
-.. only:: not esp32
-
-    ::
-
-        rst:0x10 (RTCWDT_RTC_RST)
-
-The RTC watchdog covers the execution time from the first stage bootloader (ROM bootloader) to application startup. It is initially set in the ROM bootloader, then configured in the bootloader with the :ref:`CONFIG_BOOTLOADER_WDT_TIME_MS` option (9000ms by default). During the application initialization stage, it is reconfigured again because the source of the slow clock may have changed, and finally disabled right before the ``app_main()`` call. There is an option :ref:`CONFIG_BOOTLOADER_WDT_DISABLE_IN_USER_CODE` which allows the RTC watchdog to not be disabled before ``app_main`` and instead the RTC watchdog remains active and must be explicitly reset in your application.
+The RTC watchdog covers the execution time from the first stage bootloader (ROM bootloader) to application startup. It is initially set in the ROM bootloader, then configured in the bootloader with the :ref:`CONFIG_BOOTLOADER_WDT_TIME_MS` option (9000 ms by default). During the application initialization stage, it is reconfigured because the source of the slow clock may have changed, and finally disabled right before the ``app_main()`` call. There is an option :ref:`CONFIG_BOOTLOADER_WDT_DISABLE_IN_USER_CODE` which prevents the RTC watchdog from being disabled before ``app_main``. Instead, the RTC watchdog remains active and must be fed periodically in your application's code.
 
 .. _Guru-Meditation-Errors:
 
@@ -317,7 +313,7 @@ This section explains the meaning of different error causes, printed in parens a
 |ILLEGAL_INSTR_MSG|
 ^^^^^^^^^^^^^^^^^^^
 
-This CPU exception indicates that the instruction which was executed was not a valid instruction. Most common reasons for this error include:
+This CPU exception indicates that the instruction which was executed was not a valid instruction. The most common reasons for this error include:
 
 - FreeRTOS task function has returned. In FreeRTOS, if a task function needs to terminate, it should call :cpp:func:`vTaskDelete` and delete itself, instead of returning.
 
@@ -365,11 +361,7 @@ This CPU exception indicates that the instruction which was executed was not a v
     Unhandled debug exception
     ^^^^^^^^^^^^^^^^^^^^^^^^^
 
-    This will usually be followed by a message like::
-
-        Debug exception reason: Stack canary watchpoint triggered (task_name)
-
-    This error indicates that the application has written past the end of the stack of the task with name ``task_name``. Note that not every stack overflow is guaranteed to trigger this error. It is possible that the task writes to memory beyond the stack canary location, in which case the watchpoint will not be triggered.
+    This CPU exception happens when the instruction ``BREAK`` is executed.
 
 .. only:: CONFIG_IDF_TARGET_ARCH_RISCV
 
@@ -386,15 +378,15 @@ This CPU exception indicates that the instruction which was executed was not a v
     Breakpoint
     ^^^^^^^^^^
 
-    This CPU exception happens when the instruction ``EBREAK`` is executed.
+    This CPU exception happens when the instruction ``EBREAK`` is executed. See also :ref:`FreeRTOS-End-Of-Stack-Watchpoint`.
 
     Load address misaligned, Store address misaligned
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     Application has attempted to read or write memory location, and address alignment did not match load/store size. For example, 32-bit load can only be done from 4-byte aligned address, and 16-bit load can only be done from a 2-byte aligned address.
 
-Interrupt wdt timeout on CPU0 / CPU1
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Interrupt Watchdog Timeout on CPU0/CPU1
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Indicates that an interrupt watchdog timeout has occurred. See :doc:`Watchdogs <../api-reference/system/wdts>` for more information.
 
@@ -403,7 +395,7 @@ Indicates that an interrupt watchdog timeout has occurred. See :doc:`Watchdogs <
 
 In some situations, ESP-IDF will temporarily disable access to external SPI Flash and SPI RAM via caches. For example, this happens when spi_flash APIs are used to read/write/erase/mmap regions of SPI Flash. In these situations, tasks are suspended, and interrupt handlers not registered with ``ESP_INTR_FLAG_IRAM`` are disabled. Make sure that any interrupt handlers registered with this flag have all the code and data in IRAM/DRAM. Refer to the :ref:`SPI flash API documentation <iram-safe-interrupt-handlers>` for more details.
 
-.. only:: CONFIG_ESP_SYSTEM_MEMPROT_FEATURE
+.. only:: SOC_MEMPROT_SUPPORTED
 
     Memory protection fault
     ^^^^^^^^^^^^^^^^^^^^^^^
@@ -444,6 +436,64 @@ ESP-IDF's heap implementation contains a number of run-time checks of the heap s
 
 Consult :doc:`Heap Memory Debugging <../api-reference/system/heap_debug>` documentation for further information.
 
+|STACK_OVERFLOW|
+^^^^^^^^^^^^^^^^
+
+.. only:: SOC_ASSIST_DEBUG_SUPPORTED
+
+    Hardware Stack Guard
+    """"""""""""""""""""
+
+    {IDF_TARGET_NAME} has an integrated assist-debug module that can watch the SP register to ensure that it is within the bounds of allocated stack memory. The assist-debug module needs to set new stack bounds on every interrupt handling and FreeRTOS context switch. This can have a small impact on performance.
+
+    Here are some additional details about the assist-debug module:
+
+    - Implemented in hardware
+    - Watches Stack Pointer register value
+    - Requires no additional CPU time or memory while watching stack bounds
+
+    When the assist-debug module detects a stack overflow, the panic handler will run and display a message that resembles the following:
+
+    .. parsed-literal::
+
+        Guru Meditation Error: Core 0 panic'ed (Stack protection fault).
+
+    Hardware stack guard can be disabled using :ref:`CONFIG_ESP_SYSTEM_HW_STACK_GUARD` options.
+
+.. _FreeRTOS-End-Of-Stack-Watchpoint:
+
+FreeRTOS End of Stack Watchpoint
+""""""""""""""""""""""""""""""""
+
+ESP-IDF provides a custom FreeRTOS stack overflow detecting mechanism based on watchpoints. Every time FreeRTOS switches task context, one of the watchpoints is set to watch the last 32 bytes of stack.
+
+Generally, this may cause the watchpoint to be triggered up to 28 bytes earlier than expected. The value 32 is chosen because it is larger than the stack canary size in FreeRTOS (20 bytes). Adopting this approach ensures that the watchpoint triggers before the stack canary is corrupted, not after.
+
+.. note::
+    Not every stack overflow is guaranteed to trigger the watchpoint. It is possible that the task writes to memory beyond the stack canary location, in which case the watchpoint will not be triggered.
+
+If watchpoint triggers, the message will be similar to:
+
+.. only:: CONFIG_IDF_TARGET_ARCH_XTENSA
+
+    ::
+
+        Debug exception reason: Stack canary watchpoint triggered (task_name)
+
+.. only:: CONFIG_IDF_TARGET_ARCH_RISCV
+
+    ::
+
+        Guru Meditation Error: Core  0 panic'ed (Breakpoint). Exception was unhandled.
+
+This feature can be enabled by using the :ref:`CONFIG_FREERTOS_WATCHPOINT_END_OF_STACK` option.
+
+
+FreeRTOS Stack Checks
+"""""""""""""""""""""
+
+See :ref:`CONFIG_FREERTOS_CHECK_STACKOVERFLOW`
+
 Stack Smashing
 ^^^^^^^^^^^^^^
 
@@ -463,14 +513,16 @@ The backtrace should point to the function where stack smashing has occurred. Ch
     .. |CPU_EXCEPTIONS_LIST| replace:: Illegal Instruction, Load/Store Alignment Error, Load/Store Prohibited error, Double Exception.
     .. |ILLEGAL_INSTR_MSG| replace:: IllegalInstruction
     .. |CACHE_ERR_MSG| replace:: Cache disabled but cached memory region accessed
+    .. |STACK_OVERFLOW| replace:: Stack overflow
 
 .. only:: CONFIG_IDF_TARGET_ARCH_RISCV
 
     .. |CPU_EXCEPTIONS_LIST| replace:: Illegal Instruction, Load/Store Alignment Error, Load/Store Prohibited error.
     .. |ILLEGAL_INSTR_MSG| replace:: Illegal instruction
     .. |CACHE_ERR_MSG| replace:: Cache error
+    .. |STACK_OVERFLOW| replace:: Stack overflow
 
-Undefined behavior sanitizer (UBSAN) checks
+Undefined Behavior Sanitizer (UBSAN) Checks
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Undefined behavior sanitizer (UBSAN) is a compiler feature which adds run-time checks for potentially incorrect operations, such as:
@@ -507,7 +559,7 @@ To enable UBSAN for a specific component (``component_name``) from ``CMakeLists.
 
     target_compile_options(${COMPONENT_LIB} PRIVATE "-fsanitize=undefined" "-fno-sanitize=shift-base")
 
-UBSAN output
+UBSAN Output
 """"""""""""
 
 When UBSAN detects an error, a message and the backtrace are printed, for example::

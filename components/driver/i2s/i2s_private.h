@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -22,6 +22,17 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+// If ISR handler is allowed to run whilst cache is disabled,
+// Make sure all the code and related variables used by the handler are in the SRAM
+#if CONFIG_I2S_ISR_IRAM_SAFE
+#define I2S_INTR_ALLOC_FLAGS    (ESP_INTR_FLAG_IRAM | ESP_INTR_FLAG_INTRDISABLED | ESP_INTR_FLAG_SHARED | ESP_INTR_FLAG_LOWMED)
+#define I2S_MEM_ALLOC_CAPS      (MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)
+#else
+#define I2S_INTR_ALLOC_FLAGS    (ESP_INTR_FLAG_INTRDISABLED | ESP_INTR_FLAG_SHARED | ESP_INTR_FLAG_LOWMED)
+#define I2S_MEM_ALLOC_CAPS      MALLOC_CAP_DEFAULT
+#endif //CONFIG_I2S_ISR_IRAM_SAFE
+#define I2S_DMA_ALLOC_CAPS      (MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA)
 
 #define I2S_NULL_POINTER_CHECK(tag, p)          ESP_RETURN_ON_FALSE((p), ESP_ERR_INVALID_ARG, tag, "input parameter '"#p"' is NULL")
 
@@ -68,7 +79,7 @@ typedef struct {
     int                     mclk;           /*!< MCK out pin, shared by tx/rx*/
 } i2s_controller_t;
 
-struct i2s_channel_t {
+struct i2s_channel_obj_t {
     /* Channel basic information */
     i2s_controller_t        *controller;    /*!< Parent pointer to controller object */
     i2s_comm_mode_t         mode;           /*!< i2s channel communication mode */
@@ -145,7 +156,7 @@ esp_err_t i2s_free_dma_desc(i2s_chan_handle_t handle);
  * @return
  *      - ESP_OK                Allocate memory success
  *      - ESP_ERR_INVALID_ARG   NULL pointer or bufsize is too big
- *      - ESP_ERR_NO_MEM        No memmory for DMA descriptor and DMA buffer
+ *      - ESP_ERR_NO_MEM        No memory for DMA descriptor and DMA buffer
  */
 esp_err_t i2s_alloc_dma_desc(i2s_chan_handle_t handle, uint32_t num, uint32_t bufsize);
 
@@ -161,16 +172,15 @@ esp_err_t i2s_alloc_dma_desc(i2s_chan_handle_t handle, uint32_t num, uint32_t bu
  */
 uint32_t i2s_get_buf_size(i2s_chan_handle_t handle, uint32_t data_bit_width, uint32_t dma_frame_num);
 
-#if SOC_I2S_SUPPORTS_APLL
 /**
- * @brief Set mclk frequency and get the actuall APLL frequency
+ * @brief Get the frequency of the source clock
  *
- * @param mclk_freq_hz  Expected mclk frequenct in Hz
+ * @param clk_src       clock source
+ * @param mclk_freq_hz  Expected mclk frequency in Hz
  * @return
- *  - Actuall APLL frequency
+ *      - Actual source clock frequency
  */
-uint32_t i2s_set_get_apll_freq(uint32_t mclk_freq_hz);
-#endif
+uint32_t i2s_get_source_clk_freq(i2s_clock_src_t clk_src, uint32_t mclk_freq_hz);
 
 /**
  * @brief Check gpio validity and attach to corresponding signal

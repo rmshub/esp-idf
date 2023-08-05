@@ -11,13 +11,12 @@ from pytest_embedded import Dut
     'config',
     [
         'esp32_release',
+        'esp32_2t',
     ],
     indirect=True,
 )
 def test_psram_esp32(dut: Dut) -> None:
-    dut.expect_exact('Press ENTER to see the list of tests')
-    dut.write('*')
-    dut.expect_unity_test_output()
+    dut.run_all_single_board_cases()
 
 
 @pytest.mark.esp32s2
@@ -31,13 +30,11 @@ def test_psram_esp32(dut: Dut) -> None:
     indirect=True,
 )
 def test_psram_esp32s2(dut: Dut) -> None:
-    dut.expect_exact('Press ENTER to see the list of tests')
-    dut.write('*')
-    dut.expect_unity_test_output()
+    dut.run_all_single_board_cases()
 
 
 @pytest.mark.esp32s3
-@pytest.mark.quad_psram
+@pytest.mark.generic
 @pytest.mark.parametrize(
     'config',
     [
@@ -47,9 +44,7 @@ def test_psram_esp32s2(dut: Dut) -> None:
     indirect=True,
 )
 def test_psram_esp32s3(dut: Dut) -> None:
-    dut.expect_exact('Press ENTER to see the list of tests')
-    dut.write('*')
-    dut.expect_unity_test_output()
+    dut.run_all_single_board_cases()
 
 
 @pytest.mark.esp32s3
@@ -63,6 +58,18 @@ def test_psram_esp32s3(dut: Dut) -> None:
     indirect=True,
 )
 def test_psram_esp32s3_octal(dut: Dut) -> None:
-    dut.expect_exact('Press ENTER to see the list of tests')
-    dut.write('*')
-    dut.expect_unity_test_output()
+    dut.run_all_single_board_cases()
+
+
+@pytest.mark.esp32
+@pytest.mark.psramv0
+@pytest.mark.parametrize(
+    'config',
+    [
+        'esp32_hspi',
+        'esp32_vspi',
+    ],
+    indirect=True,
+)
+def test_psram_esp32_psramv0(dut: Dut) -> None:
+    dut.run_all_single_board_cases()

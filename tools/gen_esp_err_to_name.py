@@ -3,22 +3,6 @@
 # SPDX-FileCopyrightText: 2018-2022 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
 
-from __future__ import print_function, unicode_literals
-
-import sys
-from typing import Any, List, Optional, TextIO
-
-try:
-    from builtins import object, range, str
-except ImportError:
-    # This should not happen because the Python packages are checked before invoking this script. However, here is
-    # some output which should help if we missed something.
-    print('Import has failed probably because of the missing "future" package. Please install all the packages for '
-          'interpreter {} from the requirements.txt file.'.format(sys.executable))
-    # The path to requirements.txt is not provided because this script could be invoked from an IDF project (then the
-    # requirements.txt from the IDF_PATH should be used) or from the documentation project (then the requirements.txt
-    # for the documentation directory should be used).
-    sys.exit(1)
 import argparse
 import collections
 import fnmatch
@@ -27,9 +11,10 @@ import os
 import re
 import textwrap
 from io import open
+from typing import Any, List, Optional, TextIO
 
 # list files here which should not be parsed
-ignore_files = [os.path.join('components', 'mdns', 'test_afl_fuzz_host', 'esp32_mock.h')]
+ignore_files: list  = list()
 
 # add directories here which should not be parsed, this is a tuple since it will be used with *.startswith()
 ignore_dirs = (os.path.join('examples'),
@@ -42,6 +27,9 @@ priority_headers = [os.path.join('components', 'esp_common', 'include', 'esp_err
 # The following headers won't be included. This is useful if they are permanently included from esp_err_to_name.c.in.
 dont_include = [os.path.join('soc', 'soc.h'),
                 os.path.join('esp_err.h')]
+
+# Don't search the following directories, e.g. test directories
+exclude_search_dirs = ['test_apps', 'unit-test-app']
 
 err_dict = collections.defaultdict(list)  # identified errors are stored here; mapped by the error code
 rev_err_dict = dict()  # map of error string to error code
@@ -83,9 +71,9 @@ class ErrItem(object):
         base = '_BASE'
 
         if self.file == other.file:
-            if self.name.endswith(base) and not(other.name.endswith(base)):
+            if self.name.endswith(base) and not other.name.endswith(base):
                 return 1
-            elif not(self.name.endswith(base)) and other.name.endswith(base):
+            elif not self.name.endswith(base) and other.name.endswith(base):
                 return -1
 
         self_key = self.file + self.name
@@ -324,7 +312,10 @@ def main() -> None:
     include_as_pattern = re.compile(r'\s*//\s*{}: [^"]* "([^"]+)"'.format(os.path.basename(__file__)))
     define_pattern = re.compile(r'\s*#define\s+(ESP_ERR_|ESP_OK|ESP_FAIL)')
 
-    for root, dirnames, filenames in os.walk(idf_path):
+    for root, dirnames, filenames in os.walk(idf_path, topdown=True):
+        # When topdown is True, we can modify the dirnames list in-place
+        # walk() will only recurse into the subdirectories whose names remain in dirnames
+        dirnames[:] = [d for d in dirnames if d not in exclude_search_dirs]
         for filename in fnmatch.filter(filenames, '*.[ch]'):
             full_path = os.path.join(root, filename)
             path_in_idf = os.path.relpath(full_path, idf_path)

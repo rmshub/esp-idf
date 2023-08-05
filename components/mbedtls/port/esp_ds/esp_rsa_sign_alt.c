@@ -6,15 +6,18 @@
 
 #include "esp_ds.h"
 #include "rsa_sign_alt.h"
+#include "esp_memory_utils.h"
 
 #ifdef CONFIG_IDF_TARGET_ESP32S2
 #include "esp32s2/rom/digital_signature.h"
 #elif CONFIG_IDF_TARGET_ESP32C3
 #include "esp32c3/rom/digital_signature.h"
-#elif CONFIG_IDF_TARGET_ESP32H2
-#include "esp32h2/rom/digital_signature.h"
 #elif CONFIG_IDF_TARGET_ESP32S3
 #include "esp32s3/rom/digital_signature.h"
+#elif CONFIG_IDF_TARGET_ESP32C6
+#include "esp32c6/rom/digital_signature.h"
+#elif CONFIG_IDF_TARGET_ESP32H2
+#include "esp32h2/rom/digital_signature.h"
 #else
 #error   "Selected target does not support esp_rsa_sign_alt (for DS)"
 #endif
@@ -57,7 +60,7 @@ void esp_ds_set_session_timeout(int timeout)
     }
 }
 
-esp_err_t  esp_ds_init_data_ctx(esp_ds_data_ctx_t *ds_data)
+esp_err_t esp_ds_init_data_ctx(esp_ds_data_ctx_t *ds_data)
 {
     if (ds_data == NULL || ds_data->esp_ds_data == NULL) {
         return ESP_ERR_INVALID_ARG;
@@ -68,16 +71,33 @@ esp_err_t  esp_ds_init_data_ctx(esp_ds_data_ctx_t *ds_data)
         return ESP_FAIL;
     }
     s_ds_data = ds_data->esp_ds_data;
+    ESP_LOGD(TAG, "Using DS with key block %u, RSA length %u", ds_data->efuse_key_id, ds_data->rsa_length_bits);
     s_esp_ds_hmac_key_id = (hmac_key_id_t) ds_data->efuse_key_id;
-    /* calculate the rsa_length in terms of esp_digital_signature_length_t which is required for the internal DS API */
-    s_ds_data->rsa_length = (ds_data->rsa_length_bits / 32) - 1;
+
+    const unsigned rsa_length_int = (ds_data->rsa_length_bits / 32) - 1;
+    if (esp_ptr_byte_accessible(s_ds_data)) {
+        /* calculate the rsa_length in terms of esp_digital_signature_length_t which is required for the internal DS API */
+        s_ds_data->rsa_length = rsa_length_int;
+    } else if (s_ds_data->rsa_length != rsa_length_int) {
+        /*
+         * Configuration data is most likely from DROM segment and it
+         * is not properly formatted for all parameters consideration.
+         * Moreover, we can not modify as it is read-only and hence
+         * the error.
+         */
+        ESP_LOGE(TAG, "RSA length mismatch %u, %u", s_ds_data->rsa_length, rsa_length_int);
+        return ESP_ERR_INVALID_ARG;
+    }
+
     return ESP_OK;
 }
 
 void esp_ds_release_ds_lock(void)
 {
-    /* Give back the semaphore (DS lock) */
-    xSemaphoreGive(s_ds_lock);
+    if (xSemaphoreGetMutexHolder(s_ds_lock) == xTaskGetCurrentTaskHandle()) {
+        /* Give back the semaphore (DS lock) */
+        xSemaphoreGive(s_ds_lock);
+    }
 }
 
 size_t esp_ds_get_keylen(void *ctx)
@@ -236,7 +256,11 @@ int esp_ds_rsa_sign( void *ctx,
 
     ds_r = esp_ds_finish_sign((void *)signature, esp_ds_ctx);
     if (ds_r != ESP_OK) {
-        ESP_LOGE(TAG, "Error in esp_ds_finish sign, returned %d ", ds_r);
+        if (ds_r == ESP_ERR_HW_CRYPTO_DS_INVALID_DIGEST) {
+            ESP_LOGE(TAG, "Invalid digest in DS data reported by esp_ds_finish_sign");
+        } else {
+            ESP_LOGE(TAG, "Error in esp_ds_finish_sign, returned %d ", ds_r);
+        }
         heap_caps_free(signature);
         return -1;
     }

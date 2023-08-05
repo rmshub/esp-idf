@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2018-2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2018-2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -10,6 +10,7 @@
 #include <string.h>
 #include "esp_err.h"
 #include "esp_attr.h"
+#include "esp_cpu.h"
 #include "sys/queue.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -306,7 +307,7 @@ int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
 
     *thread = (pthread_t)pthread; // pointer value fit into pthread_t (uint32_t)
 
-    ESP_LOGV(TAG, "Created task %x", (uint32_t)xHandle);
+    ESP_LOGV(TAG, "Created task %"PRIx32, (uint32_t)xHandle);
 
     return 0;
 }
@@ -364,6 +365,8 @@ int pthread_join(pthread_t thread, void **retval)
             pthread_delete(pthread);
             xSemaphoreGive(s_threads_mux);
         }
+        /* clean up thread local storage before task deletion */
+        pthread_internal_local_storage_destructor_callback(handle);
         vTaskDelete(handle);
     }
 
@@ -398,6 +401,8 @@ int pthread_detach(pthread_t thread)
     } else {
         // pthread already stopped
         pthread_delete(pthread);
+        /* clean up thread local storage before task deletion */
+        pthread_internal_local_storage_destructor_callback(handle);
         vTaskDelete(handle);
     }
     xSemaphoreGive(s_threads_mux);
@@ -408,9 +413,8 @@ int pthread_detach(pthread_t thread)
 void pthread_exit(void *value_ptr)
 {
     bool detached = false;
-    /* preemptively clean up thread local storage, rather than
-       waiting for the idle task to clean up the thread */
-    pthread_internal_local_storage_destructor_callback();
+    /* clean up thread local storage before task deletion */
+    pthread_internal_local_storage_destructor_callback(NULL);
 
     if (xSemaphoreTake(s_threads_mux, portMAX_DELAY) != pdTRUE) {
         assert(false && "Failed to lock threads list!");
@@ -438,7 +442,7 @@ void pthread_exit(void *value_ptr)
         }
     }
 
-    ESP_LOGD(TAG, "Task stk_wm = %d", uxTaskGetStackHighWaterMark(NULL));
+    ESP_LOGD(TAG, "Task stk_wm = %d", (int)uxTaskGetStackHighWaterMark(NULL));
 
     xSemaphoreGive(s_threads_mux);
     // note: if this thread is joinable then after giving back s_threads_mux
@@ -493,18 +497,8 @@ int pthread_once(pthread_once_t *once_control, void (*init_routine)(void))
         return EINVAL;
     }
 
-    uint32_t res = 1;
-#if defined(CONFIG_SPIRAM)
-    if (esp_ptr_external_ram(once_control)) {
-        uxPortCompareSetExtram((uint32_t *) &once_control->init_executed, 0, &res);
-    } else {
-#endif
-        uxPortCompareSet((uint32_t *) &once_control->init_executed, 0, &res);
-#if defined(CONFIG_SPIRAM)
-    }
-#endif
     // Check if compare and set was successful
-    if (res == 0) {
+    if (esp_cpu_compare_and_set((volatile uint32_t *)&once_control->init_executed, 0, 1)) {
         ESP_LOGV(TAG, "%s: call init_routine %p", __FUNCTION__, once_control);
         init_routine();
     }
@@ -601,7 +595,7 @@ int pthread_mutex_destroy(pthread_mutex_t *mutex)
     return 0;
 }
 
-static int IRAM_ATTR pthread_mutex_lock_internal(esp_pthread_mutex_t *mux, TickType_t tmo)
+static int pthread_mutex_lock_internal(esp_pthread_mutex_t *mux, TickType_t tmo)
 {
     if (!mux) {
         return EINVAL;
@@ -638,7 +632,7 @@ static int pthread_mutex_init_if_static(pthread_mutex_t *mutex)
     return res;
 }
 
-int IRAM_ATTR pthread_mutex_lock(pthread_mutex_t *mutex)
+int pthread_mutex_lock(pthread_mutex_t *mutex)
 {
     if (!mutex) {
         return EINVAL;
@@ -650,7 +644,7 @@ int IRAM_ATTR pthread_mutex_lock(pthread_mutex_t *mutex)
     return pthread_mutex_lock_internal((esp_pthread_mutex_t *)*mutex, portMAX_DELAY);
 }
 
-int IRAM_ATTR pthread_mutex_timedlock(pthread_mutex_t *mutex, const struct timespec *timeout)
+int pthread_mutex_timedlock(pthread_mutex_t *mutex, const struct timespec *timeout)
 {
     if (!mutex) {
         return EINVAL;
@@ -672,7 +666,7 @@ int IRAM_ATTR pthread_mutex_timedlock(pthread_mutex_t *mutex, const struct times
     return res;
 }
 
-int IRAM_ATTR pthread_mutex_trylock(pthread_mutex_t *mutex)
+int pthread_mutex_trylock(pthread_mutex_t *mutex)
 {
     if (!mutex) {
         return EINVAL;
@@ -684,7 +678,7 @@ int IRAM_ATTR pthread_mutex_trylock(pthread_mutex_t *mutex)
     return pthread_mutex_lock_internal((esp_pthread_mutex_t *)*mutex, 0);
 }
 
-int IRAM_ATTR pthread_mutex_unlock(pthread_mutex_t *mutex)
+int pthread_mutex_unlock(pthread_mutex_t *mutex)
 {
     esp_pthread_mutex_t *mux;
 

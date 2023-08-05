@@ -14,6 +14,7 @@
 #include "esp_attr.h"
 #include "esp_err.h"
 #include "esp_types.h"
+#include "esp_bit_defs.h"
 #include "esp_log.h"
 #include "../esp_psram_impl.h"
 #include "esp32s2/rom/spi_flash.h"
@@ -22,6 +23,7 @@
 #include "esp_rom_efuse.h"
 #include "soc/spi_reg.h"
 #include "soc/io_mux_reg.h"
+#include "esp_private/esp_gpio_reserve.h"
 
 static const char* TAG = "quad_psram";
 
@@ -72,8 +74,8 @@ static const char* TAG = "quad_psram";
 #define FLASH_CLK_IO          SPI_CLK_GPIO_NUM
 #define FLASH_CS_IO           SPI_CS0_GPIO_NUM
 // PSRAM clock and cs IO should be configured based on hardware design.
-#define PSRAM_CLK_IO     CONFIG_DEFAULT_PSRAM_CLK_IO  // Default value is 30
-#define PSRAM_CS_IO      CONFIG_DEFAULT_PSRAM_CS_IO   // Default value is 26
+#define PSRAM_CLK_IO          SPI_CLK_GPIO_NUM
+#define PSRAM_CS_IO           SPI_CS1_GPIO_NUM
 #define PSRAM_SPIQ_SD0_IO     SPI_Q_GPIO_NUM
 #define PSRAM_SPID_SD1_IO     SPI_D_GPIO_NUM
 #define PSRAM_SPIWP_SD3_IO    SPI_WP_GPIO_NUM
@@ -377,6 +379,16 @@ static void IRAM_ATTR psram_gpio_config(psram_cache_speed_t mode)
     }
     esp_rom_spiflash_select_qio_pins(psram_io.psram_spiwp_sd3_io, spiconfig);
     s_psram_cs_io = psram_io.psram_cs_io;
+
+    // Preserve psram pins
+    esp_gpio_reserve_pins(BIT64(psram_io.flash_clk_io)        |
+                          BIT64(psram_io.flash_cs_io)         |
+                          BIT64(psram_io.psram_clk_io)        |
+                          BIT64(psram_io.psram_cs_io)         |
+                          BIT64(psram_io.psram_spiq_sd0_io)   |
+                          BIT64(psram_io.psram_spid_sd1_io)   |
+                          BIT64(psram_io.psram_spihd_sd2_io)  |
+                          BIT64(psram_io.psram_spiwp_sd3_io)  );
 }
 
 //used in UT only
@@ -420,8 +432,8 @@ esp_err_t IRAM_ATTR esp_psram_impl_enable(psram_vaddr_mode_t vaddrmode)   //psra
          */
         psram_read_id(spi_num, &s_psram_id);
         if (!PSRAM_IS_VALID(s_psram_id)) {
-            ESP_EARLY_LOGE(TAG, "PSRAM ID read error: 0x%08x", s_psram_id);
-            return ESP_FAIL;
+            ESP_EARLY_LOGE(TAG, "PSRAM ID read error: 0x%08x, PSRAM chip not found or not supported", (uint32_t)s_psram_id);
+            return ESP_ERR_NOT_SUPPORTED;
         }
     }
 

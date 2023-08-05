@@ -1,5 +1,7 @@
 menu "Bootloader config"
 
+    orsource "../esp_bootloader_format/Kconfig.bootloader"
+
     config BOOTLOADER_OFFSET_IN_FLASH
         hex
         default 0x1000 if IDF_TARGET_ESP32 || IDF_TARGET_ESP32S2
@@ -94,6 +96,7 @@ menu "Bootloader config"
     choice BOOTLOADER_VDDSDIO_BOOST
         bool "VDDSDIO LDO voltage"
         default BOOTLOADER_VDDSDIO_BOOST_1_9V
+        depends on SOC_CONFIGURABLE_VDDSDIO_SUPPORTED
         help
             If this option is enabled, and VDDSDIO LDO is set to 1.8V (using eFuse
             or MTDI bootstrapping pin), bootloader will change LDO settings to
@@ -113,6 +116,7 @@ menu "Bootloader config"
     config BOOTLOADER_FACTORY_RESET
         bool "GPIO triggers factory reset"
         default N
+        select BOOTLOADER_RESERVE_RTC_MEM if SOC_RTC_FAST_MEM_SUPPORTED
         help
             Allows to reset the device to factory settings:
             - clear one or more data partitions;
@@ -325,6 +329,7 @@ menu "Bootloader config"
         # but - as noted in help - it invalidates the integrity of Secure Boot checks
         depends on SOC_RTC_FAST_MEM_SUPPORTED && ((SECURE_BOOT && SECURE_BOOT_INSECURE) || !SECURE_BOOT)
         default n
+        select BOOTLOADER_RESERVE_RTC_MEM
         help
             This option disables the normal validation of an image coming out of
             deep sleep (checksums, SHA256, and signature). This is a trade-off
@@ -366,7 +371,7 @@ menu "Bootloader config"
         # only available if both Secure Boot and Check Signature on Boot are disabled
         depends on !SECURE_SIGNED_ON_BOOT
         default n
-        select BOOTLOADER_SKIP_VALIDATE_IN_DEEP_SLEEP
+        select BOOTLOADER_SKIP_VALIDATE_IN_DEEP_SLEEP if SOC_RTC_FAST_MEM_SUPPORTED
         select BOOTLOADER_SKIP_VALIDATE_ON_POWER_ON
         help
             Selecting this option prevents the bootloader from ever validating the app image before
@@ -380,7 +385,7 @@ menu "Bootloader config"
     config BOOTLOADER_RESERVE_RTC_SIZE
         hex
         depends on SOC_RTC_FAST_MEM_SUPPORTED
-        default 0x10 if BOOTLOADER_SKIP_VALIDATE_IN_DEEP_SLEEP || BOOTLOADER_CUSTOM_RESERVE_RTC
+        default 0x10 if BOOTLOADER_RESERVE_RTC_MEM
         default 0
         help
             Reserve RTC FAST memory for Skip image validation. This option in bytes.
@@ -392,6 +397,7 @@ menu "Bootloader config"
     config BOOTLOADER_CUSTOM_RESERVE_RTC
         bool "Reserve RTC FAST memory for custom purposes"
         depends on SOC_RTC_FAST_MEM_SUPPORTED
+        select BOOTLOADER_RESERVE_RTC_MEM
         default n
         help
             This option allows the customer to place data in the RTC FAST memory,
@@ -403,7 +409,6 @@ menu "Bootloader config"
 
     config BOOTLOADER_CUSTOM_RESERVE_RTC_SIZE
         hex "Size in bytes for custom purposes"
-        range 0 0x10
         default 0
         depends on BOOTLOADER_CUSTOM_RESERVE_RTC
         help
@@ -412,9 +417,19 @@ menu "Bootloader config"
             in this area of memory, you can increase it. It must be a multiple of 4 bytes.
             This area (rtc_retain_mem_t) is reserved and has access from the bootloader and an application.
 
+    config BOOTLOADER_RESERVE_RTC_MEM
+        bool
+        depends on SOC_RTC_FAST_MEM_SUPPORTED
+        help
+            This option reserves an area in RTC FAST memory for the following features:
+            - "Skip image validation when exiting deep sleep"
+            - "Reserve RTC FAST memory for custom purposes"
+            - "GPIO triggers factory reset"
+
     config BOOTLOADER_FLASH_XMC_SUPPORT
         bool "Enable the support for flash chips of XMC (READ HELP FIRST)"
         default y
+        depends on !IDF_ENV_BRINGUP
         help
             Perform the startup flow recommended by XMC. Please consult XMC for the details of this flow.
             XMC chips will be forbidden to be used, when this option is disabled.
@@ -450,8 +465,8 @@ menu "Security features"
     config SECURE_BOOT_V2_RSA_SUPPORTED
         bool
         default y
-        # RSA secure boot is supported in ESP32 revision >= ECO3
-        depends on (IDF_TARGET_ESP32 && ESP32_REV_MIN >= 3) || SOC_SECURE_BOOT_V2_RSA
+        # RSA secure boot is supported in ESP32 revision >= v3.0
+        depends on (IDF_TARGET_ESP32 && ESP32_REV_MIN_FULL >= 300) || SOC_SECURE_BOOT_V2_RSA
 
     config SECURE_BOOT_V2_ECC_SUPPORTED
         bool
@@ -466,7 +481,7 @@ menu "Security features"
     config SECURE_BOOT_V2_PREFERRED
         bool
         default y
-        depends on ESP32_REV_MIN >= 3
+        depends on ESP32_REV_MIN_FULL >= 300
 
     config SECURE_BOOT_V2_ECDSA_ENABLED
         bool
@@ -587,8 +602,8 @@ menu "Security features"
     config SECURE_BOOT
         bool "Enable hardware Secure Boot in bootloader (READ DOCS FIRST)"
         default n
-        # Secure boot is not supported for ESP32-C3 revision < ECO3
-        depends on SOC_SECURE_BOOT_SUPPORTED && !(IDF_TARGET_ESP32C3 && ESP32C3_REV_MIN < 3)
+        # Secure boot is not supported for ESP32-C3 revision < v0.3
+        depends on SOC_SECURE_BOOT_SUPPORTED && !(IDF_TARGET_ESP32C3 && ESP32C3_REV_MIN_FULL < 3)
         select ESPTOOLPY_NO_STUB if !IDF_TARGET_ESP32 && !IDF_TARGET_ESP32S2
         help
             Build a bootloader which enables Secure Boot on first boot.
@@ -723,6 +738,23 @@ menu "Security features"
             This can lead to permanent bricking of the device, in case all keys are revoked
             because of signature verification failure.
 
+    config SECURE_BOOT_FLASH_BOOTLOADER_DEFAULT
+        bool "Flash bootloader along with other artifacts when using the default flash command"
+        depends on SECURE_BOOT_V2_ENABLED && SECURE_BOOT_BUILD_SIGNED_BINARIES
+        default N
+        help
+            When Secure Boot V2 is enabled, by default the bootloader is not flashed along with other artifacts
+            like the application and the partition table images, i.e. bootloader has to be seperately flashed
+            using the command `idf.py bootloader flash`, whereas, the application and partition table can be flashed
+            using the command `idf.py flash` itself.
+            Enabling this option allows flashing the bootloader along with the other artifacts
+            by invocation of the command `idf.py flash`.
+
+            If this option is enabled make sure that even the bootloader is signed using the correct secure boot key,
+            otherwise the bootloader signature verification would fail, as hash of the public key which is present in
+            the bootloader signature would not match with the digest stored into the efuses
+            and thus the device will not be able to boot up.
+
     choice SECURE_BOOTLOADER_KEY_ENCODING
         bool "Hardware Key Encoding"
         depends on SECURE_BOOTLOADER_REFLASHABLE
@@ -762,6 +794,7 @@ menu "Security features"
         bool "Enable flash encryption on boot (READ DOCS FIRST)"
         default N
         select SPI_FLASH_ENABLE_ENCRYPTED_READ_WRITE
+        select NVS_ENCRYPTION
         help
             If this option is set, flash contents will be encrypted by the bootloader on first boot.
 
@@ -772,11 +805,11 @@ menu "Security features"
             before enabling.
 
     choice SECURE_FLASH_ENCRYPTION_KEYSIZE
-        bool "Size of generated AES-XTS key"
+        bool "Size of generated XTS-AES key"
         default SECURE_FLASH_ENCRYPTION_AES128
         depends on SOC_FLASH_ENCRYPTION_XTS_AES_OPTIONS && SECURE_FLASH_ENC_ENABLED
         help
-            Size of generated AES-XTS key.
+            Size of generated XTS-AES key.
 
             - AES-128 uses a 256-bit key (32 bytes) derived from 128 bits (16 bytes) burned in half Efuse key block.
               Internally, it calculates SHA256(128 bits)
@@ -812,6 +845,10 @@ menu "Security features"
             Release mode should always be selected for production or manufacturing. Once enabled it's no longer
             possible for the device in ROM Download Mode to use the flash encryption hardware.
 
+            When EFUSE_VIRTUAL is enabled, SECURE_FLASH_ENCRYPTION_MODE_RELEASE is not available.
+            For CI tests we use IDF_CI_BUILD to bypass it ("export IDF_CI_BUILD=1").
+            We do not recommend bypassing it for other purposes.
+
             Refer to the Flash Encryption section of the ESP-IDF Programmer's Guide for details.
 
         config SECURE_FLASH_ENCRYPTION_MODE_DEVELOPMENT
@@ -821,8 +858,13 @@ menu "Security features"
         config SECURE_FLASH_ENCRYPTION_MODE_RELEASE
             bool "Release"
             select PARTITION_TABLE_MD5 if !APP_COMPATIBLE_PRE_V3_1_BOOTLOADERS
+            depends on !EFUSE_VIRTUAL || IDF_CI_BUILD
 
     endchoice
+
+    config SECURE_FLASH_HAS_WRITE_PROTECTION_CACHE
+        bool
+        default y if (SOC_EFUSE_DIS_ICACHE || IDF_TARGET_ESP32) && SECURE_FLASH_ENC_ENABLED
 
     menu "Potentially insecure options"
         visible if SECURE_FLASH_ENCRYPTION_MODE_DEVELOPMENT || SECURE_BOOT_INSECURE || SECURE_SIGNED_ON_UPDATE_NO_SECURE_BOOT # NOERROR
@@ -850,6 +892,7 @@ menu "Security features"
         config SECURE_BOOT_ALLOW_JTAG
             bool "Allow JTAG Debugging"
             depends on SECURE_BOOT_INSECURE || SECURE_FLASH_ENCRYPTION_MODE_DEVELOPMENT
+            select SECURE_FLASH_SKIP_WRITE_PROTECTION_CACHE if SECURE_FLASH_HAS_WRITE_PROTECTION_CACHE
             default N
             help
                 If not set (default), the bootloader will permanently disable JTAG (across entire chip) on first boot
@@ -907,6 +950,7 @@ menu "Security features"
         config SECURE_FLASH_UART_BOOTLOADER_ALLOW_ENC
             bool "Leave UART bootloader encryption enabled"
             depends on SECURE_FLASH_ENCRYPTION_MODE_DEVELOPMENT
+            select SECURE_FLASH_SKIP_WRITE_PROTECTION_CACHE if SECURE_FLASH_HAS_WRITE_PROTECTION_CACHE
             default N
             help
                 If not set (default), the bootloader will permanently disable UART bootloader encryption access on
@@ -927,8 +971,9 @@ menu "Security features"
 
         config SECURE_FLASH_UART_BOOTLOADER_ALLOW_CACHE
             bool "Leave UART bootloader flash cache enabled"
-            depends on SECURE_FLASH_ENCRYPTION_MODE_DEVELOPMENT
+            depends on SECURE_FLASH_ENCRYPTION_MODE_DEVELOPMENT && (IDF_TARGET_ESP32 || SOC_EFUSE_DIS_DOWNLOAD_ICACHE || SOC_EFUSE_DIS_DOWNLOAD_DCACHE) # NOERROR
             default N
+            select SECURE_FLASH_SKIP_WRITE_PROTECTION_CACHE if SECURE_FLASH_HAS_WRITE_PROTECTION_CACHE
             help
                 If not set (default), the bootloader will permanently disable UART bootloader flash cache access on
                 first boot. If set, the UART bootloader will still be able to access the flash cache.
@@ -949,6 +994,40 @@ menu "Security features"
                 Only use this option in testing environments, to avoid accidentally enabling flash encryption on
                 the wrong device. The device needs to have flash encryption already enabled using espefuse.py.
 
+        config SECURE_FLASH_SKIP_WRITE_PROTECTION_CACHE
+            bool "Skip write-protection of DIS_CACHE (DIS_ICACHE, DIS_DCACHE)"
+            default n
+            depends on SECURE_FLASH_HAS_WRITE_PROTECTION_CACHE
+            help
+                If not set (default, recommended), on the first boot the bootloader will burn the write-protection of
+                DIS_CACHE(for ESP32) or DIS_ICACHE/DIS_DCACHE(for other chips) eFuse when Flash Encryption is enabled.
+                Write protection for cache disable efuse prevents the chip from being blocked if it is set by accident.
+                App and bootloader use cache so disabling it makes the chip useless for IDF.
+                Due to other eFuses are linked with the same write protection bit (see the list below) then
+                write-protection will not be done if these SECURE_FLASH_UART_BOOTLOADER_ALLOW_ENC,
+                SECURE_BOOT_ALLOW_JTAG or SECURE_FLASH_UART_BOOTLOADER_ALLOW_CACHE options are selected
+                to give a chance to turn on the chip into the release mode later.
+
+                List of eFuses with the same write protection bit:
+                ESP32: MAC, MAC_CRC, DISABLE_APP_CPU, DISABLE_BT, DIS_CACHE, VOL_LEVEL_HP_INV.
+
+                ESP32-C3: DIS_ICACHE, DIS_USB_JTAG, DIS_DOWNLOAD_ICACHE, DIS_USB_SERIAL_JTAG,
+                DIS_FORCE_DOWNLOAD, DIS_TWAI, JTAG_SEL_ENABLE, DIS_PAD_JTAG, DIS_DOWNLOAD_MANUAL_ENCRYPT.
+
+                ESP32-C6: SWAP_UART_SDIO_EN, DIS_ICACHE, DIS_USB_JTAG, DIS_DOWNLOAD_ICACHE,
+                DIS_USB_SERIAL_JTAG, DIS_FORCE_DOWNLOAD, DIS_TWAI, JTAG_SEL_ENABLE,
+                DIS_PAD_JTAG, DIS_DOWNLOAD_MANUAL_ENCRYPT.
+
+                ESP32-H2: DIS_ICACHE, DIS_USB_JTAG, POWERGLITCH_EN, DIS_FORCE_DOWNLOAD, SPI_DOWNLOAD_MSPI_DIS,
+                DIS_TWAI, JTAG_SEL_ENABLE, DIS_PAD_JTAG, DIS_DOWNLOAD_MANUAL_ENCRYPT.
+
+                ESP32-S2: DIS_ICACHE, DIS_DCACHE, DIS_DOWNLOAD_ICACHE, DIS_DOWNLOAD_DCACHE,
+                DIS_FORCE_DOWNLOAD, DIS_USB, DIS_TWAI, DIS_BOOT_REMAP, SOFT_DIS_JTAG,
+                HARD_DIS_JTAG, DIS_DOWNLOAD_MANUAL_ENCRYPT.
+
+                ESP32-S3: DIS_ICACHE, DIS_DCACHE, DIS_DOWNLOAD_ICACHE, DIS_DOWNLOAD_DCACHE,
+                DIS_FORCE_DOWNLOAD, DIS_USB_OTG, DIS_TWAI, DIS_APP_CPU, DIS_PAD_JTAG,
+                DIS_DOWNLOAD_MANUAL_ENCRYPT, DIS_USB_JTAG, DIS_USB_SERIAL_JTAG, STRAP_JTAG_SEL, USB_PHY_SEL.
     endmenu  # Potentially Insecure
 
     config SECURE_FLASH_CHECK_ENC_EN_IN_APP
@@ -972,7 +1051,7 @@ menu "Security features"
         default SECURE_ENABLE_SECURE_ROM_DL_MODE if SECURE_ROM_DL_MODE_ENABLED # NOERROR
         default SECURE_INSECURE_ALLOW_DL_MODE
         depends on SECURE_BOOT_V2_ENABLED || SECURE_FLASH_ENC_ENABLED
-        depends on !IDF_TARGET_ESP32 || ESP32_REV_MIN_3
+        depends on !(IDF_TARGET_ESP32 && ESP32_REV_MIN_FULL < 300)
 
         config SECURE_DISABLE_ROM_DL_MODE
             bool "UART ROM download mode (Permanently disabled (recommended))"
@@ -998,9 +1077,9 @@ menu "Security features"
                 Download Mode into a separate Secure Download mode. This option can only work if
                 Download Mode is not already disabled by eFuse.
 
-                Secure Download mode limits the use of Download Mode functions to simple flash read,
-                write and erase operations, plus a command to return a summary of currently enabled
-                security features.
+                Secure Download mode limits the use of Download Mode functions to update SPI config,
+                changing baud rate, basic flash write and a command to return a summary of currently
+                enabled security features (`get_security_info`).
 
                 Secure Download mode is not compatible with the esptool.py flasher stub feature,
                 espefuse.py, read/writing memory or registers, encrypted download, or any other

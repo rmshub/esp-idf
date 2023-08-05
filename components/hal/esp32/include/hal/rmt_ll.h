@@ -32,6 +32,9 @@ extern "C" {
 #define RMT_LL_EVENT_TX_MASK(channel)     (RMT_LL_EVENT_TX_DONE(channel) | RMT_LL_EVENT_TX_THRES(channel) | RMT_LL_EVENT_TX_LOOP_END(channel))
 #define RMT_LL_EVENT_RX_MASK(channel)     (RMT_LL_EVENT_RX_DONE(channel) | RMT_LL_EVENT_RX_THRES(channel))
 
+#define RMT_LL_MAX_FILTER_VALUE           255
+#define RMT_LL_MAX_IDLE_VALUE             65535
+
 typedef enum {
     RMT_LL_MEM_OWNER_SW = 0,
     RMT_LL_MEM_OWNER_HW = 1,
@@ -99,6 +102,20 @@ static inline void rmt_ll_set_group_clock_src(rmt_dev_t *dev, uint32_t channel, 
     }
 }
 
+/**
+ * @brief Enable RMT peripheral source clock
+ *
+ * @note RMT doesn't support enable/disable clock source, this function is only for compatibility
+ *
+ * @param dev Peripheral instance address
+ * @param en True to enable, False to disable
+ */
+static inline void rmt_ll_enable_group_clock(rmt_dev_t *dev, bool en)
+{
+    (void)dev;
+    (void)en;
+}
+
 ////////////////////////////////////////TX Channel Specific/////////////////////////////////////////////////////////////
 
 /**
@@ -139,6 +156,7 @@ static inline void rmt_ll_tx_set_channel_clock_div(rmt_dev_t *dev, uint32_t chan
  * @param dev Peripheral instance address
  * @param channel RMT TX channel number
  */
+__attribute__((always_inline))
 static inline void rmt_ll_tx_reset_pointer(rmt_dev_t *dev, uint32_t channel)
 {
     dev->conf_ch[channel].conf1.mem_rd_rst = 1;
@@ -153,6 +171,7 @@ static inline void rmt_ll_tx_reset_pointer(rmt_dev_t *dev, uint32_t channel)
  * @param dev Peripheral instance address
  * @param channel RMT TX channel number
  */
+__attribute__((always_inline))
 static inline void rmt_ll_tx_start(rmt_dev_t *dev, uint32_t channel)
 {
     dev->conf_ch[channel].conf1.tx_start = 1;
@@ -189,6 +208,7 @@ static inline void rmt_ll_tx_enable_wrap(rmt_dev_t *dev, uint32_t channel, bool 
  * @param channel RMT TX channel number
  * @param enable True to enable, False to disable
  */
+__attribute__((always_inline))
 static inline void rmt_ll_tx_enable_loop(rmt_dev_t *dev, uint32_t channel, bool enable)
 {
     dev->conf_ch[channel].conf1.tx_conti_mode = enable;
@@ -202,6 +222,7 @@ static inline void rmt_ll_tx_enable_loop(rmt_dev_t *dev, uint32_t channel, bool 
  * @param level IDLE level (1 => high, 0 => low)
  * @param enable True to fix the IDLE level, otherwise the IDLE level is determined by EOF encoder
  */
+__attribute__((always_inline))
 static inline void rmt_ll_tx_fix_idle_level(rmt_dev_t *dev, uint32_t channel, uint8_t level, bool enable)
 {
     dev->conf_ch[channel].conf1.idle_out_en = enable;
@@ -306,6 +327,7 @@ static inline void rmt_ll_rx_set_channel_clock_div(rmt_dev_t *dev, uint32_t chan
  * @param dev Peripheral instance address
  * @param channel RMT RX channel number
  */
+__attribute__((always_inline))
 static inline void rmt_ll_rx_reset_pointer(rmt_dev_t *dev, uint32_t channel)
 {
     dev->conf_ch[channel].conf1.mem_wr_rst = 1;
@@ -321,6 +343,7 @@ static inline void rmt_ll_rx_reset_pointer(rmt_dev_t *dev, uint32_t channel)
  * @param channel RMT RX channel number
  * @param enable True to enable, False to disable
  */
+__attribute__((always_inline))
 static inline void rmt_ll_rx_enable(rmt_dev_t *dev, uint32_t channel, bool enable)
 {
     dev->conf_ch[channel].conf1.rx_en = enable;
@@ -357,6 +380,7 @@ static inline void rmt_ll_rx_set_idle_thres(rmt_dev_t *dev, uint32_t channel, ui
  * @param channel RMT RX channel number
  * @param owner Memory owner
  */
+__attribute__((always_inline))
 static inline void rmt_ll_rx_set_mem_owner(rmt_dev_t *dev, uint32_t channel, rmt_ll_mem_owner_t owner)
 {
     dev->conf_ch[channel].conf1.mem_owner = owner;
@@ -393,6 +417,7 @@ static inline void rmt_ll_rx_set_filter_thres(rmt_dev_t *dev, uint32_t channel, 
  * @param channel RMT RX channel number
  * @return writer offset
  */
+__attribute__((always_inline))
 static inline uint32_t rmt_ll_rx_get_memory_writer_offset(rmt_dev_t *dev, uint32_t channel)
 {
     return (dev->status_ch[channel] & 0x3FF) - (channel) * 64;
@@ -407,6 +432,7 @@ static inline uint32_t rmt_ll_rx_get_memory_writer_offset(rmt_dev_t *dev, uint32
  * @param mask Event mask
  * @param enable True to enable, False to disable
  */
+__attribute__((always_inline))
 static inline void rmt_ll_enable_interrupt(rmt_dev_t *dev, uint32_t mask, bool enable)
 {
     if (enable) {
@@ -422,6 +448,7 @@ static inline void rmt_ll_enable_interrupt(rmt_dev_t *dev, uint32_t mask, bool e
  * @param dev Peripheral instance address
  * @param mask Interupt status mask
  */
+__attribute__((always_inline))
 static inline void rmt_ll_clear_interrupt_status(rmt_dev_t *dev, uint32_t mask)
 {
     dev->int_clr.val = mask;
@@ -445,6 +472,7 @@ static inline volatile void *rmt_ll_get_interrupt_status_reg(rmt_dev_t *dev)
  * @param channel RMT TX channel number
  * @return Interrupt status
  */
+__attribute__((always_inline))
 static inline uint32_t rmt_ll_tx_get_interrupt_status(rmt_dev_t *dev, uint32_t channel)
 {
     return dev->int_st.val & RMT_LL_EVENT_TX_MASK(channel);
@@ -469,6 +497,7 @@ static inline uint32_t rmt_ll_tx_get_interrupt_status_raw(rmt_dev_t *dev, uint32
  * @param channel RMT RX channel number
  * @return Interrupt raw status
  */
+__attribute__((always_inline))
 static inline uint32_t rmt_ll_rx_get_interrupt_status_raw(rmt_dev_t *dev, uint32_t channel)
 {
     return dev->int_raw.val & (RMT_LL_EVENT_RX_MASK(channel) | RMT_LL_EVENT_RX_ERROR(channel));
@@ -481,6 +510,7 @@ static inline uint32_t rmt_ll_rx_get_interrupt_status_raw(rmt_dev_t *dev, uint32
  * @param channel RMT RX channel number
  * @return Interrupt status
  */
+__attribute__((always_inline))
 static inline uint32_t rmt_ll_rx_get_interrupt_status(rmt_dev_t *dev, uint32_t channel)
 {
     return dev->int_st.val & RMT_LL_EVENT_RX_MASK(channel);
@@ -491,48 +521,57 @@ static inline uint32_t rmt_ll_rx_get_interrupt_status(rmt_dev_t *dev, uint32_t c
 /////////////////////////////They might be removed in the next major release (ESP-IDF 6.0)//////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+__attribute__((always_inline))
 static inline uint32_t rmt_ll_tx_get_status_word(rmt_dev_t *dev, uint32_t channel)
 {
     return dev->status_ch[channel];
 }
 
+__attribute__((always_inline))
 static inline uint32_t rmt_ll_rx_get_status_word(rmt_dev_t *dev, uint32_t channel)
 {
     return dev->status_ch[channel];
 }
 
+__attribute__((always_inline))
 static inline uint32_t rmt_ll_tx_get_channel_clock_div(rmt_dev_t *dev, uint32_t channel)
 {
     uint32_t div = HAL_FORCE_READ_U32_REG_FIELD(dev->conf_ch[channel].conf0, div_cnt);
     return div == 0 ? 256 : div;
 }
 
+__attribute__((always_inline))
 static inline uint32_t rmt_ll_rx_get_channel_clock_div(rmt_dev_t *dev, uint32_t channel)
 {
     uint32_t div = HAL_FORCE_READ_U32_REG_FIELD(dev->conf_ch[channel].conf0, div_cnt);
     return div == 0 ? 256 : div;
 }
 
+__attribute__((always_inline))
 static inline uint32_t rmt_ll_rx_get_idle_thres(rmt_dev_t *dev, uint32_t channel)
 {
     return HAL_FORCE_READ_U32_REG_FIELD(dev->conf_ch[channel].conf0, idle_thres);
 }
 
+__attribute__((always_inline))
 static inline uint32_t rmt_ll_tx_get_mem_blocks(rmt_dev_t *dev, uint32_t channel)
 {
     return dev->conf_ch[channel].conf0.mem_size;
 }
 
+__attribute__((always_inline))
 static inline uint32_t rmt_ll_rx_get_mem_blocks(rmt_dev_t *dev, uint32_t channel)
 {
     return dev->conf_ch[channel].conf0.mem_size;
 }
 
+__attribute__((always_inline))
 static inline bool rmt_ll_tx_is_loop_enabled(rmt_dev_t *dev, uint32_t channel)
 {
     return dev->conf_ch[channel].conf1.tx_conti_mode;
 }
 
+__attribute__((always_inline))
 static inline rmt_clock_source_t rmt_ll_get_group_clock_src(rmt_dev_t *dev, uint32_t channel)
 {
     if (dev->conf_ch[channel].conf1.ref_always_on) {
@@ -541,11 +580,13 @@ static inline rmt_clock_source_t rmt_ll_get_group_clock_src(rmt_dev_t *dev, uint
     return RMT_CLK_SRC_REF_TICK;
 }
 
+__attribute__((always_inline))
 static inline bool rmt_ll_tx_is_idle_enabled(rmt_dev_t *dev, uint32_t channel)
 {
     return dev->conf_ch[channel].conf1.idle_out_en;
 }
 
+__attribute__((always_inline))
 static inline uint32_t rmt_ll_tx_get_idle_level(rmt_dev_t *dev, uint32_t channel)
 {
     return dev->conf_ch[channel].conf1.idle_out_lv;
@@ -557,11 +598,13 @@ static inline bool rmt_ll_is_mem_powered_down(rmt_dev_t *dev)
     return dev->conf_ch[0].conf0.mem_pd;
 }
 
+__attribute__((always_inline))
 static inline uint32_t rmt_ll_rx_get_mem_owner(rmt_dev_t *dev, uint32_t channel)
 {
     return dev->conf_ch[channel].conf1.mem_owner;
 }
 
+__attribute__((always_inline))
 static inline uint32_t rmt_ll_get_tx_end_interrupt_status(rmt_dev_t *dev)
 {
     uint32_t status = dev->int_st.val;
@@ -569,6 +612,7 @@ static inline uint32_t rmt_ll_get_tx_end_interrupt_status(rmt_dev_t *dev)
            ((status & 0x1000) >> 8) | ((status & 0x8000) >> 10) | ((status & 0x40000) >> 12) | ((status & 0x200000) >> 14);
 }
 
+__attribute__((always_inline))
 static inline uint32_t rmt_ll_get_rx_end_interrupt_status(rmt_dev_t *dev)
 {
     uint32_t status = dev->int_st.val;
@@ -576,6 +620,7 @@ static inline uint32_t rmt_ll_get_rx_end_interrupt_status(rmt_dev_t *dev)
            ((status & 0x2000) >> 9) | ((status & 0x10000) >> 11) | ((status & 0x80000) >> 13) | ((status & 0x400000) >> 15);
 }
 
+__attribute__((always_inline))
 static inline uint32_t rmt_ll_get_tx_err_interrupt_status(rmt_dev_t *dev)
 {
     uint32_t status =  dev->int_st.val;
@@ -583,6 +628,7 @@ static inline uint32_t rmt_ll_get_tx_err_interrupt_status(rmt_dev_t *dev)
            ((status & 0x4000) >> 10) | ((status & 0x20000) >> 12) | ((status & 0x100000) >> 14) | ((status & 0x800000) >> 16);
 }
 
+__attribute__((always_inline))
 static inline uint32_t rmt_ll_get_rx_err_interrupt_status(rmt_dev_t *dev)
 {
     uint32_t status =  dev->int_st.val;
@@ -590,6 +636,7 @@ static inline uint32_t rmt_ll_get_rx_err_interrupt_status(rmt_dev_t *dev)
            ((status & 0x4000) >> 10) | ((status & 0x20000) >> 12) | ((status & 0x100000) >> 14) | ((status & 0x800000) >> 16);
 }
 
+__attribute__((always_inline))
 static inline uint32_t rmt_ll_get_tx_thres_interrupt_status(rmt_dev_t *dev)
 {
     uint32_t status =  dev->int_st.val;

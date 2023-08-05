@@ -6,62 +6,101 @@ idf_build_get_property(python PYTHON)
 idf_build_get_property(idf_path IDF_PATH)
 
 set(chip_model ${target})
-# TODO: remove this if block when esp32h2 beta1 is no longer supported
-if(target STREQUAL "esp32h2")
-    if(CONFIG_IDF_TARGET_ESP32H2_BETA_VERSION_1)
-        set(chip_model esp32h2beta1)
-    elseif(CONFIG_IDF_TARGET_ESP32H2_BETA_VERSION_2)
-        set(chip_model esp32h2beta2)
-    endif()
-endif()
 
 set(ESPTOOLPY ${python} "$ENV{ESPTOOL_WRAPPER}" "${CMAKE_CURRENT_LIST_DIR}/esptool/esptool.py" --chip ${chip_model})
 set(ESPSECUREPY ${python} "${CMAKE_CURRENT_LIST_DIR}/esptool/espsecure.py")
 set(ESPEFUSEPY ${python} "${CMAKE_CURRENT_LIST_DIR}/esptool/espefuse.py")
-set(ESPMONITOR ${python} "${idf_path}/tools/idf_monitor.py")
-
-set(ESPFLASHMODE ${CONFIG_ESPTOOLPY_FLASHMODE})
-set(ESPFLASHFREQ ${CONFIG_ESPTOOLPY_FLASHFREQ})
-set(ESPFLASHSIZE ${CONFIG_ESPTOOLPY_FLASHSIZE})
-
+set(ESPMONITOR ${python} -m esp_idf_monitor)
 set(ESPTOOLPY_CHIP "${chip_model}")
 
-set(esptool_elf2image_args
-    --flash_mode ${ESPFLASHMODE}
-    --flash_freq ${ESPFLASHFREQ}
-    --flash_size ${ESPFLASHSIZE}
-    )
+if(NOT CONFIG_APP_BUILD_TYPE_RAM AND CONFIG_APP_BUILD_GENERATE_BINARIES)
+    if(CONFIG_SPI_FLASH_HPM_ENABLE)
+    # When set flash frequency to 120M, must keep 1st bootloader work under ``DOUT`` mode
+    # because on some flash chips, 120M will modify the status register,
+    # which will make ROM won't work.
+    # This change intends to be for esptool only and the bootloader should keep use
+    # ``DOUT`` mode.
+        set(ESPFLASHMODE "dout")
+        message("Note: HPM is enabled for the flash, force the ROM bootloader into DOUT mode for stable boot on")
+    else()
+        set(ESPFLASHMODE ${CONFIG_ESPTOOLPY_FLASHMODE})
+    endif()
+    set(ESPFLASHFREQ ${CONFIG_ESPTOOLPY_FLASHFREQ})
+    set(ESPFLASHSIZE ${CONFIG_ESPTOOLPY_FLASHSIZE})
 
-set(MMU_PAGE_SIZE ${CONFIG_MMU_PAGE_MODE})
 
-if(NOT BOOTLOADER_BUILD)
-    list(APPEND esptool_elf2image_args --elf-sha256-offset 0xb0)
-    if(CONFIG_IDF_TARGET_ESP32C2)
-        list(APPEND esptool_elf2image_args --flash-mmu-page-size ${MMU_PAGE_SIZE})
+    set(esptool_elf2image_args
+        --flash_mode ${ESPFLASHMODE}
+        --flash_freq ${ESPFLASHFREQ}
+        --flash_size ${ESPFLASHSIZE}
+        )
+
+    if(BOOTLOADER_BUILD AND CONFIG_SECURE_BOOT_V2_ENABLED)
+        # The bootloader binary needs to be 4KB aligned in order to append a secure boot V2 signature block.
+        # If CONFIG_SECURE_BOOT_BUILD_SIGNED_BINARIES is NOT set, the bootloader
+        # image generated is not 4KB aligned for external HSM to sign it readily.
+        # Following esptool option --pad-to-size 4KB generates a 4K aligned bootloader image.
+        # In case of signing during build, espsecure.py "sign_data" operation handles the 4K alignment of the image.
+        if(NOT CONFIG_SECURE_BOOT_BUILD_SIGNED_BINARIES)
+            list(APPEND esptool_elf2image_args --pad-to-size 4KB)
+        endif()
+    endif()
+
+    set(MMU_PAGE_SIZE ${CONFIG_MMU_PAGE_MODE})
+
+    if(NOT BOOTLOADER_BUILD)
+        list(APPEND esptool_elf2image_args --elf-sha256-offset 0xb0)
+        # For chips that support configurable MMU page size feature
+        # If page size is configured to values other than the default "64KB" in menuconfig,
+        # then we need to pass the actual size to flash-mmu-page-size arg
+        if(NOT MMU_PAGE_SIZE STREQUAL "64KB")
+            list(APPEND esptool_elf2image_args --flash-mmu-page-size ${MMU_PAGE_SIZE})
+        endif()
+    endif()
+
+    if(NOT CONFIG_SECURE_BOOT_ALLOW_SHORT_APP_PARTITION AND
+        NOT BOOTLOADER_BUILD)
+        if(CONFIG_SECURE_SIGNED_APPS_ECDSA_SCHEME)
+            list(APPEND esptool_elf2image_args --secure-pad)
+        elseif(CONFIG_SECURE_SIGNED_APPS_RSA_SCHEME OR CONFIG_SECURE_SIGNED_APPS_ECDSA_V2_SCHEME)
+            list(APPEND esptool_elf2image_args --secure-pad-v2)
+        endif()
+    endif()
+
+    if(CONFIG_ESPTOOLPY_HEADER_FLASHSIZE_UPDATE)
+        # Set ESPFLASHSIZE to 'detect' *after* esptool_elf2image_args are generated,
+        # as elf2image can't have 'detect' as an option...
+        set(ESPFLASHSIZE detect)
+
+        # Flash size detection updates the image header which would invalidate the appended
+        # SHA256 digest. Therefore, a digest is not appended in that case.
+        # This argument requires esptool>=4.1.
+        list(APPEND esptool_elf2image_args --dont-append-digest)
+    endif()
+
+    if(CONFIG_SECURE_SIGNED_APPS_RSA_SCHEME)
+        set(ESPFLASHSIZE keep)
     endif()
 endif()
 
-if(NOT CONFIG_SECURE_BOOT_ALLOW_SHORT_APP_PARTITION AND
-    NOT BOOTLOADER_BUILD)
-    if(CONFIG_SECURE_SIGNED_APPS_ECDSA_SCHEME)
-        list(APPEND esptool_elf2image_args --secure-pad)
-    elseif(CONFIG_SECURE_SIGNED_APPS_RSA_SCHEME OR CONFIG_SECURE_SIGNED_APPS_ECDSA_V2_SCHEME)
-        list(APPEND esptool_elf2image_args --secure-pad-v2)
-    endif()
+# We still set "--min-rev" to keep the app compatible with older booloaders where this field is controlled.
+if(CONFIG_IDF_TARGET_ESP32)
+    # for this chip min_rev is major revision
+    math(EXPR min_rev "${CONFIG_ESP_REV_MIN_FULL} / 100")
 endif()
-
-if(CONFIG_ESP32_REV_MIN)
-    set(min_rev ${CONFIG_ESP32_REV_MIN})
-endif()
-if(CONFIG_ESP32C3_REV_MIN)
-    set(min_rev ${CONFIG_ESP32C3_REV_MIN})
+if(CONFIG_IDF_TARGET_ESP32C3)
+    # for this chip min_rev is minor revision
+    math(EXPR min_rev "${CONFIG_ESP_REV_MIN_FULL} % 100")
 endif()
 
 if(min_rev)
     list(APPEND esptool_elf2image_args --min-rev ${min_rev})
-    set(monitor_rev_args "--revision;${min_rev}")
-    unset(min_rev)
 endif()
+
+list(APPEND esptool_elf2image_args --min-rev-full ${CONFIG_ESP_REV_MIN_FULL})
+list(APPEND esptool_elf2image_args --max-rev-full ${CONFIG_ESP_REV_MAX_FULL})
+
+set(monitor_rev_args "--revision;${CONFIG_ESP_REV_MIN_FULL}")
 
 if(CONFIG_ESPTOOLPY_HEADER_FLASHSIZE_UPDATE)
     # Set ESPFLASHSIZE to 'detect' *after* esptool_elf2image_args are generated,
@@ -110,7 +149,7 @@ if(CONFIG_APP_BUILD_GENERATE_BINARIES)
 endif()
 
 set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-    APPEND PROPERTY ADDITIONAL_MAKE_CLEAN_FILES
+    APPEND PROPERTY ADDITIONAL_CLEAN_FILES
     "${build_dir}/${unsigned_project_binary}"
     )
 
@@ -127,6 +166,8 @@ endif()
 if(NOT BOOTLOADER_BUILD AND CONFIG_SECURE_SIGNED_APPS)
     if(CONFIG_SECURE_BOOT_BUILD_SIGNED_BINARIES)
         # for locally signed secure boot image, add a signing step to get from unsigned app to signed app
+        get_filename_component(secure_boot_signing_key "${CONFIG_SECURE_BOOT_SIGNING_KEY}"
+            ABSOLUTE BASE_DIR "${project_dir}")
         add_custom_command(OUTPUT "${build_dir}/.signed_bin_timestamp"
             COMMAND ${ESPSECUREPY} sign_data --version ${secure_boot_version} --keyfile ${secure_boot_signing_key}
                 -o "${build_dir}/${PROJECT_BIN}" "${build_dir}/${unsigned_project_binary}"
@@ -141,7 +182,7 @@ if(NOT BOOTLOADER_BUILD AND CONFIG_SECURE_SIGNED_APPS)
         add_dependencies(gen_project_binary gen_signed_project_binary)
 
         set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-            APPEND PROPERTY ADDITIONAL_MAKE_CLEAN_FILES
+            APPEND PROPERTY ADDITIONAL_CLEAN_FILES
             "${build_dir}/${PROJECT_BIN}"
             )
     else()
@@ -310,43 +351,6 @@ function(esptool_py_flash_target_image target_name image_name offset image)
     endif()
 endfunction()
 
-# Use this function to generate a ternary expression that will be evaluated.
-# - retexpr is the expression returned by the function
-# - condition is the expression evaluated to a boolean
-# - condtrue is the expression to evaluate if condition is true
-# - condfalse is the expression to evaluate if condition is false
-# This function can be summarized as:
-#   retexpr = condition ? condtrue : condfalse
-function(if_expr_generator retexpr condition condtrue condfalse)
-    # CMake version 3.8 and above provide a ternary operator for expression
-    # generator. For version under, we must simulate this behaviour
-    if(${CMAKE_VERSION} VERSION_LESS "3.8.0")
-
-        # If condtrue is not empty, then we have to do something in case the
-        # condition is true. Generate the expression that will be used in that
-        # case
-        if(condtrue)
-            set(iftrue "$<${condition}:${condtrue}>")
-        endif()
-
-        # Same for condfalse. If it is empty, it is useless to create an
-        # expression that will be evaluated later
-        if(condfalse)
-            set(iffalse "$<$<NOT:${condition}>:${condfalse}>")
-        endif()
-
-        # Concatenate the previously generated expressions. If one of them was
-        # not initialized (because of empty condtrue/condfalse) it will be
-        # replaced by an empty string
-        set(${retexpr} "${iftrue}${iffalse}" PARENT_SCOPE)
-
-    else()
-        # CMake 3.8 and above implement what we want, making the expression
-        # simpler
-        set(${retexpr} "$<IF:${condition},${condtrue},${condfalse}>" PARENT_SCOPE)
-    endif()
-endfunction()
-
 
 function(esptool_py_flash_target target_name main_args sub_args)
     set(single_value OFFSET IMAGE) # template file to use to be able to
@@ -429,8 +433,7 @@ $<JOIN:$<TARGET_PROPERTY:${target_name},IMAGES>,\n>")
 encrypted-${target_name},NON_ENCRYPTED_IMAGES>>")
 
         # Prepare esptool arguments (--encrypt or --encrypt-files)
-        if_expr_generator(if_non_enc_expr ${has_non_encrypted_images}
-                          "" "--encrypt")
+        set(if_non_enc_expr "$<IF:${has_non_encrypted_images},,--encrypt>")
         set_target_properties(encrypted-${target_name} PROPERTIES SUB_ARGS
                              "${sub_args}; ${if_non_enc_expr}")
 
@@ -442,8 +445,7 @@ encrypted-${target_name},NON_ENCRYPTED_IMAGES>,\n>")
 
         # Put both lists together, use --encrypted-files if we do also have
         # plain images to flash
-        if_expr_generator(if_enc_expr ${has_non_encrypted_images}
-                          "--encrypt-files\n" "")
+        set(if_enc_expr "$<IF:${has_non_encrypted_images},--encrypt-files\n,>")
         set(flash_args_content "$<JOIN:$<TARGET_PROPERTY:\
 encrypted-${target_name},SUB_ARGS>, >\
 ${non_encrypted_files}\n\
@@ -489,7 +491,11 @@ function(esptool_py_custom_target target_name flasher_filename dependencies)
 endfunction()
 
 if(NOT BOOTLOADER_BUILD)
-    set(flash_deps "partition_table_bin")
+    set(flash_deps "")
+
+    if(CONFIG_APP_BUILD_TYPE_APP_2NDBOOT)
+        list(APPEND flash_deps "partition_table_bin")
+    endif()
 
     if(CONFIG_APP_BUILD_GENERATE_BINARIES)
         list(APPEND flash_deps "app")
@@ -501,3 +507,7 @@ if(NOT BOOTLOADER_BUILD)
 
     esptool_py_custom_target(flash project "${flash_deps}")
 endif()
+
+# Adds espefuse functions for global use
+idf_component_get_property(esptool_py_dir esptool_py COMPONENT_DIR)
+include(${esptool_py_dir}/espefuse.cmake)

@@ -6,13 +6,14 @@
 
 #include <freertos/FreeRTOS.h>
 #include "clk_ctrl_os.h"
+#include "soc/rtc.h"
+#include "esp_private/esp_clk_tree_common.h"
 #include "esp_check.h"
-#include "sdkconfig.h"
 
 static portMUX_TYPE periph_spinlock = portMUX_INITIALIZER_UNLOCKED;
 
 static uint8_t s_periph_ref_counts = 0;
-static uint32_t s_rtc_clk_freq = 0; // Frequency of the 8M/256 clock in Hz
+static uint32_t s_rc_fast_freq = 0; // Frequency of the RC_FAST clock in Hz
 #if SOC_CLK_APLL_SUPPORTED
 static const char *TAG = "clk_ctrl_os";
 // Current APLL frequency, in HZ. Zero if APLL is not enabled.
@@ -26,13 +27,14 @@ bool periph_rtc_dig_clk8m_enable(void)
     portENTER_CRITICAL(&periph_spinlock);
     if (s_periph_ref_counts == 0) {
         rtc_dig_clk8m_enable();
-#if !CONFIG_IDF_TARGET_ESP32H2
-        s_rtc_clk_freq = rtc_clk_freq_cal(rtc_clk_cal(RTC_CAL_8MD256, 100));
-        if (s_rtc_clk_freq == 0) {
+#if SOC_CLK_RC_FAST_SUPPORT_CALIBRATION
+        s_rc_fast_freq = esp_clk_tree_rc_fast_get_freq_hz(ESP_CLK_TREE_SRC_FREQ_PRECISION_EXACT);
+        if (s_rc_fast_freq == 0) {
+            rtc_dig_clk8m_disable();
             portEXIT_CRITICAL(&periph_spinlock);
             return false;
         }
-#endif
+#endif //SOC_CLK_RC_FAST_SUPPORT_CALIBRATION
     }
     s_periph_ref_counts++;
     portEXIT_CRITICAL(&periph_spinlock);
@@ -41,11 +43,11 @@ bool periph_rtc_dig_clk8m_enable(void)
 
 uint32_t periph_rtc_dig_clk8m_get_freq(void)
 {
-#if CONFIG_IDF_TARGET_ESP32H2
-    /* Workaround: H2 doesn't have 8MD256 clk, so calibration cannot be done, we just return its theoretic frequency */
+#if !SOC_CLK_RC_FAST_SUPPORT_CALIBRATION
+    /* Workaround: CLK8M calibration cannot be performed, we can only return its theoretic value */
     return SOC_CLK_RC_FAST_FREQ_APPROX;
 #else
-    return s_rtc_clk_freq * 256;
+    return s_rc_fast_freq;
 #endif
 }
 
@@ -55,7 +57,7 @@ void periph_rtc_dig_clk8m_disable(void)
     assert(s_periph_ref_counts > 0);
     s_periph_ref_counts--;
     if (s_periph_ref_counts == 0) {
-        s_rtc_clk_freq = 0;
+        s_rc_fast_freq = 0;
         rtc_dig_clk8m_disable();
     }
     portEXIT_CRITICAL(&periph_spinlock);

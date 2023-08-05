@@ -1,16 +1,8 @@
-// Copyright 2015-2019 Espressif Systems (Shanghai) PTE LTD
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+/*
+ * SPDX-FileCopyrightText: 2015-2023 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 #ifndef ESP_CORE_DUMP_PRIV_H_
 #define ESP_CORE_DUMP_PRIV_H_
 
@@ -26,7 +18,12 @@ extern "C" {
 #include "esp_private/panic_internal.h"
 #include "core_dump_checksum.h"
 
+#if CONFIG_ESP_COREDUMP_LOGS
 #define ESP_COREDUMP_LOG( level, format, ... )  if (LOG_LOCAL_LEVEL >= level)   { esp_rom_printf(DRAM_STR(format), esp_log_early_timestamp(), (const char *)TAG, ##__VA_ARGS__); }
+#else
+#define ESP_COREDUMP_LOG( level, format, ... )  // dummy define doing nothing
+#endif
+
 #define ESP_COREDUMP_LOGE( format, ... )  ESP_COREDUMP_LOG(ESP_LOG_ERROR, LOG_FORMAT(E, format), ##__VA_ARGS__)
 #define ESP_COREDUMP_LOGW( format, ... )  ESP_COREDUMP_LOG(ESP_LOG_WARN, LOG_FORMAT(W, format), ##__VA_ARGS__)
 #define ESP_COREDUMP_LOGI( format, ... )  ESP_COREDUMP_LOG(ESP_LOG_INFO, LOG_FORMAT(I, format), ##__VA_ARGS__)
@@ -58,8 +55,6 @@ extern "C" {
 /**
  * @brief The following macros defined below are used to create a version
  * numbering. This number is then used in the core dump header.
- *
- * @note COREDUMP_VERSION_CHIP is defined in ports header.
  */
 #define COREDUMP_VERSION_MAKE(_maj_, _min_) ( \
                                                 (((COREDUMP_VERSION_CHIP)&0xFFFF) << 16) | \
@@ -71,9 +66,9 @@ extern "C" {
 
 /* legacy bin coredumps (before IDF v4.1) has version set to 1 */
 #define COREDUMP_VERSION_BIN_LEGACY         COREDUMP_VERSION_MAKE(COREDUMP_VERSION_BIN, 1) // -> 0x0001
-#define COREDUMP_VERSION_BIN_CURRENT        COREDUMP_VERSION_MAKE(COREDUMP_VERSION_BIN, 2) // -> 0x0002
-#define COREDUMP_VERSION_ELF_CRC32          COREDUMP_VERSION_MAKE(COREDUMP_VERSION_ELF, 0) // -> 0x0100
-#define COREDUMP_VERSION_ELF_SHA256         COREDUMP_VERSION_MAKE(COREDUMP_VERSION_ELF, 1) // -> 0x0101
+#define COREDUMP_VERSION_BIN_CURRENT        COREDUMP_VERSION_MAKE(COREDUMP_VERSION_BIN, 3) // -> 0x0003
+#define COREDUMP_VERSION_ELF_CRC32          COREDUMP_VERSION_MAKE(COREDUMP_VERSION_ELF, 2) // -> 0x0102
+#define COREDUMP_VERSION_ELF_SHA256         COREDUMP_VERSION_MAKE(COREDUMP_VERSION_ELF, 3) // -> 0x0103
 #define COREDUMP_CURR_TASK_MARKER           0xDEADBEEF
 #define COREDUMP_CURR_TASK_NOT_FOUND        -1
 
@@ -90,6 +85,11 @@ extern "C" {
 #if (COREDUMP_CACHE_SIZE % 16) != 0
     #error "Coredump cache size must be a multiple of 16"
 #endif
+
+/**
+ * @brief Chip ID associated to this implementation.
+ */
+#define COREDUMP_VERSION_CHIP CONFIG_IDF_FIRMWARE_CHIP_ID
 
 
 typedef struct _core_dump_write_data_t
@@ -143,6 +143,7 @@ typedef struct _core_dump_header_t
     uint32_t tasks_num; /*!< Number of tasks */
     uint32_t tcb_sz;    /*!< Size of a TCB, in bytes */
     uint32_t mem_segs_num; /*!< Number of memory segments */
+    uint32_t chip_rev; /*!< Chip revision */
 } core_dump_header_t;
 
 /**

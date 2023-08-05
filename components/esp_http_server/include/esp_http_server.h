@@ -14,10 +14,37 @@
 #include <http_parser.h>
 #include <sdkconfig.h>
 #include <esp_err.h>
+#include <esp_event.h>
+#include <esp_event_base.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#define ESP_HTTPD_DEF_CTRL_PORT         (32768)    /*!< HTTP Server control socket port*/
+
+ESP_EVENT_DECLARE_BASE(ESP_HTTP_SERVER_EVENT);
+
+/**
+ * @brief   HTTP Server events id
+ */
+typedef enum {
+    HTTP_SERVER_EVENT_ERROR = 0,       /*!< This event occurs when there are any errors during execution */
+    HTTP_SERVER_EVENT_START,           /*!< This event occurs when HTTP Server is started */
+    HTTP_SERVER_EVENT_ON_CONNECTED,    /*!< Once the HTTP Server has been connected to the client, no data exchange has been performed */
+    HTTP_SERVER_EVENT_ON_HEADER,       /*!< Occurs when receiving each header sent from the client */
+    HTTP_SERVER_EVENT_HEADERS_SENT,     /*!< After sending all the headers to the client */
+    HTTP_SERVER_EVENT_ON_DATA,         /*!< Occurs when receiving data from the client */
+    HTTP_SERVER_EVENT_SENT_DATA,       /*!< Occurs when an ESP HTTP server session is finished */
+    HTTP_SERVER_EVENT_DISCONNECTED,    /*!< The connection has been disconnected */
+    HTTP_SERVER_EVENT_STOP,            /*!< This event occurs when HTTP Server is stopped */
+} esp_http_server_event_id_t;
+
+/** Argument structure for HTTP_SERVER_EVENT_ON_DATA and HTTP_SERVER_EVENT_SENT_DATA event */
+typedef struct {
+    int fd;         /*!< Session socket file descriptor */
+    int data_len;   /*!< Data length */
+} esp_http_server_event_data;
 
 /*
 note: esp_https_server.h includes a customized copy of this
@@ -28,7 +55,7 @@ initializer that should be kept in sync
         .stack_size         = 4096,                     \
         .core_id            = tskNO_AFFINITY,           \
         .server_port        = 80,                       \
-        .ctrl_port          = 32768,                    \
+        .ctrl_port          = ESP_HTTPD_DEF_CTRL_PORT,  \
         .max_open_sockets   = 7,                        \
         .max_uri_handlers   = 8,                        \
         .max_resp_headers   = 8,                        \
@@ -40,6 +67,12 @@ initializer that should be kept in sync
         .global_user_ctx_free_fn = NULL,                \
         .global_transport_ctx = NULL,                   \
         .global_transport_ctx_free_fn = NULL,           \
+        .enable_so_linger = false,                      \
+        .linger_timeout = 0,                            \
+        .keep_alive_enable = false,                     \
+        .keep_alive_idle = 0,                           \
+        .keep_alive_interval = 0,                       \
+        .keep_alive_count = 0,                          \
         .open_fn = NULL,                                \
         .close_fn = NULL,                               \
         .uri_match_fn = NULL                            \
@@ -147,7 +180,7 @@ typedef struct httpd_config {
      */
     uint16_t    ctrl_port;
 
-    uint16_t    max_open_sockets;   /*!< Max number of sockets/clients connected at any time*/
+    uint16_t    max_open_sockets;   /*!< Max number of sockets/clients connected at any time (3 sockets are reserved for internal working of the HTTP server) */
     uint16_t    max_uri_handlers;   /*!< Maximum allowed uri handlers */
     uint16_t    max_resp_headers;   /*!< Maximum allowed additional headers in HTTP response */
     uint16_t    backlog_conn;       /*!< Number of backlog connections */
@@ -185,6 +218,12 @@ typedef struct httpd_config {
      */
     httpd_free_ctx_fn_t global_transport_ctx_free_fn;
 
+    bool enable_so_linger;  /*!< bool to enable/disable linger */
+    int linger_timeout;     /*!< linger timeout (in seconds) */
+    bool keep_alive_enable; /*!< Enable keep-alive timeout */
+    int keep_alive_idle;    /*!< Keep-alive idle time. Default is 5 (second) */
+    int keep_alive_interval;/*!< Keep-alive interval time. Default is 5 (second) */
+    int keep_alive_count;   /*!< Keep-alive packet retry send count. Default is 3 counts */
     /**
      * Custom session opening callback.
      *
@@ -772,6 +811,40 @@ esp_err_t httpd_sess_set_send_override(httpd_handle_t hd, int sockfd, httpd_send
  *  - ESP_ERR_INVALID_ARG : Null arguments
  */
 esp_err_t httpd_sess_set_pending_override(httpd_handle_t hd, int sockfd, httpd_pending_func_t pending_func);
+
+/**
+ * @brief   Start an asynchronous request. This function can be called
+ *          in a request handler to get a request copy that can be used on a async thread.
+ *
+ * @note
+ * - This function is necessary in order to handle multiple requests simultaneously.
+ * See examples/async_requests for example usage.
+ * - You must call httpd_req_async_handler_complete() when you are done with the request.
+ *
+ * @param[in]   r       The request to create an async copy of
+ * @param[out]  out     A newly allocated request which can be used on an async thread
+ *
+ * @return
+ *  - ESP_OK : async request object created
+ */
+esp_err_t httpd_req_async_handler_begin(httpd_req_t *r, httpd_req_t **out);
+
+/**
+ * @brief   Mark an asynchronous request as completed. This will
+ *  - free the request memory
+ *  - relinquish ownership of the underlying socket, so it can be reused.
+ *  - allow the http server to close our socket if needed (lru_purge_enable)
+ *
+ * @note If async requests are not marked completed, eventually the server
+ * will no longer accept incoming connections. The server will log a
+ * "httpd_accept_conn: error in accept (23)" message if this happens.
+ *
+ * @param[in]   r   The request to mark async work as completed
+ *
+ * @return
+ *  - ESP_OK : async request was marked completed
+ */
+esp_err_t httpd_req_async_handler_complete(httpd_req_t *r);
 
 /**
  * @brief   Get the Socket Descriptor from the HTTP request

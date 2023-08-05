@@ -2,14 +2,10 @@
 #
 # SPDX-FileCopyrightText: 2018-2022 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
-
-from __future__ import division, print_function, unicode_literals
-
 import logging
 import os
 import random
 import sys
-from builtins import range, str
 
 import pytest
 
@@ -19,6 +15,7 @@ except ModuleNotFoundError:
     sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'tools', 'ci', 'python_packages'))
     from idf_http_server_test import adder as client
 
+from common_test_methods import get_env_config_variable
 from pytest_embedded import Dut
 
 # When running on local machine execute the following before running this script
@@ -28,9 +25,8 @@ from pytest_embedded import Dut
 
 @pytest.mark.esp32
 @pytest.mark.esp32c3
-@pytest.mark.esp32s2
 @pytest.mark.esp32s3
-@pytest.mark.wifi
+@pytest.mark.wifi_router
 def test_examples_protocol_http_server_persistence(dut: Dut) -> None:
 
     # Get binary file
@@ -43,7 +39,13 @@ def test_examples_protocol_http_server_persistence(dut: Dut) -> None:
 
     # Parse IP address of STA
     logging.info('Waiting to connect with AP')
-    got_ip = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)', timeout=30)[1].decode()
+    if dut.app.sdkconfig.get('EXAMPLE_WIFI_SSID_PWD_FROM_STDIN') is True:
+        dut.expect('Please input ssid password:')
+        env_name = 'wifi_router'
+        ap_ssid = get_env_config_variable(env_name, 'ap_ssid')
+        ap_password = get_env_config_variable(env_name, 'ap_password')
+        dut.write(f'{ap_ssid} {ap_password}')
+    got_ip = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=30)[1].decode()
     got_port = dut.expect(r"(?:[\s\S]*)Starting server on port: '(\d+)'", timeout=30)[1].decode()
 
     logging.info('Got IP   : {}'.format(got_ip))
@@ -56,6 +58,16 @@ def test_examples_protocol_http_server_persistence(dut: Dut) -> None:
     conn = client.start_session(got_ip, got_port)
     visitor = 0
     adder = 0
+
+    # Test login and logout
+    if client.getreq(conn, '/login').decode() != str(1):
+        raise RuntimeError
+    visitor += 1
+    dut.expect('/login visitor count = ' + str(visitor), timeout=30)
+    dut.expect('/login GET handler send ' + str(1), timeout=30)
+    if client.getreq(conn, '/logout').decode() != str(1):
+        raise RuntimeError
+    dut.expect('Logging out', timeout=30)
 
     # Test PUT request and initialize session context
     num = random.randint(0,100)

@@ -13,13 +13,10 @@
 #if CONFIG_IDF_TARGET_ESP32
 
 #include "esp_system.h"
-#include "driver/adc.h"
 #include "unity.h"
 #include "esp_system.h"
 #include "esp_event.h"
-#include "esp_wifi.h"
 #include "esp_log.h"
-#include "nvs_flash.h"
 #include "test_dac_audio_file.h"
 #include "driver/i2s.h"
 #include "driver/dac.h"

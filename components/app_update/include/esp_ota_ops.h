@@ -12,7 +12,8 @@
 #include <stddef.h>
 #include "esp_err.h"
 #include "esp_partition.h"
-#include "esp_image_format.h"
+#include "esp_app_desc.h"
+#include "esp_bootloader_desc.h"
 #include "esp_flash_partitions.h"
 #include "soc/soc_caps.h"
 
@@ -44,20 +45,27 @@ typedef uint32_t esp_ota_handle_t;
 /**
  * @brief   Return esp_app_desc structure. This structure includes app version.
  *
+ * @note This API is present for backward compatibility reasons. Alternative function
+ * with the same functionality is `esp_app_get_description`
+ *
  * Return description for running app.
  * @return Pointer to esp_app_desc structure.
  */
-const esp_app_desc_t *esp_ota_get_app_description(void);
+const esp_app_desc_t *esp_ota_get_app_description(void) __attribute__((deprecated("Please use esp_app_get_description instead")));
 
 /**
  * @brief   Fill the provided buffer with SHA256 of the ELF file, formatted as hexadecimal, null-terminated.
  * If the buffer size is not sufficient to fit the entire SHA256 in hex plus a null terminator,
  * the largest possible number of bytes will be written followed by a null.
+ *
+* @note This API is present for backward compatibility reasons. Alternative function
+ * with the same functionality is `esp_app_get_elf_sha256`
+ *
  * @param dst   Destination buffer
  * @param size  Size of the buffer
  * @return      Number of bytes written to dst (including null terminator)
  */
-int esp_ota_get_app_elf_sha256(char* dst, size_t size);
+int esp_ota_get_app_elf_sha256(char* dst, size_t size) __attribute__((deprecated("Please use esp_app_get_elf_sha256 instead")));
 
 /**
  * @brief   Commence an OTA update writing to the specified partition.
@@ -245,6 +253,23 @@ const esp_partition_t* esp_ota_get_next_update_partition(const esp_partition_t *
 esp_err_t esp_ota_get_partition_description(const esp_partition_t *partition, esp_app_desc_t *app_desc);
 
 /**
+ * @brief Returns the description structure of the bootloader.
+ *
+ * @param[in] bootloader_partition Pointer to bootloader partition.
+ *                                 If NULL, then the current bootloader is used (the default location).
+ *                                 offset = CONFIG_BOOTLOADER_OFFSET_IN_FLASH,
+ *                                 size = CONFIG_PARTITION_TABLE_OFFSET - CONFIG_BOOTLOADER_OFFSET_IN_FLASH,
+ * @param[out] desc     Structure of info about bootloader.
+ * @return
+ *  - ESP_OK                Successful.
+ *  - ESP_ERR_NOT_FOUND     Description structure is not found in the bootloader image. Magic byte is incorrect.
+ *  - ESP_ERR_INVALID_ARG   Arguments is NULL.
+ *  - ESP_ERR_INVALID_SIZE  Read would go out of bounds of the partition.
+ *  - or one of error codes from lower-level flash driver.
+ */
+esp_err_t esp_ota_get_bootloader_description(const esp_partition_t *bootloader_partition, esp_bootloader_desc_t *desc);
+
+/**
  * @brief Returns number of ota partitions provided in partition table.
  *
  * @return
@@ -327,7 +352,7 @@ typedef enum {
 /**
  * @brief Revokes the old signature digest. To be called in the application after the rollback logic.
  *
- * Relevant for Secure boot v2 on ESP32-S2, ESP32-S3, ESP32-C3, ESP32-H2 where upto 3 key digests can be stored (Key \#N-1, Key \#N, Key \#N+1).
+ * Relevant for Secure boot v2 on ESP32-S2, ESP32-S3, ESP32-C3, ESP32-C6, ESP32-H2 where up to 3 key digests can be stored (Key \#N-1, Key \#N, Key \#N+1).
  * When key \#N-1 used to sign an app is invalidated, an OTA update is to be sent with an app signed with key \#N-1 & Key \#N.
  * After successfully booting the OTA app should call this function to revoke Key \#N-1.
  *

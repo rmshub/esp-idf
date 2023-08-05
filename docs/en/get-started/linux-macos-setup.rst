@@ -1,4 +1,4 @@
-﻿********************************************
+********************************************
 Standard Toolchain Setup for Linux and macOS
 ********************************************
 
@@ -25,16 +25,16 @@ These are the steps for setting up the ESP-IDF for your {IDF_TARGET_NAME}.
 Step 1. Install Prerequisites
 =============================
 
-In order to use ESP-IDF with the {IDF_TARGET_NAME}, you need to install some software packages based on your Operating System. This setup guide will help you on getting everything installed on Linux and macOS based systems.
+In order to use ESP-IDF with the {IDF_TARGET_NAME}, you need to install some software packages based on your Operating System. This setup guide helps you on getting everything installed on Linux and macOS based systems.
 
 For Linux Users
 ~~~~~~~~~~~~~~~
 
-To compile using ESP-IDF you will need to get the following packages. The command to run depends on which distribution of Linux you are using:
+To compile using ESP-IDF, you need to get the following packages. The command to run depends on which distribution of Linux you are using:
 
 - Ubuntu and Debian::
 
-    sudo apt-get install git wget flex bison gperf python3 python3-venv cmake ninja-build ccache libffi-dev libssl-dev dfu-util libusb-1.0-0
+    sudo apt-get install git wget flex bison gperf python3 python3-pip python3-venv cmake ninja-build ccache libffi-dev libssl-dev dfu-util libusb-1.0-0
 
 - CentOS 7 & 8::
 
@@ -47,13 +47,13 @@ CentOS 7 is still supported but CentOS version 8 is recommended for a better use
     sudo pacman -S --needed gcc git make flex bison gperf python cmake ninja ccache dfu-util libusb
 
 .. note::
-    - CMake version 3.16 or newer is required for use with ESP-IDF. Run "tools/idf_tools.py install cmake" to install a suitable version if your OS versions doesn't have one.
+    - CMake version 3.16 or newer is required for use with ESP-IDF. Run "tools/idf_tools.py install cmake" to install a suitable version if your OS versions does not have one.
     - If you do not see your Linux distribution in the above list then please check its documentation to find out which command to use for package installation.
 
 For macOS Users
 ~~~~~~~~~~~~~~~
 
-ESP-IDF will use the version of Python installed by default on macOS.
+ESP-IDF uses the version of Python installed by default on macOS.
 
 - Install CMake & Ninja build:
 
@@ -74,16 +74,35 @@ ESP-IDF will use the version of Python installed by default on macOS.
 
      xcrun: error: invalid active developer path (/Library/Developer/CommandLineTools), missing xcrun at: /Library/Developer/CommandLineTools/usr/bin/xcrun
 
-   Then you will need to install the XCode command line tools to continue. You can install these by running ``xcode-select --install``.
+   Then you need to install the XCode command line tools to continue. You can install these by running ``xcode-select --install``.
+
+Apple M1 Users
+~~~~~~~~~~~~~~
+
+If you use Apple M1 platform and see an error like this::
+
+      WARNING: directory for tool xtensa-esp32-elf version esp-2021r2-patch3-8.4.0 is present, but tool was not found
+      ERROR: tool xtensa-esp32-elf has no installed versions. Please run 'install.sh' to install it.
+
+or::
+
+      zsh: bad CPU type in executable: ~/.espressif/tools/xtensa-esp32-elf/esp-2021r2-patch3-8.4.0/xtensa-esp32-elf/bin/xtensa-esp32-elf-gcc
+
+Then you need to install Apple Rosetta 2 by running
+
+.. code-block:: bash
+
+    /usr/sbin/softwareupdate --install-rosetta --agree-to-license
+
 
 Installing Python 3
 ~~~~~~~~~~~~~~~~~~~
 
-Based on macOS `Catalina 10.15 release notes`_, use of Python 2.7 is not recommended and Python 2.7 will not be included by default in future versions of macOS. Check what Python you currently have::
+Based on macOS `Catalina 10.15 release notes`_, use of Python 2.7 is not recommended and Python 2.7 is not included by default in future versions of macOS. Check what Python you currently have::
 
   python --version
 
-If the output is like ``Python 2.7.17``, your default interpreter is Python 2.7. If so, also check if Python 3 isn't already installed on your computer::
+If the output is like ``Python 2.7.17``, your default interpreter is Python 2.7. If so, also check if Python 3 is not already installed on your computer::
 
   python3 --version
 
@@ -112,13 +131,13 @@ Open Terminal, and run the following commands:
 
 .. include-build-file:: inc/git-clone-bash.inc
 
-ESP-IDF will be downloaded into ``~/esp/esp-idf``.
+ESP-IDF is downloaded into ``~/esp/esp-idf``.
 
 Consult :doc:`/versions` for information about which ESP-IDF version to use in a given situation.
 
 .. _get-started-set-up-tools:
 
-Step 3. Set up the tools
+Step 3. Set up the Tools
 ========================
 
 Aside from the ESP-IDF, you also need to install the tools used by ESP-IDF, such as the compiler, debugger, Python packages, etc, for projects supporting {IDF_TARGET_NAME}.
@@ -163,13 +182,19 @@ or with Fish shell
     cd ~/esp/esp-idf
     ./install.fish all
 
+.. note::
+   For macOS users, if an error like this is shown during any step::
+
+     <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:xxx)
+
+   You may run ``Install Certificates.command`` in the Python folder of your computer to install certificates. For details, see `Download Error While Installing ESP-IDF Tools <https://github.com/espressif/esp-idf/issues/4775>`_.
 
 Alternative File Downloads
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The tools installer downloads a number of files attached to GitHub Releases. If accessing GitHub is slow then it is possible to set an environment variable to prefer Espressif's download server for GitHub asset downloads.
 
-.. note:: This setting only controls individual tools downloaded from GitHub releases, it doesn't change the URLs used to access any Git repositories.
+.. note:: This setting only controls individual tools downloaded from GitHub releases, it does not change the URLs used to access any Git repositories.
 
 To prefer the Espressif download server when installing tools, use the following sequence of commands when running ``install.sh``:
 
@@ -179,7 +204,7 @@ To prefer the Espressif download server when installing tools, use the following
     export IDF_GITHUB_ASSETS="dl.espressif.com/github_assets"
     ./install.sh
 
-Customizing the tools installation path
+Customizing the Tools Installation Path
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The scripts introduced in this step install compilation tools required by ESP-IDF inside the user home directory: ``$HOME/.espressif`` on Linux. If you wish to install the tools into a different directory, set the environment variable ``IDF_TOOLS_PATH`` before running the installation scripts. Make sure that your user account has sufficient permissions to read and write this path.
@@ -188,7 +213,7 @@ If changing the ``IDF_TOOLS_PATH``, make sure it is set to the same value every 
 
 .. _get-started-set-up-env:
 
-Step 4. Set up the environment variables
+Step 4. Set up the Environment Variables
 ========================================
 
 The installed tools are not yet added to the PATH environment variable. To make the tools usable from the command line, some environment variables must be set. ESP-IDF provides another script which does that.
@@ -249,12 +274,17 @@ Once the new tools are installed, update the environment using the Export script
 Related Documents
 =================
 
+    * :doc:`establish-serial-connection`
+    * `Eclipse Plugin <https://github.com/espressif/idf-eclipse-plugin/blob/master/README.md>`_
+    * `VSCode Extension <https://github.com/espressif/vscode-esp-idf-extension/blob/master/docs/tutorial/install.md>`_
+    * :doc:`../api-guides/tools/idf-monitor`
+
 .. toctree::
+    :hidden:
     :maxdepth: 1
 
     establish-serial-connection
-    eclipse-setup
-    vscode-setup
+    flashing-troubleshooting
     ../api-guides/tools/idf-monitor
 
 .. _AUR: https://wiki.archlinux.org/index.php/Arch_User_Repository

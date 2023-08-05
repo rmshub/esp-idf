@@ -11,12 +11,14 @@
 #include "utils/common.h"
 #include "utils/eloop.h"
 #include "common/ieee802_11_defs.h"
+#include "common/sae.h"
 #include "crypto/crypto.h"
 #include "hostapd.h"
 #include "ieee802_1x.h"
 #include "wpa_auth.h"
 #include "ap_config.h"
 #include "sta_info.h"
+#include "esp_wps_i.h"
 
 static void ap_sta_delayed_1x_auth_fail_cb(void *eloop_ctx, void *timeout_ctx);
 void hostapd_wps_eap_completed(struct hostapd_data *hapd);
@@ -103,6 +105,15 @@ void ap_free_sta(struct hostapd_data *hapd, struct sta_info *sta)
 
 	hapd->num_sta--;
 
+#ifdef CONFIG_SAE
+	sae_clear_data(sta->sae);
+	os_free(sta->sae);
+	if (sta->lock) {
+		os_semphr_give(sta->lock);
+		os_mutex_delete(sta->lock);
+		sta->lock = NULL;
+	}
+#endif /* CONFIG_SAE */
 	wpa_auth_sta_deinit(sta->wpa_sm);
 #ifdef CONFIG_WPS_REGISTRAR
 	if (ap_sta_pending_delayed_1x_auth_fail_disconnect(hapd, sta))
@@ -161,13 +172,16 @@ struct sta_info * ap_sta_add(struct hostapd_data *hapd, const u8 *addr)
 	hapd->sta_list = sta;
 	hapd->num_sta++;
 	ap_sta_hash_add(hapd, sta);
+#ifdef CONFIG_SAE
+	sta->sae_commit_processing = false;
+	sta->remove_pending = false;
+#endif /* CONFIG_SAE */
 
 	return sta;
 }
 
 static void ap_sta_delayed_1x_auth_fail_cb(void *eloop_ctx, void *timeout_ctx)
 {
-	struct hostapd_data *hapd = eloop_ctx;
 	struct sta_info *sta = timeout_ctx;
 	u16 reason;
 
@@ -177,8 +191,6 @@ static void ap_sta_delayed_1x_auth_fail_cb(void *eloop_ctx, void *timeout_ctx)
 
 	reason = WLAN_REASON_IEEE_802_1X_AUTH_FAILED;
 	esp_wifi_ap_deauth_internal(sta->addr, reason);
-	if (sta->flags & WLAN_STA_WPS)
-		hostapd_wps_eap_completed(hapd);
 }
 
 
@@ -197,6 +209,8 @@ void ap_sta_delayed_1x_auth_fail_disconnect(struct hostapd_data *hapd,
 	eloop_cancel_timeout(ap_sta_delayed_1x_auth_fail_cb, hapd, sta);
 	eloop_register_timeout(0, 10000, ap_sta_delayed_1x_auth_fail_cb,
 			       hapd, sta);
+	if (wps_get_status() == WPS_STATUS_PENDING)
+		wps_set_status(WPS_STATUS_SUCCESS);
 }
 
 

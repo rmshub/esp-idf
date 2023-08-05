@@ -313,6 +313,10 @@ esp_err_t esp_flash_encrypt_enable(void)
 
     ESP_LOGI(TAG, "Flash encryption completed");
 
+#ifdef CONFIG_EFUSE_VIRTUAL
+    ESP_LOGW(TAG, "Flash encryption not really completed. Must disable virtual efuses");
+#endif
+
     return err;
 }
 
@@ -429,7 +433,8 @@ esp_err_t esp_flash_encrypt_region(uint32_t src_addr, size_t data_length)
         return ESP_FAIL;
     }
 
-    wdt_hal_context_t rtc_wdt_ctx = {.inst = WDT_RWDT, .rwdt_dev = &RTCCNTL};
+    wdt_hal_context_t rtc_wdt_ctx = RWDT_HAL_CONTEXT_DEFAULT();
+
     for (size_t i = 0; i < data_length; i += FLASH_SECTOR_SIZE) {
         wdt_hal_write_protect_disable(&rtc_wdt_ctx);
         wdt_hal_feed(&rtc_wdt_ctx);

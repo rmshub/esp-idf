@@ -224,13 +224,17 @@ esp_err_t esp_vfs_fat_info(const char* base_path,
     }
     uint64_t total_sectors = ((uint64_t)(fs->n_fatent - 2)) * fs->csize;
     uint64_t free_sectors = ((uint64_t)free_clusters) * fs->csize;
+    WORD sector_size = FF_MIN_SS; // 512
+#if FF_MAX_SS != FF_MIN_SS
+    sector_size = fs->ssize;
+#endif
 
     // Assuming the total size is < 4GiB, should be true for SPI Flash
     if (out_total_bytes != NULL) {
-        *out_total_bytes = total_sectors * fs->ssize;
+        *out_total_bytes = total_sectors * sector_size;
     }
     if (out_free_bytes != NULL) {
-        *out_free_bytes = free_sectors * fs->ssize;
+        *out_free_bytes = free_sectors * sector_size;
     }
     return ESP_OK;
 }
@@ -260,7 +264,7 @@ static int fat_mode_conv(int m)
         res |= FA_CREATE_NEW;
     } else if ((m & O_CREAT) && (m & O_TRUNC)) {
         res |= FA_CREATE_ALWAYS;
-    } else if (m & O_APPEND) {
+    } else if ((m & O_APPEND) || (m & O_CREAT)) {
         res |= FA_OPEN_ALWAYS;
     } else {
         res |= FA_OPEN_EXISTING;
@@ -572,7 +576,11 @@ static off_t vfs_fat_lseek(void* ctx, int fd, off_t offset, int mode)
         return -1;
     }
 
-    ESP_LOGD(TAG, "%s: offset=%ld, filesize:=%d", __func__, new_pos, f_size(file));
+#if FF_FS_EXFAT
+    ESP_LOGD(TAG, "%s: offset=%ld, filesize:=%" PRIu64, __func__, new_pos, f_size(file));
+#else
+    ESP_LOGD(TAG, "%s: offset=%ld, filesize:=%" PRIu32, __func__, new_pos, f_size(file));
+#endif
     FRESULT res = f_lseek(file, new_pos);
     if (res != FR_OK) {
         ESP_LOGD(TAG, "%s: fresult=%d", __func__, res);
@@ -592,6 +600,7 @@ static int vfs_fat_fstat(void* ctx, int fd, struct stat * st)
     st->st_mtime = 0;
     st->st_atime = 0;
     st->st_ctime = 0;
+    st->st_blksize = CONFIG_FATFS_VFS_FSTAT_BLKSIZE;
     return 0;
 }
 

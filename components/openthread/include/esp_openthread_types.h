@@ -11,7 +11,13 @@
 #include <sys/select.h>
 
 #include "esp_event_base.h"
+#include "driver/gpio.h"
+#include "driver/spi_master.h"
+#include "driver/spi_slave.h"
+#include "driver/uart.h"
+#include "hal/gpio_types.h"
 #include "hal/uart_types.h"
+#include "openthread/thread.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -21,10 +27,12 @@ extern "C" {
  * @brief OpenThread event declarations
  *
  */
-typedef enum
-{
+typedef enum {
     OPENTHREAD_EVENT_START,                     /*!< OpenThread stack start */
     OPENTHREAD_EVENT_STOP,                      /*!< OpenThread stack stop */
+    OPENTHREAD_EVENT_DETACHED,                  /*!< OpenThread detached */
+    OPENTHREAD_EVENT_ATTACHED,                  /*!< OpenThread attached */
+    OPENTHREAD_EVENT_ROLE_CHANGED,              /*!< OpenThread role changed */
     OPENTHREAD_EVENT_IF_UP,                     /*!< OpenThread network interface up */
     OPENTHREAD_EVENT_IF_DOWN,                   /*!< OpenThread network interface down */
     OPENTHREAD_EVENT_GOT_IP6,                   /*!< OpenThread stack added IPv6 address */
@@ -34,6 +42,7 @@ typedef enum
     OPENTHREAD_EVENT_TREL_ADD_IP6,              /*!< OpenThread stack added TREL IPv6 address */
     OPENTHREAD_EVENT_TREL_REMOVE_IP6,           /*!< OpenThread stack removed TREL IPv6 address */
     OPENTHREAD_EVENT_TREL_MULTICAST_GROUP_JOIN, /*!< OpenThread stack joined TREL IPv6 multicast group */
+    OPENTHREAD_EVENT_SET_DNS_SERVER,            /*!< OpenThread stack set DNS server >*/
 } esp_openthread_event_t;
 
 /**
@@ -41,6 +50,15 @@ typedef enum
  *
  */
 ESP_EVENT_DECLARE_BASE(OPENTHREAD_EVENT);
+
+/**
+ * @brief OpenThread role changed event data
+ *
+ */
+typedef struct {
+    otDeviceRole previous_role; /*!< Previous Thread role */
+    otDeviceRole current_role;  /*!< Current Thread role */
+} esp_openthread_role_changed_event_t;
 
 /**
  * This structure represents a context for a select() based mainloop.
@@ -61,16 +79,38 @@ typedef struct {
 typedef struct {
     uart_port_t   port;        /*!< UART port number */
     uart_config_t uart_config; /*!< UART configuration, see uart_config_t docs */
-    int           rx_pin;      /*!< UART RX pin */
-    int           tx_pin;      /*!< UART TX pin */
+    gpio_num_t    rx_pin;      /*!< UART RX pin */
+    gpio_num_t    tx_pin;      /*!< UART TX pin */
 } esp_openthread_uart_config_t;
+
+/**
+ * @brief The spi port config for OpenThread.
+ *
+ */
+typedef struct {
+    spi_host_device_t             host_device;      /*!< SPI host device */
+    spi_dma_chan_t                dma_channel;      /*!< DMA channel */
+    spi_bus_config_t              spi_interface;    /*!< SPI bus */
+    spi_device_interface_config_t spi_device;       /*!< SPI peripheral device */
+    gpio_num_t                    intr_pin;         /*!< SPI interrupt pin */
+} esp_openthread_spi_host_config_t;
+
+/**
+ * @brief The spi slave config for OpenThread.
+ *
+ */
+typedef struct {
+    spi_host_device_t            host_device;  /*!< SPI host device */
+    spi_bus_config_t             bus_config;   /*!< SPI bus config */
+    spi_slave_interface_config_t slave_config; /*!< SPI slave config */
+    gpio_num_t                   intr_pin;     /*!< SPI interrupt pin */
+} esp_openthread_spi_slave_config_t;
 
 /**
  * @brief The radio mode of OpenThread.
  *
  */
-typedef enum
-{
+typedef enum {
     RADIO_MODE_NATIVE = 0x0,   /*!< Use the native 15.4 radio */
     RADIO_MODE_UART_RCP = 0x1, /*!< UART connection to a 15.4 capable radio co-processor (RCP) */
     RADIO_MODE_SPI_RCP = 0x2,  /*!< SPI connection to a 15.4 capable radio co-processor (RCP) */
@@ -80,11 +120,11 @@ typedef enum
  * @brief How OpenThread connects to the host.
  *
  */
-typedef enum
-{
+typedef enum {
     HOST_CONNECTION_MODE_NONE = 0x0,     /*!< Disable host connection */
     HOST_CONNECTION_MODE_CLI_UART = 0x1, /*!< CLI UART connection to the host */
     HOST_CONNECTION_MODE_RCP_UART = 0x2, /*!< RCP UART connection to the host */
+    HOST_CONNECTION_MODE_RCP_SPI = 0x3,  /*!< RCP SPI connection to the host */
 } esp_openthread_host_connection_mode_t;
 
 /**
@@ -92,8 +132,11 @@ typedef enum
  *
  */
 typedef struct {
-    esp_openthread_radio_mode_t  radio_mode;        /*!< The radio mode */
-    esp_openthread_uart_config_t radio_uart_config; /*!< The uart configuration to RCP */
+    esp_openthread_radio_mode_t radio_mode; /*!< The radio mode */
+    union {
+        esp_openthread_uart_config_t     radio_uart_config; /*!< The uart configuration to RCP */
+        esp_openthread_spi_host_config_t radio_spi_config;  /*!< The spi configuration to RCP */
+    };
 } esp_openthread_radio_config_t;
 
 /**
@@ -102,7 +145,10 @@ typedef struct {
  */
 typedef struct {
     esp_openthread_host_connection_mode_t host_connection_mode; /*!< The host connection mode */
-    esp_openthread_uart_config_t          host_uart_config;     /*!< The uart configuration to host */
+    union {
+        esp_openthread_uart_config_t      host_uart_config; /*!< The uart configuration to host */
+        esp_openthread_spi_slave_config_t spi_slave_config; /*!< The spi configuration to host */
+    };
 } esp_openthread_host_connection_config_t;
 
 /**

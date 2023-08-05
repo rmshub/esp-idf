@@ -6,6 +6,8 @@
  * SPDX-License-Identifier: Unlicense OR CC0-1.0
  */
 
+#include <inttypes.h>
+
 #include "run_tc.h"
 #include "test_env.h"
 #include "wifi_unit.h"
@@ -48,7 +50,7 @@ static void wifi_tc_sta_throughput_timeout(void *arg)
         uint32_t speed = report[1] * 8 / (now - last_timestamp);
         accumulate_speed += speed;
         statistic_count += 1;
-        printf("speed: %d kbps average speed: %lld kbps\n", speed, accumulate_speed / statistic_count );
+        printf("speed: %" PRIu32 " kbps average speed: %lld kbps\n", speed, accumulate_speed / statistic_count );
         report[1] = 0;
         report[0] = now;
     }
@@ -230,7 +232,7 @@ void ble_scan_start(void *param)
 
 void ble_scan_end(void)
 {
-    ESP_LOGI(TAG, "%s \n", __func__);
+    ESP_LOGI(TAG, "%s", __func__);
 }
 
 tc_t tc_case[] = {
@@ -264,7 +266,7 @@ static void run_task(void *arg)
             if ( msg.case_id < sizeof(tc_case) / sizeof(tc_case[0]) ) {
                 xTaskCreatePinnedToCore(excute_case, tc_case_table->name, 4096, &tc_case_table[msg.case_id], RUN_TASK_PRIORITY, NULL, 0);
             } else {
-                ESP_LOGW(TAG, "msg.case_id  %d\n", msg.case_id);
+                ESP_LOGW(TAG, "msg.case_id  %d", msg.case_id);
             }
 
         }

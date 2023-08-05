@@ -20,7 +20,7 @@ if(NOT BOOTLOADER_BUILD)
         if(CMAKE_C_COMPILER_ID MATCHES "GNU")
             list(APPEND compile_options "-freorder-blocks")
         endif()
-    elseif(CONFIG_COMPILER_OPTIMIZATION_DEFAULT)
+    elseif(CONFIG_COMPILER_OPTIMIZATION_DEBUG)
         list(APPEND compile_options "-Og")
     elseif(CONFIG_COMPILER_OPTIMIZATION_NONE)
         list(APPEND compile_options "-O0")
@@ -102,8 +102,21 @@ if(CMAKE_C_COMPILER_ID MATCHES "Clang")
     # Disable Clang warnings for atomic operations with access size
     # more then 4 bytes
     list(APPEND compile_options "-Wno-atomic-alignment")
+    # several warnings in wpa_supplicant component
+    list(APPEND compile_options "-Wno-unused-but-set-variable")
     # Clang also produces many -Wunused-function warnings which GCC doesn't.
-    # However these aren't treated as errors.
+    list(APPEND compile_options "-Wno-unused-function")
+    # many warnings in bluedroid code
+    # warning: field 'hdr' with variable sized type 'BT_HDR' not at the end of a struct or class is a GNU extension
+    list(APPEND compile_options "-Wno-gnu-variable-sized-type-not-at-end")
+    # several warnings in bluedroid code
+    list(APPEND compile_options "-Wno-constant-logical-operand")
+    # warning: '_Static_assert' with no message is a C2x extension
+    list(APPEND compile_options "-Wno-c2x-extensions")
+    # warning on xMPU_SETTINGS for esp32s2 has size 0 for C and 1 for C++
+    list(APPEND compile_options "-Wno-extern-c-compat")
+    # warning: implicit truncation from 'int' to a one-bit wide bit-field changes value from 1 to -1
+    list(APPEND compile_options "-Wno-single-bit-bitfield-constant-conversion")
 endif()
 # More warnings may exist in unit tests and example projects.
 
@@ -168,10 +181,14 @@ if(NOT ${CMAKE_C_COMPILER_VERSION} VERSION_LESS 8.0.0)
     endif()
 endif()
 
+if(CONFIG_COMPILER_DISABLE_GCC12_WARNINGS)
+    list(APPEND compile_options "-Wno-address"
+                                "-Wno-use-after-free")
+endif()
+
 # GCC-specific options
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     list(APPEND compile_options "-fstrict-volatile-bitfields"
-                                "-Wno-error=unused-but-set-variable"
                                 )
 endif()
 
@@ -205,8 +222,12 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU")
     list(APPEND compile_options "-fno-tree-switch-conversion")
 endif()
 
-if(CMAKE_C_COMPILER_ID MATCHES "LLVM")
+if(CMAKE_C_COMPILER_ID MATCHES "Clang")
     list(APPEND compile_options "-fno-use-cxa-atexit")
+endif()
+
+if(COMPILER_RT_LIB_NAME)
+    list(APPEND link_options "-rtlib=${CONFIG_COMPILER_RT_LIB_NAME}")
 endif()
 
 # For the transition period from 32-bit time_t to 64-bit time_t,

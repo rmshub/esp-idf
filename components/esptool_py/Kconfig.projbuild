@@ -1,8 +1,9 @@
 menu "Serial flasher config"
+    depends on !APP_BUILD_TYPE_PURE_RAM_APP
 
     config ESPTOOLPY_NO_STUB
         bool "Disable download stub"
-        default "y" if IDF_TARGET_ESP32H2 && IDF_ENV_FPGA # TODO: IDF-4288
+        default "y" if IDF_ENV_FPGA || IDF_ENV_BRINGUP
         default "n"
 
         help
@@ -13,6 +14,25 @@ menu "Serial flasher config"
         depends on IDF_TARGET_ESP32S3
         bool "Enable Octal Flash"
         default n
+
+    config ESPTOOLPY_FLASH_MODE_AUTO_DETECT
+        depends on IDF_TARGET_ESP32S3
+        bool "Choose flash mode automatically (please read help)"
+        default y
+        help
+            This config option helps decide whether flash is Quad or Octal, but please note some limitations:
+
+            1. If the flash chip is an Octal one, even if one of "QIO", "QOUT", "DIO", "DOUT" options is
+               selected in `ESPTOOLPY_FLASHMODE`, our code will automatically change the
+               mode to "OPI" and the sample mode will be STR.
+            2. If the flash chip is a Quad one, even if "OPI" is selected in `ESPTOOLPY_FLASHMODE`, our code will
+               automatically change the mode to "DIO".
+            3. Please do not rely on this option when you are pretty sure that you are using Octal flash,
+               please enable `ESPTOOLPY_OCT_FLASH` option, then you can choose `DTR` sample mode
+               in `ESPTOOLPY_FLASH_SAMPLE_MODE`. Otherwise, only `STR` mode is available.
+            4. Enabling this feature reduces available internal RAM size (around 900 bytes).
+               If your IRAM space is insufficient and you're aware of your flash type,
+               disable this option and select corresponding flash type options.
 
     choice ESPTOOLPY_FLASHMODE
         prompt "Flash SPI mode"
@@ -69,15 +89,29 @@ menu "Serial flasher config"
     choice ESPTOOLPY_FLASHFREQ
         prompt "Flash SPI speed"
         default ESPTOOLPY_FLASHFREQ_40M if IDF_TARGET_ESP32
-        default ESPTOOLPY_FLASHFREQ_80M if IDF_TARGET_ESP32S2 || IDF_TARGET_ESP32S3 || IDF_TARGET_ESP32C3
+        default ESPTOOLPY_FLASHFREQ_80M if ESPTOOLPY_FLASHFREQ_80M_DEFAULT
         default ESPTOOLPY_FLASHFREQ_60M if IDF_TARGET_ESP32C2
-        default ESPTOOLPY_FLASHFREQ_48M if IDF_TARGET_ESP32H2
         config ESPTOOLPY_FLASHFREQ_120M
             bool "120 MHz"
-            depends on SOC_MEMSPI_SRC_FREQ_120M && ESPTOOLPY_FLASH_SAMPLE_MODE_STR
+            select SPI_FLASH_HPM_ENABLE
+            depends on SOC_MEMSPI_SRC_FREQ_120M && \
+                (ESPTOOLPY_FLASH_SAMPLE_MODE_STR || IDF_EXPERIMENTAL_FEATURES)
+            help
+                - Flash 120 MHz SDR mode is stable.
+                - Flash 120 MHz DDR mode is an experimental feature, it works when
+                  the temperature is stable.
+
+                    Risks:
+                        If your chip powers on at a certain temperature, then after the temperature
+                        increases or decreases by approximately 20 Celsius degrees (depending on the
+                        chip), the program will crash randomly.
+
         config ESPTOOLPY_FLASHFREQ_80M
             bool "80 MHz"
             depends on SOC_MEMSPI_SRC_FREQ_80M_SUPPORTED
+        config ESPTOOLPY_FLASHFREQ_64M
+            bool "64 MHz"
+            depends on SOC_MEMSPI_SRC_FREQ_64M_SUPPORTED
         config ESPTOOLPY_FLASHFREQ_60M
             bool "60 MHz"
             depends on SOC_MEMSPI_SRC_FREQ_60M_SUPPORTED
@@ -87,6 +121,9 @@ menu "Serial flasher config"
         config ESPTOOLPY_FLASHFREQ_40M
             bool "40 MHz"
             depends on SOC_MEMSPI_SRC_FREQ_40M_SUPPORTED
+        config ESPTOOLPY_FLASHFREQ_32M
+            bool "32 MHz"
+            depends on SOC_MEMSPI_SRC_FREQ_32M_SUPPORTED
         config ESPTOOLPY_FLASHFREQ_30M
             bool "30 MHz"
             depends on SOC_MEMSPI_SRC_FREQ_30M_SUPPORTED
@@ -99,10 +136,19 @@ menu "Serial flasher config"
         config ESPTOOLPY_FLASHFREQ_20M
             bool "20 MHz"
             depends on SOC_MEMSPI_SRC_FREQ_20M_SUPPORTED
+        config ESPTOOLPY_FLASHFREQ_16M
+            bool "16 MHz"
+            depends on SOC_MEMSPI_SRC_FREQ_16M_SUPPORTED
         config ESPTOOLPY_FLASHFREQ_15M
             bool "15 MHz"
             depends on SOC_MEMSPI_SRC_FREQ_15M_SUPPORTED
     endchoice
+
+    config ESPTOOLPY_FLASHFREQ_80M_DEFAULT
+        bool
+        default y if IDF_TARGET_ESP32S2 || IDF_TARGET_ESP32S3 || IDF_TARGET_ESP32C3 || IDF_TARGET_ESP32C6
+        help
+            This is an invisible item, used to define the targets that defaults to use 80MHz Flash SPI speed.
 
     config ESPTOOLPY_FLASHFREQ
         string
@@ -111,12 +157,15 @@ menu "Serial flasher config"
         default '80m' if ESPTOOLPY_FLASHFREQ_120M
         default '80m' if ESPTOOLPY_FLASHFREQ_80M
         default '60m' if ESPTOOLPY_FLASHFREQ_60M
+        default '48m' if ESPTOOLPY_FLASHFREQ_64M # For 0xf in esptool
         default '48m' if ESPTOOLPY_FLASHFREQ_48M
+        default '24m' if ESPTOOLPY_FLASHFREQ_32M # For 0x0 in esptool
         default '30m' if ESPTOOLPY_FLASHFREQ_30M
         default '24m' if ESPTOOLPY_FLASHFREQ_24M
         default '40m' if ESPTOOLPY_FLASHFREQ_40M
         default '26m' if ESPTOOLPY_FLASHFREQ_26M
         default '20m' if ESPTOOLPY_FLASHFREQ_20M
+        default '12m' if ESPTOOLPY_FLASHFREQ_16M # For 0x2 in esptool
         default '20m' # if no clock can match in bin headers, go with minimal.
 
 

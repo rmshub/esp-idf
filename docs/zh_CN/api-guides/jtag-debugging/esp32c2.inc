@@ -11,9 +11,9 @@
 
 ::
 
-    openocd -f board/esp32c2-BOARD_NAME.cfg
+    openocd -f board/esp32c2-ftdi.cfg
 
-.. |run-openocd-device-name| replace:: ESP32C2
+.. |run-openocd-device-name| replace:: ESP32-C2 development board with ESP-Prog
 
 ---
 
@@ -21,9 +21,26 @@
 
 ::
 
-    CHIP SPECIFIC LOG OUTPUT
+    user-name@computer-name:~/esp/esp-idf$ openocd -f board/esp32c2-ftdi.cfg
+    Open On-Chip Debugger v0.11.0-esp32-20221026 (2022-10-26-14:48)
+    Licensed under GNU GPL v2
+    For bug reports, read
+            http://openocd.org/doc/doxygen/bugs.html
+    adapter speed: 20000 kHz
 
-.. |run-openocd-cfg-file-err| replace:: ``Can't find board/esp32c2-BOARD_NAME.cfg``
+    Info : Listening on port 6666 for tcl connections
+    Info : Listening on port 4444 for telnet connections
+    Warn : libusb_detach_kernel_driver() failed with LIBUSB_ERROR_ACCESS, trying to continue anyway
+    Info : ftdi: if you experience problems at higher adapter clocks, try the command "ftdi tdo_sample_edge falling"
+    Info : clock speed 20000 kHz
+    Info : JTAG tap: esp32c2.cpu tap/device found: 0x0000cc25 (mfg: 0x612 (Espressif Systems), part: 0x000c, ver: 0x0)
+    Info : datacount=2 progbufsize=16
+    Info : Examined RISC-V core; found 1 harts
+    Info :  hart 0: XLEN=32, misa=0x40101104
+    Info : starting gdb server for esp32c2 on 3333
+    Info : Listening on port 3333 for gdb connections
+
+.. |run-openocd-cfg-file-err| replace:: ``Can't find board/esp32c2-ftdi.cfg``
 
 ---
 
@@ -31,7 +48,7 @@
 
 ::
 
-    openocd -f board/esp32c2-BOARD_NAME.cfg -c "program_esp filename.bin 0x10000 verify exit"
+    openocd -f board/esp32c2-ftdi.cfg -c "program_esp filename.bin 0x10000 verify exit"
 
 ---
 
@@ -39,7 +56,7 @@
 
 .. code-block:: bash
 
-    src/openocd -f board/esp32c2-BOARD_NAME.cfg
+    src/openocd -f board/esp32c2-ftdi.cfg
 
 ---
 
@@ -47,13 +64,13 @@
 
 .. code-block:: batch
 
-    src\openocd -f board/esp32c2-BOARD_NAME.cfg
+    src\openocd -f board/esp32c2-ftdi.cfg
 
 ---
 
 .. idf-py-openocd-default-cfg
 
-.. |idf-py-def-cfg| replace:: ``-f board/esp32c2-BOARD_NAME.cfg``
+.. |idf-py-def-cfg| replace:: ``-f board/esp32c2-ftdi.cfg``
 
 ---
 
@@ -61,20 +78,24 @@
 
 ::
 
-    openocd -f board/esp32c2-BOARD_NAME.cfg -c "init; halt; esp appimage_offset 0x210000"
+    openocd -f board/esp32c2-ftdi.cfg -c "init; halt; esp appimage_offset 0x210000"
 
 ---
 
 .. openocd-cfg-files
 
-.. list-table:: OpenOCD configuration files for ESP32C2
+.. list-table:: OpenOCD configuration files for ESP32-C2
     :widths: 25 75
     :header-rows: 1
 
     * - Name
       - Description
-    * - Content
-      - Content
+    * - ``board/esp32c2-ftdi.cfg``
+      - Board configuration file for ESP32-C2 debug through an ESP-Prog compatible FTDI, includes target and adapter configuration.
+    * - ``target/esp32c2.cfg``
+      - ESP32-C2 target configuration file. Can be used together with one of the ``interface/`` configuration files.
+    * - ``interface/ftdi/esp32_devkitj_v1.cfg``
+      - JTAG adapter configuration file for ESP-Prog boards.
 
 ---
 
@@ -86,23 +107,20 @@
 
 .. jtag-pins
 
-.. list-table:: ESP32C2 pins and JTAG signals
+.. list-table:: ESP32-C2 pins and JTAG signals
     :widths: 25 75
     :header-rows: 1
 
-    * - ESP32C2 Pin
+    * - ESP32-C2 Pin
       - JTAG Signal
-    * - MTDO / GPIOX
+    * - MTDO / GPIO7
       - TDO
-    * - MTDI / GPIOX
+    * - MTDI / GPIO5
       - TDI
-    * - MTCK / GPIOX
+    * - MTCK / GPIO6
       - TCK
-    * - MTMS / GPIOX
+    * - MTMS / GPIO4
       - TMS
-
-.. |jtag-sel-gpio| replace:: GPIOX
-.. |jtag-gpio-list| replace:: GPIOX
 
 ---
 
@@ -110,7 +128,7 @@
 
 ::
 
-    openocd -l openocd_log.txt -d3 -f board/esp32c2-BOARD_NAME.cfg
+    openocd -l openocd_log.txt -d3 -f board/esp32c2-ftdi.cfg
 
 ---
 
@@ -118,7 +136,7 @@
 
 ::
 
-    openocd -d3 -f board/esp32c2-BOARD_NAME.cfg 2>&1 | tee openocd.log
+    openocd -d3 -f board/esp32c2-ftdi.cfg 2>&1 | tee openocd.log
 
 ---
 
@@ -132,8 +150,8 @@
 
 .. devkit-defs
 
-.. |devkit-name| replace:: ESP32C2
-.. |devkit-name-with-link| replace:: LINK TO DEVKIT
+.. |devkit-name| replace:: There is no ESP32-C2 devkit with FT2232H
+.. |devkit-name-with-link| replace:: add a link here if such a devkit is added.
 
 ---
 

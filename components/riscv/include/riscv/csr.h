@@ -36,6 +36,51 @@ extern "C" {
 #include <stdbool.h>
 #include <sys/param.h>
 #include "encoding.h"
+#include "esp_assert.h"
+
+/********************************************************
+ Physical Memory Attributes (PMA) register fields
+ (privileged spec)
+ ********************************************************/
+
+/********************************************************
+   PMA CSR and TOR & NAPOT macros
+ ********************************************************/
+#define CSR_PMACFG0  0xBC0
+#define CSR_PMAADDR0 0xBD0
+
+#define CSR_PMACFG(i)  (CSR_PMACFG0 + (i))
+#define CSR_PMAADDR(i)  (CSR_PMAADDR0 + (i))
+
+#define PMA_EN    BIT(0)
+#define PMA_R     BIT(4)
+#define PMA_W     BIT(3)
+#define PMA_X     BIT(2)
+#define PMA_L     BIT(29)
+#define PMA_SHIFT 2
+
+#define PMA_TOR   0x40000000
+#define PMA_NA4   0x80000000
+#define PMA_NAPOT 0xC0000000
+
+#define PMA_NONCACHEABLE     BIT(27)
+#define PMA_WRITETHROUGH     BIT(26)
+#define PMA_WRITEMISSNOALLOC BIT(25)
+#define PMA_READMISSNOALLOC  BIT(24)
+
+#define PMA_ENTRY_SET_TOR(ENTRY, ADDR, CFG)                            \
+    do {                                                               \
+        RV_WRITE_CSR((CSR_PMAADDR0) + (ENTRY), (ADDR) >> (PMA_SHIFT)); \
+        RV_WRITE_CSR((CSR_PMACFG0) + (ENTRY), CFG);                    \
+    } while (0)
+
+#define PMA_ENTRY_SET_NAPOT(ENTRY, ADDR, SIZE, CFG)                                \
+    do {                                                                           \
+        ESP_STATIC_ASSERT(__builtin_popcount((SIZE)) == 1, "Size must be a power of 2"); \
+        ESP_STATIC_ASSERT((ADDR) % ((SIZE)) == 0, "Addr must be aligned to size"); \
+        RV_WRITE_CSR((CSR_PMAADDR0) + (ENTRY), ((ADDR) | ((SIZE >> 1) - 1)) >> 2); \
+        RV_WRITE_CSR((CSR_PMACFG0) + (ENTRY), CFG);                                \
+    } while (0)
 
 /********************************************************
  Physical Memory Protection (PMP) register fields
@@ -60,8 +105,8 @@ extern "C" {
    register. The PMP_ENTRY_SET macro will do this.
  */
 #define PMPADDR_NAPOT(START, END) ({                                    \
-            _Static_assert(__builtin_popcount((END)-(START)) == 1, "Size must be a power of 2"); \
-            _Static_assert((START) % ((END)-(START)) == 0, "Start must be aligned to size"); \
+            ESP_STATIC_ASSERT(__builtin_popcount((END)-(START)) == 1, "Size must be a power of 2"); \
+            ESP_STATIC_ASSERT((START) % ((END)-(START)) == 0, "Start must be aligned to size"); \
             (((START)) | (((END)-(START)-1)>>1));                       \
         })
 
@@ -86,13 +131,14 @@ extern "C" {
     RV_SET_CSR((CSR_PMPCFG0) + (ENTRY)/4, ((CFG)&0xFF) << (ENTRY%4)*8); \
     } while(0)
 
+/*Reset all permissions of a particular PMPCFG entry*/
+#define PMP_ENTRY_CFG_RESET(ENTRY) do {\
+    RV_CLEAR_CSR((CSR_PMPCFG0) + (ENTRY)/4, (0xFF) << (ENTRY%4)*8); \
+    } while(0)
+
 /********************************************************
    Trigger Module register fields (Debug specification)
  ********************************************************/
-
-/* tcontrol CSRs not recognized by toolchain currently */
-#define CSR_TCONTROL        0x7a5
-#define CSR_TDATA1          0x7a1
 
 #define TCONTROL_MTE     (1<<3)    /*R/W, Current M mode trigger enable bit*/
 #define TCONTROL_MPTE    (1<<7)    /*R/W, Previous M mode trigger enable bit*/
@@ -105,6 +151,7 @@ extern "C" {
 #define TDATA1_MATCH     (1<<7)
 #define TDATA1_MATCH_V   (0xF)   /*R/W,Address match type :0 : Exact byte match  1 : NAPOT range match */
 #define TDATA1_MATCH_S   (7)
+#define TDATA1_HIT_S     (20)
 
 
 /* RISC-V CSR macros

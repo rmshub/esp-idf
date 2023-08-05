@@ -12,7 +12,6 @@ from copy import deepcopy
 import junit_xml
 from tiny_test_fw import TinyFW, Utility
 
-from .DebugUtils import CustomProcess, GDBBackend, OCDBackend  # noqa: export DebugUtils for users
 from .IDFApp import UT, ComponentUTApp, Example, IDFApp, LoadableElfTestApp, TestApp  # noqa: export all Apps for users
 from .IDFDUT import (ESP32C2DUT, ESP32C3DUT, ESP32C3FPGADUT, ESP32C6DUT, ESP32DUT,  # noqa: export DUTs for users
                      ESP32H2DUT, ESP32QEMUDUT, ESP32S2DUT, ESP32S3DUT, ESP32S3FPGADUT, ESP8266DUT, IDFDUT)
@@ -311,22 +310,3 @@ def check_performance(item, value, target):
         break
     else:
         raise AssertionError('Failed to get performance standard for {}'.format(item))
-
-
-MINIMUM_FREE_HEAP_SIZE_RE = re.compile(r'Minimum free heap size: (\d+) bytes')
-
-
-def print_heap_size(app_name, config_name, target, minimum_free_heap_size):
-    """
-    Do not change the print output in case you really need to.
-    The result is parsed by ci-dashboard project
-    """
-    print('------ heap size info ------\n'
-          '[app_name] {}\n'
-          '[config_name] {}\n'
-          '[target] {}\n'
-          '[minimum_free_heap_size] {} Bytes\n'
-          '------ heap size end ------'.format(app_name,
-                                               '' if not config_name else config_name,
-                                               target,
-                                               minimum_free_heap_size))

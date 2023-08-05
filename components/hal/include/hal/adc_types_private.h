@@ -47,7 +47,6 @@ typedef struct {
 }
 #endif  //#if SOC_ADC_ARBITER_SUPPORTED
 
-
 #ifdef __cplusplus
 }
 #endif

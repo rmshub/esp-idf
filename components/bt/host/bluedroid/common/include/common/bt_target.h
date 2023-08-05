@@ -21,7 +21,6 @@
 #define BT_TARGET_H
 
 #include <bt_common.h>
-#include "soc/soc_caps.h"
 
 #ifndef BUILDCFG
 #define BUILDCFG
@@ -193,6 +192,12 @@
 #define BLE_42_FEATURE_SUPPORT   FALSE
 #endif
 
+#if (UC_BT_BLE_FEAT_PERIODIC_ADV_SYNC_TRANSFER == TRUE)
+#define BLE_FEAT_PERIODIC_ADV_SYNC_TRANSFER   TRUE
+#else
+#define BLE_FEAT_PERIODIC_ADV_SYNC_TRANSFER   FALSE
+#endif
+
 #if (UC_BT_BLE_RPA_SUPPORTED  == TRUE)
 #define CONTROLLER_RPA_LIST_ENABLE   TRUE
 #else
@@ -278,11 +283,6 @@
 #define BLE_ESTABLISH_LINK_CONNECTION_TIMEOUT UC_BT_BLE_ESTAB_LINK_CONN_TOUT
 #endif
 
-#ifdef SOC_BLE_DONT_UPDATE_OWN_RPA
-#define BLE_UPDATE_BLE_ADDR_TYPE_RPA FALSE
-#else
-#define BLE_UPDATE_BLE_ADDR_TYPE_RPA TRUE
-#endif
 //------------------Added from bdroid_buildcfg.h---------------------
 #ifndef L2CAP_EXTFEA_SUPPORTED_MASK
 #define L2CAP_EXTFEA_SUPPORTED_MASK (L2CAP_EXTFEA_ENH_RETRANS | L2CAP_EXTFEA_STREAM_MODE | L2CAP_EXTFEA_NO_CRC | L2CAP_EXTFEA_FIXED_CHNLS)
@@ -499,8 +499,36 @@
 #define GATTS_SEND_SERVICE_CHANGE_MODE UC_BT_GATTS_SEND_SERVICE_CHANGE_MODE
 #endif
 
+#if (UC_BT_GATTS_ROBUST_CACHING_ENABLED == TRUE)
+#define GATTS_ROBUST_CACHING_ENABLED TRUE
+#else
+#define GATTS_ROBUST_CACHING_ENABLED FALSE
+#endif
+
+#if (UC_BT_GATTS_DEVICE_NAME_WRITABLE == TRUE)
+#define GATTS_DEVICE_NAME_WRITABLE TRUE
+#else
+#define GATTS_DEVICE_NAME_WRITABLE FALSE
+#endif
+
+#if (UC_BT_GATTS_APPEARANCE_WRITABLE == TRUE)
+#define GATTS_APPEARANCE_WRITABLE TRUE
+#else
+#define GATTS_APPEARANCE_WRITABLE FALSE
+#endif
+
 #ifdef UC_BT_BLE_ACT_SCAN_REP_ADV_SCAN
 #define BTM_BLE_ACTIVE_SCAN_REPORT_ADV_SCAN_RSP_INDIVIDUALLY    UC_BT_BLE_ACT_SCAN_REP_ADV_SCAN
+#endif
+
+#ifdef UC_BT_BLE_RPA_TIMEOUT
+#define BTM_BLE_PRIVATE_ADDR_INT UC_BT_BLE_RPA_TIMEOUT
+#endif
+
+#if (UC_BT_CLASSIC_BQB_ENABLED == TRUE)
+#define BT_CLASSIC_BQB_INCLUDED TRUE
+#else
+#define BT_CLASSIC_BQB_INCLUDED FALSE
 #endif
 
 /* This feature is used to eanble interleaved scan*/
@@ -957,7 +985,7 @@
 /* TRUE to include Sniff Subrating */
 #if (BTA_DM_PM_INCLUDED == TRUE)
 #ifndef BTM_SSR_INCLUDED
-#define BTM_SSR_INCLUDED                FALSE
+#define BTM_SSR_INCLUDED                TRUE
 #endif
 #endif /* BTA_DM_PM_INCLUDED */
 
@@ -999,6 +1027,19 @@
 #define BLE_MAX_L2CAP_CLIENTS           15
 #endif
 
+/* Support status of L2CAP connection-oriented dynamic channels over LE transport with dynamic CID */
+#ifndef BLE_L2CAP_COC_INCLUDED
+#define BLE_L2CAP_COC_INCLUDED          FALSE // LE COC not use by default
+#endif
+
+/* Support status of L2CAP connection-oriented dynamic channels over LE or BR/EDR transport with dynamic CID */
+#ifndef L2CAP_COC_INCLUDED
+#if (CLASSIC_BT_INCLUDED == TRUE || BLE_L2CAP_COC_INCLUDED == TRUE)
+#define L2CAP_COC_INCLUDED              TRUE
+#else
+#define L2CAP_COC_INCLUDED              FALSE
+#endif
+#endif
 
 /* The maximum number of simultaneous links that L2CAP can support. Up to 7*/
 #ifndef MAX_ACL_CONNECTIONS
@@ -1203,15 +1244,27 @@
 #endif
 
 #ifndef BTM_BLE_ADV_TX_POWER
+#ifdef CONFIG_IDF_TARGET_ESP32
 #define BTM_BLE_ADV_TX_POWER {-12, -9, -6, -3, 0, 3, 6, 9}
+#else
+#define BTM_BLE_ADV_TX_POWER {-24, -21, -18, -15, -12, -9, -6, -3, 0, 3, 6, 9, 12, 15, 18, 21}
+#endif
 #endif
 
 #ifndef BTM_TX_POWER
+#ifdef CONFIG_IDF_TARGET_ESP32
 #define BTM_TX_POWER {-12, -9, -6, -3, 0, 3, 6, 9}
+#else
+#define BTM_TX_POWER {-24, -21, -18, -15, -12, -9, -6, -3, 0, 3, 6, 9, 12, 15, 18, 21}
+#endif
 #endif
 
 #ifndef BTM_TX_POWER_LEVEL_MAX
+#ifdef CONFIG_IDF_TARGET_ESP32
 #define BTM_TX_POWER_LEVEL_MAX 7
+#else
+#define BTM_TX_POWER_LEVEL_MAX 15
+#endif
 #endif
 
 
@@ -1489,6 +1542,12 @@
 #define RFCOMM_INCLUDED             FALSE
 #endif
 
+#if (RFCOMM_INCLUDED == TRUE) && (BT_CLASSIC_BQB_INCLUDED == TRUE)
+#define BT_RFCOMM_BQB_INCLUDED      TRUE
+#else
+#define BT_RFCOMM_BQB_INCLUDED      FALSE
+#endif
+
 #ifndef BTA_JV_RFCOMM_INCLUDED
 #define BTA_JV_RFCOMM_INCLUDED      FALSE
 #endif
@@ -1572,7 +1631,7 @@
 
 /* ERTM Tx window size */
 #ifndef RFC_FCR_OPT_TX_WINDOW_SIZE
-#define RFC_FCR_OPT_TX_WINDOW_SIZE  20
+#define RFC_FCR_OPT_TX_WINDOW_SIZE  10
 #endif
 
 /* ERTM Maximum transmissions before disconnecting */
@@ -2241,6 +2300,10 @@ The maximum number of payload octets that the local device can receive in a sing
 #define BTA_DM_AVOID_A2DP_ROLESWITCH_ON_INQUIRY FALSE
 #endif
 
+#ifndef BTA_GATTC_MAX_CACHE_CHAR
+#define BTA_GATTC_MAX_CACHE_CHAR UC_BT_GATTC_MAX_CACHE_CHAR
+#endif
+
 /******************************************************************************
 **
 ** Tracing:  Include trace header file here.
@@ -2250,12 +2313,6 @@ The maximum number of payload octets that the local device can receive in a sing
 /* Enable/disable BTSnoop memory logging */
 #ifndef BTSNOOP_MEM
 #define BTSNOOP_MEM FALSE
-#endif
-
-#if UC_BT_BLUEDROID_MEM_DEBUG
-#define HEAP_MEMORY_DEBUG   TRUE
-#else
-#define HEAP_MEMORY_DEBUG   FALSE
 #endif
 
 #if UC_HEAP_ALLOCATION_FROM_SPIRAM_FIRST

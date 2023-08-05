@@ -11,6 +11,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include "esp_assert.h"
 
 #include "soc/soc.h"
 #include "soc/rtc_cntl_reg.h"
@@ -44,28 +45,34 @@ extern "C" {
   *
   *************************************************************************************
   *     RTC store registers     usage
-  *     RTC_CNTL_STORE0_REG     Reserved
+  *     RTC_CNTL_STORE0_REG     RTC fix us, high 32 bits
   *     RTC_CNTL_STORE1_REG     RTC_SLOW_CLK calibration value
   *     RTC_CNTL_STORE2_REG     Boot time, low word
   *     RTC_CNTL_STORE3_REG     Boot time, high word
   *     RTC_CNTL_STORE4_REG     External XTAL frequency
   *     RTC_CNTL_STORE5_REG     APB bus frequency
-  *     RTC_CNTL_STORE6_REG     FAST_RTC_MEMORY_ENTRY
-  *     RTC_CNTL_STORE7_REG     FAST_RTC_MEMORY_CRC
+  *     RTC_CNTL_STORE6_REG     rtc reset cause
+  *     RTC_CNTL_STORE7_REG     RTC fix us, low 32 bits
   *************************************************************************************
+  *
+  * Since esp32c2 does not support RTC fast mem, so use RTC store regs to record rtc time:
+  *
+  * |------------------------|----------------------------------------|
+  * |   RTC_CNTL_STORE0_REG  |   RTC_CNTL_STORE7_REG                  |
+  * |   rtc_fix_us(MSB)      |   rtc_fix_us(LSB)                      |
+  * |------------------------|----------------------------------------|
   */
 
+#define RTC_FIX_US_HIGH_REG     RTC_CNTL_STORE0_REG
 #define RTC_SLOW_CLK_CAL_REG    RTC_CNTL_STORE1_REG
 #define RTC_BOOT_TIME_LOW_REG   RTC_CNTL_STORE2_REG
 #define RTC_BOOT_TIME_HIGH_REG  RTC_CNTL_STORE3_REG
 #define RTC_XTAL_FREQ_REG       RTC_CNTL_STORE4_REG
 #define RTC_APB_FREQ_REG        RTC_CNTL_STORE5_REG
-#define RTC_ENTRY_ADDR_REG      RTC_CNTL_STORE6_REG
 #define RTC_RESET_CAUSE_REG     RTC_CNTL_STORE6_REG
-#define RTC_MEMORY_CRC_REG      RTC_CNTL_STORE7_REG
+#define RTC_FIX_US_LOW_REG      RTC_CNTL_STORE7_REG
 
 #define RTC_DISABLE_ROM_LOG ((1 << 0) | (1 << 16)) //!< Disable logging from the ROM code.
-
 
 typedef enum {
     AWAKE = 0,             //<CPU ON
@@ -93,20 +100,20 @@ typedef enum {
 } RESET_REASON;
 
 // Check if the reset reason defined in ROM is compatible with soc/reset_reasons.h
-_Static_assert((soc_reset_reason_t)POWERON_RESET == RESET_REASON_CHIP_POWER_ON, "POWERON_RESET != RESET_REASON_CHIP_POWER_ON");
-_Static_assert((soc_reset_reason_t)RTC_SW_SYS_RESET == RESET_REASON_CORE_SW, "RTC_SW_SYS_RESET != RESET_REASON_CORE_SW");
-_Static_assert((soc_reset_reason_t)DEEPSLEEP_RESET == RESET_REASON_CORE_DEEP_SLEEP, "DEEPSLEEP_RESET != RESET_REASON_CORE_DEEP_SLEEP");
-_Static_assert((soc_reset_reason_t)TG0WDT_SYS_RESET == RESET_REASON_CORE_MWDT0, "TG0WDT_SYS_RESET != RESET_REASON_CORE_MWDT0");
-_Static_assert((soc_reset_reason_t)RTCWDT_SYS_RESET == RESET_REASON_CORE_RTC_WDT, "RTCWDT_SYS_RESET != RESET_REASON_CORE_RTC_WDT");
-_Static_assert((soc_reset_reason_t)TG0WDT_CPU_RESET == RESET_REASON_CPU0_MWDT0, "TG0WDT_CPU_RESET != RESET_REASON_CPU0_MWDT0");
-_Static_assert((soc_reset_reason_t)RTC_SW_CPU_RESET == RESET_REASON_CPU0_SW, "RTC_SW_CPU_RESET != RESET_REASON_CPU0_SW");
-_Static_assert((soc_reset_reason_t)RTCWDT_CPU_RESET == RESET_REASON_CPU0_RTC_WDT, "RTCWDT_CPU_RESET != RESET_REASON_CPU0_RTC_WDT");
-_Static_assert((soc_reset_reason_t)RTCWDT_BROWN_OUT_RESET == RESET_REASON_SYS_BROWN_OUT, "RTCWDT_BROWN_OUT_RESET != RESET_REASON_SYS_BROWN_OUT");
-_Static_assert((soc_reset_reason_t)RTCWDT_RTC_RESET == RESET_REASON_SYS_RTC_WDT, "RTCWDT_RTC_RESET != RESET_REASON_SYS_RTC_WDT");
-_Static_assert((soc_reset_reason_t)SUPER_WDT_RESET == RESET_REASON_SYS_SUPER_WDT, "SUPER_WDT_RESET != RESET_REASON_SYS_SUPER_WDT");
-_Static_assert((soc_reset_reason_t)GLITCH_RTC_RESET == RESET_REASON_SYS_CLK_GLITCH, "GLITCH_RTC_RESET != RESET_REASON_SYS_CLK_GLITCH");
-_Static_assert((soc_reset_reason_t)EFUSE_RESET == RESET_REASON_CORE_EFUSE_CRC, "EFUSE_RESET != RESET_REASON_CORE_EFUSE_CRC");
-_Static_assert((soc_reset_reason_t)JTAG_RESET == RESET_REASON_CPU0_JTAG, "JTAG_RESET != RESET_REASON_CPU0_JTAG");
+ESP_STATIC_ASSERT((soc_reset_reason_t)POWERON_RESET == RESET_REASON_CHIP_POWER_ON, "POWERON_RESET != RESET_REASON_CHIP_POWER_ON");
+ESP_STATIC_ASSERT((soc_reset_reason_t)RTC_SW_SYS_RESET == RESET_REASON_CORE_SW, "RTC_SW_SYS_RESET != RESET_REASON_CORE_SW");
+ESP_STATIC_ASSERT((soc_reset_reason_t)DEEPSLEEP_RESET == RESET_REASON_CORE_DEEP_SLEEP, "DEEPSLEEP_RESET != RESET_REASON_CORE_DEEP_SLEEP");
+ESP_STATIC_ASSERT((soc_reset_reason_t)TG0WDT_SYS_RESET == RESET_REASON_CORE_MWDT0, "TG0WDT_SYS_RESET != RESET_REASON_CORE_MWDT0");
+ESP_STATIC_ASSERT((soc_reset_reason_t)RTCWDT_SYS_RESET == RESET_REASON_CORE_RTC_WDT, "RTCWDT_SYS_RESET != RESET_REASON_CORE_RTC_WDT");
+ESP_STATIC_ASSERT((soc_reset_reason_t)TG0WDT_CPU_RESET == RESET_REASON_CPU0_MWDT0, "TG0WDT_CPU_RESET != RESET_REASON_CPU0_MWDT0");
+ESP_STATIC_ASSERT((soc_reset_reason_t)RTC_SW_CPU_RESET == RESET_REASON_CPU0_SW, "RTC_SW_CPU_RESET != RESET_REASON_CPU0_SW");
+ESP_STATIC_ASSERT((soc_reset_reason_t)RTCWDT_CPU_RESET == RESET_REASON_CPU0_RTC_WDT, "RTCWDT_CPU_RESET != RESET_REASON_CPU0_RTC_WDT");
+ESP_STATIC_ASSERT((soc_reset_reason_t)RTCWDT_BROWN_OUT_RESET == RESET_REASON_SYS_BROWN_OUT, "RTCWDT_BROWN_OUT_RESET != RESET_REASON_SYS_BROWN_OUT");
+ESP_STATIC_ASSERT((soc_reset_reason_t)RTCWDT_RTC_RESET == RESET_REASON_SYS_RTC_WDT, "RTCWDT_RTC_RESET != RESET_REASON_SYS_RTC_WDT");
+ESP_STATIC_ASSERT((soc_reset_reason_t)SUPER_WDT_RESET == RESET_REASON_SYS_SUPER_WDT, "SUPER_WDT_RESET != RESET_REASON_SYS_SUPER_WDT");
+ESP_STATIC_ASSERT((soc_reset_reason_t)GLITCH_RTC_RESET == RESET_REASON_SYS_CLK_GLITCH, "GLITCH_RTC_RESET != RESET_REASON_SYS_CLK_GLITCH");
+ESP_STATIC_ASSERT((soc_reset_reason_t)EFUSE_RESET == RESET_REASON_CORE_EFUSE_CRC, "EFUSE_RESET != RESET_REASON_CORE_EFUSE_CRC");
+ESP_STATIC_ASSERT((soc_reset_reason_t)JTAG_RESET == RESET_REASON_CPU0_JTAG, "JTAG_RESET != RESET_REASON_CPU0_JTAG");
 
 typedef enum {
     NO_SLEEP        = 0,
@@ -161,17 +168,6 @@ RESET_REASON rtc_get_reset_reason(int cpu_no);
 WAKEUP_REASON rtc_get_wakeup_cause(void);
 
 /**
-  * @brief Get CRC for Fast RTC Memory.
-  *
-  * @param  uint32_t start_addr : 0 - 0x7ff for Fast RTC Memory.
-  *
-  * @param  uint32_t crc_len : 0 - 0x7ff, 0 for 4 byte, 0x7ff for 0x2000 byte.
-  *
-  * @return uint32_t : CRC32 result
-  */
-uint32_t calc_rtc_memory_crc(uint32_t start_addr, uint32_t crc_len);
-
-/**
   * @brief Suppress ROM log by setting specific RTC control register.
   * @note This is not a permanent disable of ROM logging since the RTC register can not retain after chip reset.
   *
@@ -188,26 +184,6 @@ static inline void rtc_suppress_rom_log(void)
      */
     REG_SET_BIT(RTC_CNTL_STORE4_REG, RTC_DISABLE_ROM_LOG);
 }
-
-/**
-  * @brief Set CRC of Fast RTC memory 0-0x7ff into RTC STORE7.
-  *
-  * @param  None
-  *
-  * @return None
-  */
-void set_rtc_memory_crc(void);
-
-/**
-  * @brief Fetch entry from RTC memory and RTC STORE reg
-  *
-  * @param uint32_t * entry_addr : the address to save entry
-  *
-  * @param RESET_REASON reset_reason : reset reason this time
-  *
-  * @return None
-  */
-void rtc_boot_control(uint32_t *entry_addr, RESET_REASON reset_reason);
 
 /**
   * @brief Software Reset digital core.

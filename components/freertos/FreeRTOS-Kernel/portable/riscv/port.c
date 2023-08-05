@@ -3,7 +3,7 @@
  *
  * SPDX-License-Identifier: MIT
  *
- * SPDX-FileContributor: 2016-2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileContributor: 2016-2023 Espressif Systems (Shanghai) CO LTD
  */
 /*
  * FreeRTOS Kernel V10.4.3
@@ -44,7 +44,7 @@
 #include "hal/systimer_hal.h"
 #include "hal/systimer_ll.h"
 #include "riscv/rvruntime-frames.h"
-#include "riscv/riscv_interrupts.h"
+#include "riscv/rv_utils.h"
 #include "riscv/interrupt.h"
 #include "esp_private/crosscore_int.h"
 #include "esp_attr.h"
@@ -55,15 +55,31 @@
 #include "task.h"
 #include "portmacro.h"
 #include "port_systick.h"
+#include "esp_memory_utils.h"
+#if CONFIG_IDF_TARGET_ESP32P4
+//TODO: IDF-7566
+#include "soc/hp_system_reg.h"
+#endif
 
+_Static_assert(portBYTE_ALIGNMENT == 16, "portBYTE_ALIGNMENT must be set to 16");
+#if CONFIG_ESP_SYSTEM_HW_STACK_GUARD
+/**
+ * offsetof() can not be used in asm code. Then we need make sure that
+ * PORT_OFFSET_PX_STACK and PORT_OFFSET_PX_END_OF_STACK have expected values.
+ * Macro used in the portasm.S instead of variables to save at least 4 instruction calls
+ * which accessing DRAM memory. This optimization saves CPU time in the interrupt handling.
+ */
 
+_Static_assert(offsetof( StaticTask_t, pxDummy6 ) == PORT_OFFSET_PX_STACK);
+_Static_assert(offsetof( StaticTask_t, pxDummy8 ) == PORT_OFFSET_PX_END_OF_STACK);
+#endif // CONFIG_ESP_SYSTEM_HW_STACK_GUARD
 
 /* ---------------------------------------------------- Variables ------------------------------------------------------
  *
  * ------------------------------------------------------------------------------------------------------------------ */
 
-static const char *TAG = "cpu_start"; // [refactor-todo]: might be appropriate to change in the future, but
-
+//TODO: IDF-7566
+#if !CONFIG_IDF_TARGET_ESP32P4
 /**
  * @brief A variable is used to keep track of the critical section nesting.
  * @note This variable has to be stored as part of the task context and must be initialized to a non zero value
@@ -72,11 +88,30 @@ static const char *TAG = "cpu_start"; // [refactor-todo]: might be appropriate t
  */
 static UBaseType_t uxCriticalNesting = 0;
 static UBaseType_t uxSavedInterruptState = 0;
-BaseType_t uxSchedulerRunning = 0;
+BaseType_t uxSchedulerRunning = 0;  // Duplicate of xSchedulerRunning, accessible to port files
 UBaseType_t uxInterruptNesting = 0;
 BaseType_t xPortSwitchFlag = 0;
-__attribute__((aligned(16))) static StackType_t xIsrStack[configISR_STACK_SIZE];
+__attribute__((aligned(16))) StackType_t xIsrStack[configISR_STACK_SIZE];
 StackType_t *xIsrStackTop = &xIsrStack[0] + (configISR_STACK_SIZE & (~((portPOINTER_SIZE_TYPE)portBYTE_ALIGNMENT_MASK)));
+
+#else
+/* uxCriticalNesting will be increased by 1 each time one processor is entering a critical section
+ * and will be decreased by 1 each time one processor is exiting a critical section
+ */
+volatile UBaseType_t uxCriticalNesting[portNUM_PROCESSORS] = {0};
+volatile UBaseType_t uxSavedInterruptState[portNUM_PROCESSORS] = {0};
+volatile BaseType_t uxSchedulerRunning[portNUM_PROCESSORS] = {0};
+volatile UBaseType_t uxInterruptNesting[portNUM_PROCESSORS] = {0};
+volatile BaseType_t xPortSwitchFlag[portNUM_PROCESSORS] = {0};
+/* core0 interrupt stack space */
+__attribute__((aligned(16))) static StackType_t xIsrStack[configISR_STACK_SIZE];
+/* core1 interrupt stack space */
+__attribute__((aligned(16))) static StackType_t xIsrStack1[configISR_STACK_SIZE];
+/* core0 interrupt stack top, passed to sp */
+StackType_t *xIsrStackTop = &xIsrStack[0] + (configISR_STACK_SIZE & (~((portPOINTER_SIZE_TYPE)portBYTE_ALIGNMENT_MASK)));
+/* core1 interrupt stack top, passed to sp */
+StackType_t *xIsrStackTop1 = &xIsrStack1[0] + (configISR_STACK_SIZE & (~((portPOINTER_SIZE_TYPE)portBYTE_ALIGNMENT_MASK)));
+#endif
 
 
 
@@ -87,18 +122,25 @@ StackType_t *xIsrStackTop = &xIsrStack[0] + (configISR_STACK_SIZE & (~((portPOIN
 
 // ----------------- Scheduler Start/End -------------------
 
-extern void esprv_intc_int_set_threshold(int); // FIXME, this function is in ROM only
+//TODO: IDF-7566
 BaseType_t xPortStartScheduler(void)
 {
+#if !CONFIG_IDF_TARGET_ESP32P4
     uxInterruptNesting = 0;
     uxCriticalNesting = 0;
     uxSchedulerRunning = 0;
+#else
+    BaseType_t coreID = xPortGetCoreID();
+    uxInterruptNesting[coreID] = 0;
+    uxCriticalNesting[coreID] = 0;
+    uxSchedulerRunning[coreID] = 0;
+#endif
 
     /* Setup the hardware to generate the tick. */
     vPortSetupTimer();
 
     esprv_intc_int_set_threshold(1); /* set global INTC masking level */
-    riscv_global_interrupts_enable();
+    rv_utils_intr_global_enable();
 
     vPortYield();
 
@@ -114,103 +156,185 @@ void vPortEndScheduler(void)
 
 // ------------------------ Stack --------------------------
 
-__attribute__((noreturn)) static void _prvTaskExitError(void)
-{
-    /* A function that implements a task must not exit or attempt to return to
-    its caller as there is nothing to return to.  If a task wants to exit it
-    should instead call vTaskDelete( NULL ).
+/**
+ * @brief Align stack pointer in a downward growing stack
+ *
+ * This macro is used to round a stack pointer downwards to the nearest n-byte boundary, where n is a power of 2.
+ * This macro is generally used when allocating aligned areas on a downward growing stack.
+ */
+#define STACKPTR_ALIGN_DOWN(n, ptr)     ((ptr) & (~((n)-1)))
 
-    Artificially force an assert() to be triggered if configASSERT() is
-    defined, then stop here so application writers can catch the error. */
-    configASSERT(uxCriticalNesting == ~0UL);
-    portDISABLE_INTERRUPTS();
-    abort();
+/**
+ * @brief Allocate and initialize GCC TLS area
+ *
+ * This function allocates and initializes the area on the stack used to store GCC TLS (Thread Local Storage) variables.
+ * - The area's size is derived from the TLS section's linker variables, and rounded up to a multiple of 16 bytes
+ * - The allocated area is aligned to a 16-byte aligned address
+ * - The TLS variables in the area are then initialized
+ *
+ * Each task access the TLS variables using the THREADPTR register plus an offset to obtain the address of the variable.
+ * The value for the THREADPTR register is also calculated by this function, and that value should be use to initialize
+ * the THREADPTR register.
+ *
+ * @param[in] uxStackPointer Current stack pointer address
+ * @param[out] ret_threadptr_reg_init Calculated THREADPTR register initialization value
+ * @return Stack pointer that points to the TLS area
+ */
+FORCE_INLINE_ATTR UBaseType_t uxInitialiseStackTLS(UBaseType_t uxStackPointer, uint32_t *ret_threadptr_reg_init)
+{
+    /*
+    TLS layout at link-time, where 0xNNN is the offset that the linker calculates to a particular TLS variable.
+
+    LOW ADDRESS
+            |---------------------------|   Linker Symbols
+            | Section                   |   --------------
+            | .flash.rodata             |
+         0x0|---------------------------| <- _flash_rodata_start
+          ^ | Other Data                |
+          | |---------------------------| <- _thread_local_start
+          | | .tbss                     | ^
+          V |                           | |
+      0xNNN | int example;              | | tls_area_size
+            |                           | |
+            | .tdata                    | V
+            |---------------------------| <- _thread_local_end
+            | Other data                |
+            | ...                       |
+            |---------------------------|
+    HIGH ADDRESS
+    */
+    // Calculate TLS area size and round up to multiple of 16 bytes.
+    extern char _thread_local_start, _thread_local_end, _flash_rodata_start;
+    const uint32_t tls_area_size = ALIGNUP(16, (uint32_t)&_thread_local_end - (uint32_t)&_thread_local_start);
+    // TODO: check that TLS area fits the stack
+
+    // Allocate space for the TLS area on the stack. The area must be aligned to 16-bytes
+    uxStackPointer = STACKPTR_ALIGN_DOWN(16, uxStackPointer - (UBaseType_t)tls_area_size);
+    // Initialize the TLS area with the initialization values of each TLS variable
+    memcpy((void *)uxStackPointer, &_thread_local_start, tls_area_size);
+
+    /*
+    Calculate the THREADPTR register's initialization value based on the link-time offset and the TLS area allocated on
+    the stack.
+
+    HIGH ADDRESS
+            |---------------------------|
+            | .tdata (*)                |
+          ^ | int example;              |
+          | |                           |
+          | | .tbss (*)                 |
+          | |---------------------------| <- uxStackPointer (start of TLS area)
+    0xNNN | |                           | ^
+          | |                           | |
+          |             ...               | _thread_local_start - _rodata_start
+          | |                           | |
+          | |                           | V
+          V |                           | <- threadptr register's value
+
+    LOW ADDRESS
+    */
+    *ret_threadptr_reg_init = (uint32_t)uxStackPointer - ((uint32_t)&_thread_local_start - (uint32_t)&_flash_rodata_start);
+    return uxStackPointer;
 }
 
-__attribute__((naked)) static void prvTaskExitError(void)
+#if CONFIG_FREERTOS_TASK_FUNCTION_WRAPPER
+static void vPortTaskWrapper(TaskFunction_t pxCode, void *pvParameters)
 {
-    asm volatile(".option push\n" \
-                ".option norvc\n" \
-                "nop\n" \
-                ".option pop");
-    /* Task entry's RA will point here. Shifting RA into prvTaskExitError is necessary
-       to make GDB backtrace ending inside that function.
-       Otherwise backtrace will end in the function laying just before prvTaskExitError in address space. */
-    _prvTaskExitError();
+    __asm__ volatile(".cfi_undefined ra");  // tell to debugger that it's outermost (inital) frame
+    extern void __attribute__((noreturn)) panic_abort(const char *details);
+    static char DRAM_ATTR msg[80] = "FreeRTOS: FreeRTOS Task \"\0";
+    pxCode(pvParameters);
+    /* FreeRTOS tasks should not return. Log the task name and abort. */
+    /* We cannot use s(n)printf because it is in flash */
+    strcat(msg, pcTaskGetName(NULL));
+    strcat(msg, "\" should not return, Aborting now!");
+    panic_abort(msg);
+}
+#endif // CONFIG_FREERTOS_TASK_FUNCTION_WRAPPER
+
+/**
+ * @brief Initialize the task's starting interrupt stack frame
+ *
+ * This function initializes the task's starting interrupt stack frame. The dispatcher will use this stack frame in a
+ * context restore routine. Therefore, the starting stack frame must be initialized as if the task was interrupted right
+ * before its first instruction is called.
+ *
+ * - The stack frame is allocated to a 16-byte aligned address
+ *
+ * @param[in] uxStackPointer Current stack pointer address
+ * @param[in] pxCode Task function
+ * @param[in] pvParameters Task function's parameter
+ * @param[in] threadptr_reg_init THREADPTR register initialization value
+ * @return Stack pointer that points to the stack frame
+ */
+FORCE_INLINE_ATTR UBaseType_t uxInitialiseStackFrame(UBaseType_t uxStackPointer, TaskFunction_t pxCode, void *pvParameters, uint32_t threadptr_reg_init)
+{
+    /*
+    Allocate space for the task's starting interrupt stack frame.
+    - The stack frame must be allocated to a 16-byte aligned address.
+    - We use XT_STK_FRMSZ (instead of sizeof(XtExcFrame)) as it rounds up the total size to a multiple of 16.
+    */
+    uxStackPointer = STACKPTR_ALIGN_DOWN(16, uxStackPointer - RV_STK_FRMSZ);
+
+    // Clear the entire interrupt stack frame
+    RvExcFrame *frame = (RvExcFrame *)uxStackPointer;
+    memset(frame, 0, sizeof(RvExcFrame));
+
+    /* Initialize the stack frame. */
+    extern uint32_t __global_pointer$;
+    #if CONFIG_FREERTOS_TASK_FUNCTION_WRAPPER
+        frame->mepc = (UBaseType_t)vPortTaskWrapper;
+        frame->a0 = (UBaseType_t)pxCode;
+        frame->a1 = (UBaseType_t)pvParameters;
+    #else
+        frame->mepc = (UBaseType_t)pxCode;
+        frame->a0 = (UBaseType_t)pvParameters;
+    #endif // CONFIG_FREERTOS_TASK_FUNCTION_WRAPPER
+    frame->gp = (UBaseType_t)&__global_pointer$;
+    frame->tp = (UBaseType_t)threadptr_reg_init;
+
+    return uxStackPointer;
 }
 
 StackType_t *pxPortInitialiseStack(StackType_t *pxTopOfStack, TaskFunction_t pxCode, void *pvParameters)
 {
-    extern uint32_t __global_pointer$;
-    uint8_t *task_thread_local_start;
-    uint8_t *threadptr;
-    extern char _thread_local_start, _thread_local_end, _flash_rodata_start;
+#ifdef __clang_analyzer__
+    // Teach clang-tidy that pxTopOfStack cannot be a pointer to const
+    volatile StackType_t * pxTemp = pxTopOfStack;
+    pxTopOfStack = pxTemp;
+#endif /*__clang_analyzer__ */
+    /*
+    HIGH ADDRESS
+    |---------------------------| <- pxTopOfStack on entry
+    | TLS Variables             |
+    | ------------------------- | <- Start of useable stack
+    | Starting stack frame      |
+    | ------------------------- | <- pxTopOfStack on return (which is the tasks current SP)
+    |             |             |
+    |             |             |
+    |             V             |
+    ----------------------------- <- Bottom of stack
+    LOW ADDRESS
 
-    /* Byte pointer, so that subsequent calculations don't depend on sizeof(StackType_t). */
-    uint8_t *sp = (uint8_t *) pxTopOfStack;
+    - All stack areas are aligned to 16 byte boundary
+    - We use UBaseType_t for all of stack area initialization functions for more convenient pointer arithmetic
+    */
 
-    /* Set up TLS area.
-     * The following diagram illustrates the layout of link-time and run-time
-     * TLS sections.
-     *
-     *          +-------------+
-     *          |Section:     |      Linker symbols:
-     *          |.flash.rodata|      ---------------
-     *       0x0+-------------+ <-- _flash_rodata_start
-     *        ^ |             |
-     *        | | Other data  |
-     *        | |     ...     |
-     *        | +-------------+ <-- _thread_local_start
-     *        | |.tbss        | ^
-     *        v |             | |
-     *    0xNNNN|int example; | | (thread_local_size)
-     *          |.tdata       | v
-     *          +-------------+ <-- _thread_local_end
-     *          | Other data  |
-     *          |     ...     |
-     *          |             |
-     *          +-------------+
-     *
-     *                                Local variables of
-     *                              pxPortInitialiseStack
-     *                             -----------------------
-     *          +-------------+ <-- pxTopOfStack
-     *          |.tdata (*)   |  ^
-     *        ^ |int example; |  |(thread_local_size
-     *        | |             |  |
-     *        | |.tbss (*)    |  v
-     *        | +-------------+ <-- task_thread_local_start
-     * 0xNNNN | |             |  ^
-     *        | |             |  |
-     *        | |             |  |_thread_local_start - _rodata_start
-     *        | |             |  |
-     *        | |             |  v
-     *        v +-------------+ <-- threadptr
-     *
-     *   (*) The stack grows downward!
-     */
+    UBaseType_t uxStackPointer = (UBaseType_t)pxTopOfStack;
+    configASSERT((uxStackPointer & portBYTE_ALIGNMENT_MASK) == 0);
 
-    uint32_t thread_local_sz = (uint32_t) (&_thread_local_end - &_thread_local_start);
-    thread_local_sz = ALIGNUP(0x10, thread_local_sz);
-    sp -= thread_local_sz;
-    task_thread_local_start = sp;
-    memcpy(task_thread_local_start, &_thread_local_start, thread_local_sz);
-    threadptr = task_thread_local_start - (&_thread_local_start - &_flash_rodata_start);
+    // Initialize GCC TLS area
+    uint32_t threadptr_reg_init;
+    uxStackPointer = uxInitialiseStackTLS(uxStackPointer, &threadptr_reg_init);
+    configASSERT((uxStackPointer & portBYTE_ALIGNMENT_MASK) == 0);
 
-    /* Simulate the stack frame as it would be created by a context switch interrupt. */
-    sp -= RV_STK_FRMSZ;
-    RvExcFrame *frame = (RvExcFrame *)sp;
-    memset(frame, 0, sizeof(*frame));
-    /* Shifting RA into prvTaskExitError is necessary to make GDB backtrace ending inside that function.
-       Otherwise backtrace will end in the function laying just before prvTaskExitError in address space. */
-    frame->ra = (UBaseType_t)prvTaskExitError + 4/*size of the nop insruction at the beginning of prvTaskExitError*/;
-    frame->mepc = (UBaseType_t)pxCode;
-    frame->a0 = (UBaseType_t)pvParameters;
-    frame->gp = (UBaseType_t)&__global_pointer$;
-    frame->tp = (UBaseType_t)threadptr;
+    // Initialize the starting interrupt stack frame
+    uxStackPointer = uxInitialiseStackFrame(uxStackPointer, pxCode, pvParameters, threadptr_reg_init);
+    configASSERT((uxStackPointer & portBYTE_ALIGNMENT_MASK) == 0);
 
+    // Return the task's current stack pointer address which should point to the starting interrupt stack frame
+    return (StackType_t *)uxStackPointer;
     //TODO: IDF-2393
-    return (StackType_t *)frame;
 }
 
 
@@ -221,15 +345,26 @@ StackType_t *pxPortInitialiseStack(StackType_t *pxTopOfStack, TaskFunction_t pxC
 
 // --------------------- Interrupts ------------------------
 
+//TODO: IDF-7566
 BaseType_t xPortInIsrContext(void)
 {
+#if !CONFIG_IDF_TARGET_ESP32P4
     return uxInterruptNesting;
+#else
+    BaseType_t coreID = xPortGetCoreID();
+    return uxInterruptNesting[coreID];
+#endif
 }
 
 BaseType_t IRAM_ATTR xPortInterruptedFromISRContext(void)
 {
     /* For single core, this can be the same as xPortInIsrContext() because reading it is atomic */
+#if !CONFIG_IDF_TARGET_ESP32P4
     return uxInterruptNesting;
+#else
+    BaseType_t coreID = xPortGetCoreID();
+    return uxInterruptNesting[coreID];
+#endif
 }
 
 // ---------------------- Spinlocks ------------------------
@@ -238,6 +373,8 @@ BaseType_t IRAM_ATTR xPortInterruptedFromISRContext(void)
 
 // ------------------ Critical Sections --------------------
 
+//TODO: IDF-7566
+#if !CONFIG_IDF_TARGET_ESP32P4
 void vPortEnterCritical(void)
 {
     BaseType_t state = portSET_INTERRUPT_MASK_FROM_ISR();
@@ -258,15 +395,62 @@ void vPortExitCritical(void)
     }
 }
 
+#else
+void vPortEnterCritical(portMUX_TYPE *mux)
+{
+    BaseType_t coreID = xPortGetCoreID();
+    BaseType_t state = portSET_INTERRUPT_MASK_FROM_ISR();
+
+    spinlock_acquire((spinlock_t *)mux, SPINLOCK_WAIT_FOREVER);
+    uxCriticalNesting[coreID]++;
+
+    if (uxCriticalNesting[coreID] == 1) {
+        uxSavedInterruptState[coreID] = state;
+    }
+}
+
+void vPortExitCritical(portMUX_TYPE *mux)
+{
+    spinlock_release((spinlock_t *)mux);
+
+    BaseType_t coreID = xPortGetCoreID();
+    if (uxCriticalNesting[coreID] > 0) {
+        uxCriticalNesting[coreID]--;
+        if (uxCriticalNesting[coreID] == 0) {
+            portCLEAR_INTERRUPT_MASK_FROM_ISR(uxSavedInterruptState[coreID]);
+        }
+    }
+}
+#endif
+
 // ---------------------- Yielding -------------------------
 
+//TODO: IDF-7566
 int vPortSetInterruptMask(void)
 {
     int ret;
     unsigned old_mstatus = RV_CLEAR_CSR(mstatus, MSTATUS_MIE);
     ret = REG_READ(INTERRUPT_CORE0_CPU_INT_THRESH_REG);
+
+#if !CONFIG_IDF_TARGET_ESP32P4
     REG_WRITE(INTERRUPT_CORE0_CPU_INT_THRESH_REG, RVHAL_EXCM_LEVEL);
     RV_SET_CSR(mstatus, old_mstatus & MSTATUS_MIE);
+#else
+    #define RVHAL_EXCM_THRESHOLD_VALUE   (((RVHAL_EXCM_LEVEL << (8 - NLBITS)) | 0x1f) << CLIC_CPU_INT_THRESH_S)
+
+    REG_WRITE(INTERRUPT_CORE0_CPU_INT_THRESH_REG, RVHAL_EXCM_THRESHOLD_VALUE);
+    /**
+     * TODO: IDF-7898
+     * Here is an issue that,
+     * 1. Set the CLIC_INT_THRESH_REG to mask off interrupts whose level is lower than `intlevel`.
+     * 2. Set MSTATUS_MIE (global interrupt), then program may jump to interrupt vector.
+     * 3. The register value change in Step 1 may happen during Step 2.
+     *
+     * To prevent this, here a fence is used
+     */
+    rv_utils_memory_barrier();
+    RV_SET_CSR(mstatus, old_mstatus & MSTATUS_MIE);
+#endif
     /**
      * In theory, this function should not return immediately as there is a
      * delay between the moment we mask the interrupt threshold register and
@@ -304,6 +488,8 @@ void vPortClearInterruptMask(int mask)
     asm volatile ( "nop" );
 }
 
+//TODO: IDF-7566
+#if !CONFIG_IDF_TARGET_ESP32P4
 void vPortYield(void)
 {
     if (uxInterruptNesting) {
@@ -331,6 +517,37 @@ void vPortYieldFromISR( void )
     uxSchedulerRunning = 1;
     xPortSwitchFlag = 1;
 }
+
+#else
+void vPortYield(void)
+{
+    BaseType_t coreID = xPortGetCoreID();
+    if (uxInterruptNesting[coreID]) {
+        vPortYieldFromISR();
+    } else {
+        esp_crosscore_int_send_yield(coreID);
+        /* There are 3-4 instructions of latency between triggering the software
+           interrupt and the CPU interrupt happening. Make sure it happened before
+           we return, otherwise vTaskDelay() may return and execute 1-2
+           instructions before the delay actually happens.
+
+           (We could use the WFI instruction here, but there is a chance that
+           the interrupt will happen while evaluating the other two conditions
+           for an instant yield, and if that happens then the WFI would be
+           waiting for the next interrupt to occur...)
+        */
+        while (uxSchedulerRunning[coreID] && uxCriticalNesting[coreID] == 0 && REG_READ(HP_SYSTEM_CPU_INT_FROM_CPU_0_REG + 4*coreID) != 0) {}
+    }
+}
+
+void vPortYieldFromISR( void )
+{
+    traceISR_EXIT_TO_SCHEDULER();
+    BaseType_t coreID = xPortGetCoreID();
+    uxSchedulerRunning[coreID] = 1;
+    xPortSwitchFlag[coreID] = 1;
+}
+#endif
 
 void vPortYieldOtherCore(BaseType_t coreid)
 {
@@ -376,16 +593,3 @@ void vPortSetStackWatchpoint(void *pxStackStart)
 /* ---------------------------------------------- Misc Implementations -------------------------------------------------
  *
  * ------------------------------------------------------------------------------------------------------------------ */
-
-// --------------------- App Start-up ----------------------
-
-/* [refactor-todo]: See if we can include this through a header */
-extern void esp_startup_start_app_common(void);
-
-void esp_startup_start_app(void)
-{
-    esp_startup_start_app_common();
-
-    ESP_LOGI(TAG, "Starting scheduler.");
-    vTaskStartScheduler();
-}

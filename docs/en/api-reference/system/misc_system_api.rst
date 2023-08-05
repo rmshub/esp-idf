@@ -3,12 +3,12 @@ Miscellaneous System APIs
 :link_to_translation:`zh_CN:[中文]`
 
 {IDF_TARGET_BASE_MAC_BLOCK: default="BLK1", esp32="BLK0"}
-{IDF_TARGET_CPU_RESET_DES: default="both CPUs are reset", esp32c3="the CPU is reset", esp32c2="the CPU is reset"}
+{IDF_TARGET_CPU_RESET_DES: default="the CPU is reset", esp32="both CPUs are reset", esp32s3="both CPUs are reset"}
 
 Software Reset
 --------------
 
-To perform software reset of the chip, the :cpp:func:`esp_restart` function is provided. When the function is called, execution of the program stops, {IDF_TARGET_CPU_RESET_DES}, and the application is loaded by the bootloader and starts execution again.
+To perform software reset of the chip, the :cpp:func:`esp_restart` function is provided. When the function is called, execution of the program stops, {IDF_TARGET_CPU_RESET_DES}, the application is loaded by the bootloader and starts execution again.
 
 Additionally, the :cpp:func:`esp_register_shutdown_handler` function can register a routine that will be automatically called before a restart (that is triggered by :cpp:func:`esp_restart`) occurs. This is similar to the functionality of ``atexit`` POSIX function.
 
@@ -23,7 +23,7 @@ Heap Memory
 Two heap-memory-related functions are provided:
 
 * :cpp:func:`esp_get_free_heap_size` returns the current size of free heap memory.
-* :cpp:func:`esp_get_minimum_free_heap_size` returns the minimum size of free heap memory that has ever been available (i.e., the smallest size of free heap memory in the applications lifetime).
+* :cpp:func:`esp_get_minimum_free_heap_size` returns the minimum size of free heap memory that has ever been available (i.e., the smallest size of free heap memory in the application's lifetime).
 
 Note that ESP-IDF supports multiple heaps with different capabilities. The functions mentioned in this section return the size of heap memory that can be allocated using the ``malloc`` family of functions. For further information about heap memory, see :doc:`Heap Memory Allocation <mem_alloc>`.
 
@@ -91,10 +91,15 @@ In ESP-IDF, the MAC addresses for the various network interfaces are calculated 
 
     .. note:: Although {IDF_TARGET_NAME} has no integrated Ethernet MAC, it is still possible to calculate an Ethernet MAC address. However, this MAC address can only be used with an external ethernet interface such as an SPI-Ethernet device. See :doc:`/api-reference/network/esp_eth`.
 
+Custom Interface MAC
+^^^^^^^^^^^^^^^^^^^^
+
+Sometimes you may need to define custom MAC addresses that are not generated from the base MAC address. To set a custom interface MAC address, use the :cpp:func:`esp_iface_mac_addr_set` function. This function allows you to overwrite the MAC addresses of interfaces set (or not yet set) by the base MAC address. Once a MAC address has been set for a particular interface, it will not be affected when the base MAC address is changed.
+
 Custom Base MAC
 ^^^^^^^^^^^^^^^
 
-The default base MAC is pre-programmed by Espressif in eFuse {IDF_TARGET_BASE_MAC_BLOCK}. To set a custom base MAC instead, call the function :cpp:func:`esp_base_mac_addr_set` before initializing any network interfaces or calling the :cpp:func:`esp_read_mac` function. The custom MAC address can be stored in any supported storage device (e.g., flash, NVS).
+The default base MAC is pre-programmed by Espressif in eFuse {IDF_TARGET_BASE_MAC_BLOCK}. To set a custom base MAC instead, call the function :cpp:func:`esp_iface_mac_addr_set` with the ``ESP_MAC_BASE`` argument (or :cpp:func:`esp_base_mac_addr_set`) before initializing any network interfaces or calling the :cpp:func:`esp_read_mac` function. The custom MAC address can be stored in any supported storage device (e.g., flash, NVS).
 
 The custom base MAC addresses should be allocated such that derived MAC addresses will not overlap. Based on the table above, users can configure the option :ref:`CONFIG_{IDF_TARGET_CFG_PREFIX}_UNIVERSAL_MAC_ADDRESSES` to set the number of valid universal MAC addresses that can be derived from the custom base MAC.
 
@@ -106,7 +111,7 @@ The custom base MAC addresses should be allocated such that derived MAC addresse
 Custom MAC Address in eFuse
 @@@@@@@@@@@@@@@@@@@@@@@@@@@
 
-When reading custom MAC addresses from eFuse, ESP-IDF provides a helper function :cpp:func:`esp_efuse_mac_get_custom`. This loads the MAC address from eFuse BLK3. This function assumes that the custom base MAC address is stored in the following format:
+When reading custom MAC addresses from eFuse, ESP-IDF provides a helper function :cpp:func:`esp_efuse_mac_get_custom`. Users can also use :cpp:func:`esp_read_mac` with the ``ESP_MAC_EFUSE_CUSTOM`` argument. This loads the MAC address from eFuse BLK3. The :cpp:func:`esp_efuse_mac_get_custom` function assumes that the custom base MAC address is stored in the following format:
 
 .. only:: esp32
 
@@ -125,11 +130,11 @@ When reading custom MAC addresses from eFuse, ESP-IDF provides a helper function
         * - Reserved
           - 128
           - 183:56
-          - 
+          -
         * - MAC address
           - 48
           - 55:8
-          - 
+          -
         * - MAC address CRC
           - 8
           - 7:0
@@ -154,15 +159,18 @@ When reading custom MAC addresses from eFuse, ESP-IDF provides a helper function
 
     .. note::
 
-        The eFuse BLK3 uses RS-coding during a burn operation, which means that all eFuse fields in this block must be burnt at the same time.
+        The eFuse BLK3 uses RS-coding during burning, which means that all eFuse fields in this block must be burnt at the same time.
 
-Once MAC address has been obtained using :cpp:func:`esp_efuse_mac_get_custom`, call :cpp:func:`esp_base_mac_addr_set` to set this MAC address as base MAC address.
+Once custom eFuse MAC address has been obtained (using :cpp:func:`esp_efuse_mac_get_custom` or :cpp:func:`esp_read_mac`), you need to set it as the base MAC address. There are two ways to do it:
+
+1. Use an old API: call :cpp:func:`esp_base_mac_addr_set`.
+2. Use a new API: call :cpp:func:`esp_iface_mac_addr_set` with the ``ESP_MAC_BASE`` argument.
 
 
 .. _local-mac-addresses:
 
-Local vs Universal MAC Addresses
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Local Versus Universal MAC Addresses
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 {IDF_TARGET_NAME} comes pre-programmed with enough valid Espressif universally administered MAC addresses for all internal interfaces. The table above shows how to calculate and derive the MAC address for a specific interface according to the base MAC address.
 
@@ -211,7 +219,7 @@ The application version is stored in :cpp:class:`esp_app_desc_t` structure. It i
 
 To set the version in your project manually, you need to set the ``PROJECT_VER`` variable in the ``CMakeLists.txt`` of your project. In application ``CMakeLists.txt``, put ``set(PROJECT_VER "0.1.0.1")`` before including ``project.cmake``.
 
-If the :ref:`CONFIG_APP_PROJECT_VER_FROM_CONFIG` option is set, the value of :ref:`CONFIG_APP_PROJECT_VER` will be used. Otherwise, if the ``PROJECT_VER`` variable is not set in the project, it will be retrieved either from the ``$(PROJECT_PATH)/version.txt`` file (if present) or using git command ``git describe``. If neither is available, ``PROJECT_VER`` will be set to "1". Application can make use of this by calling :cpp:func:`esp_ota_get_app_description` or :cpp:func:`esp_ota_get_partition_description` functions.
+If the :ref:`CONFIG_APP_PROJECT_VER_FROM_CONFIG` option is set, the value of :ref:`CONFIG_APP_PROJECT_VER` will be used. Otherwise, if the ``PROJECT_VER`` variable is not set in the project, it will be retrieved either from the ``$(PROJECT_PATH)/version.txt`` file (if present) or using git command ``git describe``. If neither is available, ``PROJECT_VER`` will be set to "1". Application can make use of this by calling :cpp:func:`esp_app_get_description` or :cpp:func:`esp_ota_get_partition_description` functions.
 
 API Reference
 -------------
@@ -221,3 +229,4 @@ API Reference
 .. include-build-file:: inc/esp_mac.inc
 .. include-build-file:: inc/esp_chip_info.inc
 .. include-build-file:: inc/esp_cpu.inc
+.. include-build-file:: inc/esp_app_desc.inc

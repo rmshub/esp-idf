@@ -66,7 +66,7 @@ static void sdp_disable_handler(void)
     msg.pid = BTC_PID_SDP;
     msg.act = BTA_SDP_DISENABLE_EVT;
 
-    status = btc_transfer_context(&msg, NULL, 0, NULL);
+    status = btc_transfer_context(&msg, NULL, 0, NULL, NULL);
 
     if (status != BT_STATUS_SUCCESS) {
         BTC_TRACE_ERROR("%s btc_transfer_context failed", __func__);
@@ -260,7 +260,8 @@ static int add_raw_sdp(const bluetooth_sdp_record* rec)
     UINT16              service = 0;
     UINT16              browse = UUID_SERVCLASS_PUBLIC_BROWSE_GROUP;
     bool                status = true;
-    UINT8               temp[4];
+    // Buffer capable to hold 2, 4 and 16-byte UUIDs
+    UINT8               temp[LEN_UUID_128];
     UINT8*              p_temp = temp;
     UINT32              sdp_handle = 0;
 
@@ -274,17 +275,25 @@ static int add_raw_sdp(const bluetooth_sdp_record* rec)
 
     if (rec->hdr.bt_uuid.len == 16) {
         memcpy(&service, &rec->hdr.bt_uuid.uuid.uuid128[2], sizeof(service));
+        UINT8_TO_BE_STREAM(p_temp, (UUID_DESC_TYPE << 3) | SIZE_SIXTEEN_BYTES);
+        ARRAY_TO_BE_STREAM(p_temp, rec->hdr.bt_uuid.uuid.uuid128, LEN_UUID_128);
     } else if (rec->hdr.bt_uuid.len == 2) {
         memcpy(&service, &rec->hdr.bt_uuid.uuid.uuid16, sizeof(service));
+        UINT8_TO_BE_STREAM(p_temp, (UUID_DESC_TYPE << 3) | SIZE_TWO_BYTES);
+        UINT16_TO_BE_STREAM(p_temp, rec->hdr.bt_uuid.uuid.uuid16);
     } else if (rec->hdr.bt_uuid.len == 4) {
         memcpy(&service, &rec->hdr.bt_uuid.uuid.uuid16, sizeof(service));
+        UINT8_TO_BE_STREAM(p_temp, (UUID_DESC_TYPE << 3) | SIZE_FOUR_BYTES);
+        UINT32_TO_BE_STREAM(p_temp, rec->hdr.bt_uuid.uuid.uuid32);
     } else {
         SDP_DeleteRecord(sdp_handle);
         sdp_handle = 0;
         return sdp_handle;
     }
     /* add service class */
-    status &= SDP_AddServiceClassIdList(sdp_handle, 1, &service);
+    status &= SDP_AddAttribute(sdp_handle, ATTR_ID_SERVICE_CLASS_ID_LIST,
+                                DATA_ELE_SEQ_DESC_TYPE, (UINT32) (p_temp - temp), temp);
+
     memset( protoList, 0 , 2*sizeof(tSDP_PROTOCOL_ELEM) );
 
     /* add protocol list, including RFCOMM scn */
@@ -855,7 +864,7 @@ static void btc_sdp_dm_cback(tBTA_SDP_EVT event, tBTA_SDP* p_data, void* user_da
     msg.pid = BTC_PID_SDP;
     msg.act = event;
 
-    status = btc_transfer_context(&msg, p_data, sizeof(tBTA_SDP), NULL);
+    status = btc_transfer_context(&msg, p_data, sizeof(tBTA_SDP), NULL, NULL);
 
     if (status != BT_STATUS_SUCCESS) {
         BTC_TRACE_ERROR("%s btc_transfer_context failed", __func__);
@@ -1111,7 +1120,7 @@ void btc_sdp_cb_handler(btc_msg_t *msg)
         btc_sdp_cb_to_app(ESP_SDP_DEINIT_EVT, &param);
         break;
     case BTA_SDP_SEARCH_COMP_EVT:
-        param.search.status = p_data->status;
+        param.search.status = p_data->sdp_search_comp.status;
         if (param.search.status == ESP_SDP_SUCCESS) {
             memcpy(param.search.remote_addr, p_data->sdp_search_comp.remote_addr, sizeof(BD_ADDR));
             memcpy(&param.search.sdp_uuid, &p_data->sdp_search_comp.uuid, sizeof(tSDP_UUID));
@@ -1131,8 +1140,8 @@ void btc_sdp_cb_handler(btc_msg_t *msg)
         }
         break;
     case BTA_SDP_CREATE_RECORD_USER_EVT:
-        param.create_record.status = p_data->status;
-        param.create_record.record_handle = p_data->handle;
+        param.create_record.status = p_data->sdp_create_record.status;
+        param.create_record.record_handle = p_data->sdp_create_record.handle;
         btc_sdp_cb_to_app(ESP_SDP_CREATE_RECORD_COMP_EVT, &param);
         break;
     case BTA_SDP_REMOVE_RECORD_USER_EVT:

@@ -22,7 +22,6 @@ from pytest_embedded import Dut
 
 @pytest.mark.esp32
 @pytest.mark.esp32c3
-@pytest.mark.esp32s2
 @pytest.mark.esp32s3
 @pytest.mark.parametrize('config', ['spiffs',], indirect=True)
 def test_examples_protocol_http_server_file_serving(dut: Dut) -> None:
@@ -38,7 +37,7 @@ def test_examples_protocol_http_server_file_serving(dut: Dut) -> None:
     dut.expect('Initializing SPIFFS', timeout=30)
     # Parse IP address of STA
     logging.info('Waiting to connect with AP')
-    got_ip = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)', timeout=30)[1].decode()
+    got_ip = dut.expect(r'IPv4 address: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=30)[1].decode()
     # Expected logs
     got_port = dut.expect(r"Starting HTTP Server on port: '(\d+)'", timeout=30)[1].decode()
     logging.info('Got IP   : {}'.format(got_ip))

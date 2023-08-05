@@ -11,14 +11,13 @@
 #include <freertos/task.h>
 #include <freertos/semphr.h>
 #include "soc/soc_caps.h"
+#include "esp_private/esp_modem_clock.h"
 #include "esp_private/wifi.h"
 
-
-#if !TEMPORARY_DISABLED_FOR_TARGETS(ESP32C2)
+#if !TEMPORARY_DISABLED_FOR_TARGETS(ESP32H2)
 //IDF-5046
-#include "esp_phy_init.h"
 
-#if !TEMPORARY_DISABLED_FOR_TARGETS(ESP32S2, ESP32C3)
+#include "esp_phy_init.h"
 
 //Function just extern, need not test
 #if SOC_BT_SUPPORTED
@@ -59,7 +58,9 @@ static IRAM_ATTR void test_phy_rtc_cache_task(void *arg)
 {
     //power up wifi and bt mac bb power domain
     esp_wifi_power_domain_on();
-
+#if CONFIG_IDF_TARGET_ESP32C6
+    modem_clock_module_enable(PERIPH_PHY_MODULE);
+#endif // CONFIG_IDF_TARGET_ESP32C6
     test_phy_rtc_init();
 
 #if CONFIG_IDF_TARGET_ESP32
@@ -81,12 +82,15 @@ static IRAM_ATTR void test_phy_rtc_cache_task(void *arg)
 
 #if SOC_BT_SUPPORTED
 
+#if CONFIG_IDF_TARGET_ESP32
+    /* Only esp32 will call bt_track_pll_cap() in the interrupt
+        handler, other chips will call this function in the task
+     */
     ESP_LOGI(TAG, "Test bt_track_pll_cap()...");
     spi_flash_disable_interrupts_caches_and_other_cpu();
     bt_track_pll_cap();
     spi_flash_enable_interrupts_caches_and_other_cpu();
 
-#if CONFIG_IDF_TARGET_ESP32
     extern void bt_bb_init_cmplx_reg(void);
     ESP_LOGI(TAG, "Test bt_bb_init_cmplx_reg()...");
     spi_flash_disable_interrupts_caches_and_other_cpu();
@@ -94,22 +98,11 @@ static IRAM_ATTR void test_phy_rtc_cache_task(void *arg)
     spi_flash_enable_interrupts_caches_and_other_cpu();
 #endif //CONFIG_IDF_TARGET_ESP32
 
-#if CONFIG_IDF_TARGET_ESP32C3
-    extern void bt_bb_v2_init_cmplx(int print_version);
-    ESP_LOGI(TAG, "Test bt_bb_v2_init_cmplx()...");
-    spi_flash_disable_interrupts_caches_and_other_cpu();
-    bt_bb_v2_init_cmplx(0);
-    spi_flash_enable_interrupts_caches_and_other_cpu();
-
-    extern void coex_pti_v2(void);
-    ESP_LOGI(TAG, "Test coex_pti_v2()...");
-    spi_flash_disable_interrupts_caches_and_other_cpu();
-    coex_pti_v2();
-    spi_flash_enable_interrupts_caches_and_other_cpu();
-#endif //CONFIG_IDF_TARGET_ESP32C3
-
 #endif //SOC_BT_SUPPORTED
 
+#if CONFIG_IDF_TARGET_ESP32C6
+    modem_clock_module_disable(PERIPH_PHY_MODULE);
+#endif // CONFIG_IDF_TARGET_ESP32C6
     //power down wifi and bt mac bb power domain
     esp_wifi_power_domain_off();
 
@@ -129,6 +122,4 @@ TEST_CASE("Test PHY/RTC functions called when cache is disabled", "[phy_rtc][cac
 
     vSemaphoreDelete(semphr_done);
 }
-#endif //!TEMPORARY_DISABLED_FOR_TARGETS(ESP32S2)
-
-#endif //!TEMPORARY_DISABLED_FOR_TARGETS(ESP32C2)
+#endif //!TEMPORARY_DISABLED_FOR_TARGETS(ESP32C6)

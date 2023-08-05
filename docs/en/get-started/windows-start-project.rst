@@ -1,6 +1,6 @@
-Now since all requirements are met, the next topic will guide you on how to start your first project.
+Now since all requirements are met, the next topic guides you on how to start your first project.
 
-This guide will help you on the first steps using ESP-IDF. Follow this guide to start a new project on the {IDF_TARGET_NAME} and build, flash, and monitor the device output.
+This guide helps you on the first steps using ESP-IDF. Follow this guide to start a new project on the {IDF_TARGET_NAME} and build, flash, and monitor the device output.
 
 .. note::
 
@@ -35,7 +35,7 @@ If you are not sure how to check the serial port name, please refer to :doc:`est
 
 .. note::
 
-    Keep the port name handy as you will need it in the next steps.
+    Keep the port name handy as it is needed in the next steps.
 
 Configure Your Project
 ======================
@@ -51,7 +51,7 @@ Windows
     idf.py set-target {IDF_TARGET_PATH_NAME}
     idf.py menuconfig
 
-After opening a new project, you should first set the target with ``idf.py set-target {IDF_TARGET_PATH_NAME}``. Note that existing builds and configurations in the project, if any, will be cleared and initialized in this process. The target may be saved in the environment variable to skip this step at all. See :ref:`selecting-idf-target` for additional information.
+After opening a new project, you should first set the target with ``idf.py set-target {IDF_TARGET_PATH_NAME}``. Note that existing builds and configurations in the project, if any, are cleared and initialized in this process. The target may be saved in the environment variable to skip this step at all. See :ref:`selecting-idf-target` for additional information.
 
 If the previous steps have been done correctly, the following menu appears:
 
@@ -76,3 +76,17 @@ You are using this menu to set up project specific variables, e.g., Wi-Fi networ
 .. only:: esp32 or esp32s2 or esp32s3
 
     If you are using one of the supported development boards, you can speed up your development by using Board Support Package. See `Additional Tips <#additional-tips>`__ for more information.
+
+.. only:: esp32s2
+
+    To use the USB for flashing the {IDF_TARGET_NAME}, you need to change the channel for the console output to USB. For the {IDF_TARGET_NAME}, the default console output channel is the UART.
+
+    1. Navigate to the option ``Channel for console output``.
+
+        ``Component config  --->  ESP System Settings  ---> Channel for console output``
+
+    2. Change to the option (the default is always UART):
+
+        ``USB CDC``
+
+    3. Save the new configuration and exit the ``menuconfig`` screen.

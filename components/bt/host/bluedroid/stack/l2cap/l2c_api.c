@@ -1297,7 +1297,7 @@ UINT8 L2CA_GetChnlFcrMode (UINT16 lcid)
 
 #endif  ///CLASSIC_BT_INCLUDED == TRUE
 
-#if (BLE_INCLUDED == TRUE)
+#if (BLE_L2CAP_COC_INCLUDED == TRUE)
 /*******************************************************************************
 **
 ** Function         L2CA_RegisterLECoc
@@ -1608,7 +1608,7 @@ BOOLEAN L2CA_GetPeerLECocConfig (UINT16 lcid, tL2CAP_LE_CFG_INFO* peer_cfg)
 
     return TRUE;
 }
-#endif  ///BLE_INCLUDED == TRUE
+#endif // (BLE_L2CAP_COC_INCLUDED == TRUE)
 
 #if (L2CAP_NUM_FIXED_CHNLS > 0)
 /*******************************************************************************
@@ -2329,13 +2329,28 @@ void l2ble_update_att_acl_pkt_num(UINT8 type, tl2c_buff_param_t *param)
             xSemaphoreGive(buff_semaphore);
             break;
         }
+
+        if (!gatt_check_connection_state_by_tcb(p_tcb)) {
+            L2CAP_TRACE_ERROR("connection not established\n");
+            xSemaphoreGive(buff_semaphore);
+            break;
+        }
+
         tL2C_LCB * p_lcb = l2cu_find_lcb_by_bd_addr (p_tcb->peer_bda, BT_TRANSPORT_LE);
         if (p_lcb == NULL){
             L2CAP_TRACE_ERROR("%s not found p_lcb", __func__);
             xSemaphoreGive(buff_semaphore);
             break;
         }
-        fixed_queue_t * queue = p_lcb->p_fixed_ccbs[L2CAP_ATT_CID - L2CAP_FIRST_FIXED_CHNL]->xmit_hold_q;
+
+        tL2C_CCB *p_ccb = p_lcb->p_fixed_ccbs[L2CAP_ATT_CID - L2CAP_FIRST_FIXED_CHNL];
+        if(p_ccb == NULL) {
+            L2CAP_TRACE_ERROR("%s not found p_ccb", __func__);
+            xSemaphoreGive(buff_semaphore);
+            break;
+        }
+
+        fixed_queue_t * queue = p_ccb->xmit_hold_q;
         att_max_num = MIN(p_lcb->link_xmit_quota, L2CAP_CACHE_ATT_ACL_NUM);
         if (queue == NULL){
             L2CAP_TRACE_ERROR("%s not found queue", __func__);
@@ -2369,6 +2384,12 @@ void l2ble_update_att_acl_pkt_num(UINT8 type, tl2c_buff_param_t *param)
         xSemaphoreGive(buff_semaphore);
         vSemaphoreDelete(buff_semaphore);
         buff_semaphore = NULL;
+        break;
+    }
+    case L2CA_BUFF_FREE:{
+        xSemaphoreTake(buff_semaphore, portMAX_DELAY);
+        // Do nothing
+        xSemaphoreGive(buff_semaphore);
         break;
     }
     default:

@@ -11,8 +11,9 @@ endif()
 #
 idf_build_get_property(build_dir BUILD_DIR)
 set(BOOTLOADER_BUILD_DIR "${build_dir}/bootloader")
+set(BOOTLOADER_ELF_FILE "${BOOTLOADER_BUILD_DIR}/bootloader.elf")
 set(bootloader_binary_files
-    "${BOOTLOADER_BUILD_DIR}/bootloader.elf"
+    "${BOOTLOADER_ELF_FILE}"
     "${BOOTLOADER_BUILD_DIR}/bootloader.bin"
     "${BOOTLOADER_BUILD_DIR}/bootloader.map"
     )
@@ -147,5 +148,5 @@ endif()
 #
 # So for now we just have the top-level build remove the final build products...
 set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" APPEND PROPERTY
-    ADDITIONAL_MAKE_CLEAN_FILES
+    ADDITIONAL_CLEAN_FILES
     ${bootloader_binary_files})

@@ -10,11 +10,9 @@
 #include <stdlib.h>
 #include "esp32/rom/rtc.h"
 #include "esp_rom_uart.h"
+#include "esp_cpu.h"
 #include "soc/rtc.h"
 #include "soc/rtc_periph.h"
-#include "soc/sens_periph.h"
-#include "soc/efuse_periph.h"
-#include "hal/cpu_hal.h"
 #include "hal/clk_tree_ll.h"
 #include "hal/regi2c_ctrl_ll.h"
 #include "esp_hw_log.h"
@@ -95,7 +93,7 @@ void rtc_clk_init(rtc_clk_config_t cfg)
 
         rtc_xtal_freq_t est_xtal_freq = rtc_clk_xtal_freq_estimate();
         if (est_xtal_freq != configured_xtal_freq) {
-            ESP_HW_LOGW(TAG, "Possibly invalid CONFIG_ESP32_XTAL_FREQ setting (%dMHz). Detected %d MHz.",
+            ESP_HW_LOGW(TAG, "Possibly invalid CONFIG_XTAL_FREQ setting (%dMHz). Detected %d MHz.",
                     configured_xtal_freq, est_xtal_freq);
         }
     }
@@ -122,7 +120,7 @@ void rtc_clk_init(rtc_clk_config_t cfg)
     clk_ll_ref_tick_set_divider(SOC_CPU_CLK_SRC_PLL, new_config.freq_mhz);
 
     /* Re-calculate the ccount to make time calculation correct. */
-    cpu_hal_set_cycle_count( (uint64_t)cpu_hal_get_cycle_count() * cfg.cpu_freq_mhz / freq_before );
+    esp_cpu_set_cycle_count( (uint64_t)esp_cpu_get_cycle_count() * cfg.cpu_freq_mhz / freq_before );
 
     /* Slow & fast clocks setup */
     // We will not power off RC_FAST in bootloader stage even if it is not being used as any

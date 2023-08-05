@@ -24,6 +24,10 @@ Non-constant static data (.data) and zero-initialized data (.bss) is placed by t
 
    The available size of the internal DRAM region is reduced by 64 KB (by shifting start address to ``0x3FFC0000``) if Bluetooth stack is used. Length of this region is also reduced by 16 KB or 32 KB if trace memory is used. Due to some memory fragmentation issues caused by ROM, it is also not possible to use all available DRAM for static allocations - however the remaining DRAM is still available as heap at runtime.
 
+   .. note::
+
+    There is 520 KB of available SRAM (320 KB of DRAM and 200 KB of IRAM) on the ESP32. However, due to a technical limitation, the maximum statically allocated DRAM usage is 160 KB. The remaining 160 KB (for a total of 320 KB of DRAM) can only be allocated at runtime as heap.
+
 .. only:: not esp32
 
    .. note::
@@ -67,7 +71,7 @@ IRAM (Instruction RAM)
         Any internal SRAM which is not used for Instruction RAM will be made available as :ref:`dram` for static data and dynamic allocation (heap).
 
 
-When to place code in IRAM
+When to Place Code in IRAM
 ================================
 
 Cases when parts of the application should be placed into IRAM:
@@ -79,7 +83,7 @@ Cases when parts of the application should be placed into IRAM:
 
 .. _how-to-place-code-in-iram:
 
-How to place code in IRAM
+How to Place Code in IRAM
 =========================
 
 Some code is automatically placed into the IRAM region using the linker script.
@@ -116,27 +120,17 @@ Jump table optimizations can be re-enabled for individual source files that don'
 
 .. _irom:
 
-IROM (code executed from flash)
+IROM (Code Executed from flash)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-If a function is not explicitly placed into :ref:`iram` or RTC memory, it is placed into flash. The mechanism by which Flash MMU is used to allow code execution from flash is described in *{IDF_TARGET_NAME} Technical Reference Manual* > *Memory Management and Protection Units (MMU, MPU)* [`PDF <{IDF_TARGET_TRM_EN_URL}#mpummu>`__]. As IRAM is limited, most of an application's binary code must be placed into IROM instead.
-
-During :doc:`startup`, the bootloader (which runs from IRAM) configures the MMU flash cache to map the app's instruction code region to the instruction space. Flash accessed via the MMU is cached using some internal SRAM and accessing cached flash data is as fast as accessing other types of internal memory.
-
-RTC FAST memory
-^^^^^^^^^^^^^^^
-
-The same region of RTC FAST memory can be accessed as both instruction and data memory. Code which has to run after wake-up from deep sleep mode has to be placed into RTC memory. Please check detailed description in :doc:`deep sleep <deep-sleep-stub>` documentation.
+If a function is not explicitly placed into :ref:`iram` or RTC memory, it is placed into flash. As IRAM is limited, most of an application's binary code must be placed into IROM instead.
 
 .. only:: esp32
 
-     RTC FAST memory can only be accessed by the PRO CPU.
+    The mechanism by which Flash MMU is used to allow code execution from flash is described in *{IDF_TARGET_NAME} Technical Reference Manual* > *Memory Management and Protection Units (MMU, MPU)* [`PDF <{IDF_TARGET_TRM_EN_URL}#mpummu>`__].
 
-     In single core mode, remaining RTC FAST memory is added to the heap unless the option :ref:`CONFIG_ESP_SYSTEM_ALLOW_RTC_FAST_MEM_AS_HEAP` is disabled. This memory can be used interchangeably with :ref:`DRAM`, but is slightly slower to access and not DMA capable.
+During :doc:`startup`, the bootloader (which runs from IRAM) configures the MMU flash cache to map the app's instruction code region to the instruction space. Flash accessed via the MMU is cached using some internal SRAM and accessing cached flash data is as fast as accessing other types of internal memory.
 
-.. only:: not esp32 and not esp32c2
-
-     Remaining RTC FAST memory is added to the heap unless the option :ref:`CONFIG_ESP_SYSTEM_ALLOW_RTC_FAST_MEM_AS_HEAP` is disabled. This memory can be used interchangeably with :ref:`DRAM`, but is slightly slower to access.
 
 .. _drom:
 
@@ -163,6 +157,31 @@ The ``DRAM_ATTR`` attribute can be used to force constants from DROM into the :r
     Example::
 
         RTC_NOINIT_ATTR uint32_t rtc_noinit_data;
+
+
+.. only:: SOC_RTC_FAST_MEM_SUPPORTED
+
+    RTC FAST memory
+    ^^^^^^^^^^^^^^^
+
+    .. only:: esp32c6 or esp32h2
+
+        .. note::
+
+            On {IDF_TARGET_NAME} what was previously referred to as RTC memory has been renamed LP (low power) memory. You might see both terms being used interchangeably in IDF code, docs and the technical reference manual.
+
+
+    The same region of RTC FAST memory can be accessed as both instruction and data memory. Code which has to run after wake-up from deep sleep mode has to be placed into RTC memory. Please check detailed description in :doc:`deep sleep <deep-sleep-stub>` documentation.
+
+    .. only:: esp32
+
+        RTC FAST memory can only be accessed by the PRO CPU.
+
+        In single core mode, remaining RTC FAST memory is added to the heap unless the option :ref:`CONFIG_ESP_SYSTEM_ALLOW_RTC_FAST_MEM_AS_HEAP` is disabled. This memory can be used interchangeably with :ref:`DRAM`, but is slightly slower to access and not DMA capable.
+
+    .. only:: not esp32
+
+        Remaining RTC FAST memory is added to the heap unless the option :ref:`CONFIG_ESP_SYSTEM_ALLOW_RTC_FAST_MEM_AS_HEAP` is disabled. This memory can be used interchangeably with :ref:`DRAM`, but is slightly slower to access.
 
 
 DMA Capable Requirement
@@ -201,7 +220,7 @@ Or::
 
 It is also possible to allocate DMA-capable memory buffers dynamically by using the :ref:`MALLOC_CAP_DMA <dma-capable-memory>` capabilities flag.
 
-DMA Buffer in the stack
+DMA Buffer in the Stack
 ^^^^^^^^^^^^^^^^^^^^^^^
 
 Placing DMA buffers in the stack is possible but discouraged. If doing so, pay attention to the following:

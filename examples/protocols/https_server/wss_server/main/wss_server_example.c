@@ -14,8 +14,9 @@
 #include <sys/param.h>
 #include "esp_netif.h"
 #include "esp_eth.h"
+#include "esp_wifi.h"
 #include "protocol_examples_common.h"
-
+#include "lwip/sockets.h"
 #include <esp_https_server.h>
 #include "keep_alive.h"
 #include "sdkconfig.h"
@@ -111,6 +112,7 @@ void wss_close_fd(httpd_handle_t hd, int sockfd)
     ESP_LOGI(TAG, "Client disconnected %d", sockfd);
     wss_keep_alive_t h = httpd_get_global_user_ctx(hd);
     wss_keep_alive_remove_client(h, sockfd);
+    close(sockfd);
 }
 
 static const httpd_uri_t ws = {

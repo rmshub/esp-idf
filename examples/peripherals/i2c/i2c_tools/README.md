@@ -1,5 +1,5 @@
-| Supported Targets | ESP32 | ESP32-S2 | ESP32-S3 | ESP32-C3 | ESP32-C2 |
-| ----------------- | ----- | -------- | -------- | -------- | -------- |
+| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C6 | ESP32-H2 | ESP32-S2 | ESP32-S3 |
+| ----------------- | ----- | -------- | -------- | -------- | -------- | -------- | -------- |
 
 # I2C Tools Example
 
@@ -7,7 +7,7 @@
 
 ## Overview
 
-[I2C Tools](https://i2c.wiki.kernel.org/index.php/I2C_Tools) is a simple but very useful tool for developing I2C related applications, which is also famous in Linux platform. This example just implements some of basic features of [I2C Tools](https://i2c.wiki.kernel.org/index.php/I2C_Tools) based on [esp32 console component](https://docs.espressif.com/projects/esp-idf/en/latest/api-guides/console.html). As follows, this example supports five command-line tools:
+[I2C Tools](https://i2c.wiki.kernel.org/index.php/I2C_Tools) is a simple but very useful tool for developing I2C related applications, which is also famous in Linux platform. This example just implements some of basic features of [I2C Tools](https://i2c.wiki.kernel.org/index.php/I2C_Tools) based on [esp32 console component](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/system/console.html). As follows, this example supports five command-line tools:
 
 1. `i2cconfig`: It will configure the I2C bus with specific GPIO number, port number and frequency.
 2. `i2cdetect`: It will scan an I2C bus for devices and output a table with the list of detected devices on the bus.
@@ -34,10 +34,10 @@ To run this example, you should have any ESP32, ESP32-S and ESP32-C based develo
 | ESP32-S3 I2C Master | GPIO1  | GPIO2  | GND  | GND   | 3.3V |
 | ESP32-C3 I2C Master | GPIO5  | GPIO6  | GND  | GND   | 3.3V |
 | ESP32-C2 I2C Master | GPIO5  | GPIO6  | GND  | GND   | 3.3V |
-| ESP32-H2 I2C Master | GPIO5  | GPIO6  | GND  | GND   | 3.3V |
+| ESP32-H2 I2C Master | GPIO1  | GPIO2  | GND  | GND   | 3.3V |
 | Sensor              | SDA    | SCL    | GND  | WAK   | VCC  |
 
-**Note: ** There’s no need to add an external pull-up resistors for SDA/SCL pin, because the driver will enable the internal pull-up resistors itself.
+**Note:** It is recommended to add external pull-up resistors for SDA/SCL pins to make the communication more stable, though the driver will enable internal pull-up resistors.
 
 ### Configure the project
 

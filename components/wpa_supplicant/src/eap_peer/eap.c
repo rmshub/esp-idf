@@ -415,7 +415,7 @@ struct wpabuf * eap_sm_build_identity_resp(struct eap_sm *sm, u8 id, int encrypt
 	struct eap_peer_config *config = eap_get_config(sm);
 
 	if (config == NULL) {
-        wpa_printf(MSG_ERROR, "EAP: Build Identity Resp-> configuration was not available\n");
+        wpa_printf(MSG_ERROR, "EAP: Build Identity Resp-> configuration was not available");
 		return NULL;
 	}
 
@@ -432,7 +432,7 @@ struct wpabuf * eap_sm_build_identity_resp(struct eap_sm *sm, u8 id, int encrypt
 	}
 
 	if (identity == NULL) {
-        wpa_printf(MSG_ERROR, "EAP: Build Identity Resp-> identity was not available\n");
+        wpa_printf(MSG_ERROR, "EAP: Build Identity Resp-> identity was not available");
 		return NULL;
 	}
 
@@ -646,6 +646,7 @@ void eap_peer_config_deinit(struct eap_sm *sm)
 	os_free(sm->config.new_password);
 	os_free(sm->config.eap_methods);
 	os_bzero(&sm->config, sizeof(struct eap_peer_config));
+	config_methods = NULL;
 }
 
 int eap_peer_blob_init(struct eap_sm *sm)

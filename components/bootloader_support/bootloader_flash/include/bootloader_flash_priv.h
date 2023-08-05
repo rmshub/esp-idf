@@ -10,7 +10,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <esp_err.h>
-#include <esp_spi_flash.h> /* including in bootloader for error values */
+#include <spi_flash_mmap.h> /* including in bootloader for error values */
 #include "sdkconfig.h"
 #include "bootloader_flash.h"
 
@@ -20,7 +20,7 @@ extern "C" {
 
 #define FLASH_SECTOR_SIZE 0x1000
 #define FLASH_BLOCK_SIZE 	0x10000
-#define MMAP_ALIGNED_MASK 	0x0000FFFF
+#define MMAP_ALIGNED_MASK 	(SPI_FLASH_MMU_PAGE_SIZE - 1)
 #define MMU_FLASH_MASK    (~(SPI_FLASH_MMU_PAGE_SIZE - 1))
 
 /**
@@ -42,14 +42,20 @@ extern "C" {
 #define CMD_WRSR2      0x31 /* Not all SPI flash uses this command */
 #define CMD_WRSR3      0x11 /* Not all SPI flash uses this command */
 #define CMD_WREN       0x06
+#define CMD_WRENVSR    0x50 /* Flash write enable for volatile SR bits */
 #define CMD_WRDI       0x04
 #define CMD_RDSR       0x05
 #define CMD_RDSR2      0x35 /* Not all SPI flash uses this command */
 #define CMD_RDSR3      0x15 /* Not all SPI flash uses this command */
 #define CMD_OTPEN      0x3A /* Enable OTP mode, not all SPI flash uses this command */
 #define CMD_RDSFDP     0x5A /* Read the SFDP of the flash */
-#define CMD_WRAP       0x77 /* Set burst with wrap command */
 #define CMD_RESUME     0x7A /* Resume command to clear flash suspend bit */
+#define CMD_RESETEN    0x66
+#define CMD_RESET      0x99
+#define CMD_FASTRD_QIO_4B   0xEC
+#define CMD_FASTRD_QUAD_4B  0x6C
+#define CMD_FASTRD_DIO_4B   0xBC
+#define CMD_FASTRD_DUAL_4B  0x3C
 
 
 /* Provide a Flash API for bootloader_support code,
@@ -171,6 +177,14 @@ uint32_t bootloader_flash_read_sfdp(uint32_t sfdp_addr, unsigned int miso_byte_n
  * @brief Enable the flash write protect (WEL bit).
  */
 void bootloader_enable_wp(void);
+
+/**
+ * @brief Once this function is called,
+ * any on-going internal operations will be terminated and the device will return to its default power-on
+ * state and lose all the current volatile settings, such as Volatile Status Register bits, Write Enable Latch
+ * (WEL) status, Program/Erase Suspend status, etc.
+ */
+void bootloader_spi_flash_reset(void);
 
 #ifdef __cplusplus
 }

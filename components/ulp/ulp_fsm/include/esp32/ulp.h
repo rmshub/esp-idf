@@ -90,7 +90,7 @@ extern "C" {
 #define SUB_OPCODE_END 0        /*!< Stop executing the program and optionally wake up the chip */
 #define SUB_OPCODE_SLEEP 1      /*!< Stop executing the program and run it again after selected interval */
 
-#define OPCODE_TSENS 10         /*!< Instruction: temperature sensor measurement */
+#define OPCODE_TSENS 10         /*!< Instruction: temperature sensor measurement. Poor accuracy, not recommended for most use-cases */
 
 #define OPCODE_HALT 11          /*!< Halt the coprocessor */
 
@@ -331,7 +331,7 @@ static inline uint32_t SOC_REG_TO_ULP_PERIPH_SEL(uint32_t reg) {
  * This instruction can access RTC_CNTL_, RTC_IO_, SENS_, and RTC_I2C peripheral registers.
  */
 #define I_WR_REG(reg, low_bit, high_bit, val) {.wr_reg = {\
-    .addr = (reg & 0xff) / sizeof(uint32_t), \
+    .addr = ((reg) / sizeof(uint32_t)) & 0xff, \
     .periph_sel = SOC_REG_TO_ULP_PERIPH_SEL(reg), \
     .data = val, \
     .low = low_bit, \
@@ -345,7 +345,7 @@ static inline uint32_t SOC_REG_TO_ULP_PERIPH_SEL(uint32_t reg) {
  * This instruction can access RTC_CNTL_, RTC_IO_, SENS_, and RTC_I2C peripheral registers.
  */
 #define I_RD_REG(reg, low_bit, high_bit) {.rd_reg = {\
-    .addr = (reg & 0xff) / sizeof(uint32_t), \
+    .addr = ((reg) / sizeof(uint32_t)) & 0xff, \
     .periph_sel = SOC_REG_TO_ULP_PERIPH_SEL(reg), \
     .unused = 0, \
     .low = low_bit, \

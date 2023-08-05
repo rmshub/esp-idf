@@ -1,5 +1,5 @@
-| Supported Targets | ESP32-H2 |
-| ----------------- | -------- |
+| Supported Targets | ESP32-C6 | ESP32-H2 |
+| ----------------- | -------- | -------- |
 
 # OpenThread Command Line Example
 
@@ -9,7 +9,7 @@ This example demonstrates an [OpenThread CLI](https://github.com/openthread/open
 
 ### Hardware Required
 
-To run this example, an ESP32-H2 board is required.
+To run this example, a board with IEEE 802.15.4 module (for example ESP32-H2) is required.
 
 ### Configure the project
 
@@ -119,7 +119,7 @@ The second device has joined the Thread network as a router (or a child).
 
 ## Extension commands
 
-You can refer to the [extension command](../extension_command/README.md) about the extension commands.
+You can refer to the [extension command](https://github.com/espressif/esp-thread-br/blob/main/components/esp_ot_cli_extension/README.md) about the extension commands.
 
 The following examples are supported by `ot_cli`:
 

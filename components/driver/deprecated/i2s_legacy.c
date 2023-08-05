@@ -26,9 +26,13 @@
 #include "driver/i2s_types_legacy.h"
 #include "hal/i2s_hal.h"
 #if SOC_I2S_SUPPORTS_DAC
-#include "driver/dac.h"
-#include "driver/adc.h"
-#include "../adc1_private.h"
+#include "hal/dac_ll.h"
+#include "hal/dac_types.h"
+#include "esp_private/adc_share_hw_ctrl.h"
+#include "esp_private/sar_periph_ctrl.h"
+#include "adc1_private.h"
+#include "driver/adc_i2s_legacy.h"
+#include "driver/adc_types_legacy.h"
 #endif // SOC_I2S_SUPPORTS_ADC
 
 #if SOC_GDMA_SUPPORTED
@@ -45,6 +49,7 @@
 #include "esp_efuse.h"
 #include "esp_rom_gpio.h"
 #include "esp_private/periph_ctrl.h"
+#include "esp_private/esp_clk.h"
 
 static const char *TAG = "i2s(legacy)";
 
@@ -197,15 +202,15 @@ static bool IRAM_ATTR i2s_dma_tx_callback(gdma_channel_handle_t dma_chan, gdma_e
         if (xQueueIsQueueFullFromISR(p_i2s->tx->queue)) {
             xQueueReceiveFromISR(p_i2s->tx->queue, &dummy, &tmp);
             need_awoke |= tmp;
-            if (p_i2s->tx_desc_auto_clear) {
-                memset((void *) dummy, 0, p_i2s->tx->buf_size);
-            }
             if (p_i2s->i2s_queue) {
                 i2s_event.type = I2S_EVENT_TX_Q_OVF;
                 i2s_event.size = p_i2s->tx->buf_size;
                 xQueueSendFromISR(p_i2s->i2s_queue, (void * )&i2s_event, &tmp);
                 need_awoke |= tmp;
             }
+        }
+        if (p_i2s->tx_desc_auto_clear) {
+            memset((void *) (((lldesc_t *)finish_desc)->buf), 0, p_i2s->tx->buf_size);
         }
         xQueueSendFromISR(p_i2s->tx->queue, &(((lldesc_t *)finish_desc)->buf), &tmp);
         need_awoke |= tmp;
@@ -253,17 +258,17 @@ static void IRAM_ATTR i2s_intr_handler_default(void *arg)
         if (xQueueIsQueueFullFromISR(p_i2s->tx->queue)) {
             xQueueReceiveFromISR(p_i2s->tx->queue, &dummy, &tmp);
             need_awoke |= tmp;
-            // See if tx descriptor needs to be auto cleared:
-            // This will avoid any kind of noise that may get introduced due to transmission
-            // of previous data from tx descriptor on I2S line.
-            if (p_i2s->tx_desc_auto_clear == true) {
-                memset((void *) dummy, 0, p_i2s->tx->buf_size);
-            }
             if (p_i2s->i2s_queue) {
                 i2s_event.type = I2S_EVENT_TX_Q_OVF;
                 xQueueSendFromISR(p_i2s->i2s_queue, (void * )&i2s_event, &tmp);
                 need_awoke |= tmp;
             }
+        }
+        // See if tx descriptor needs to be auto cleared:
+        // This will avoid any kind of noise that may get introduced due to transmission
+        // of previous data from tx descriptor on I2S line.
+        if (p_i2s->tx_desc_auto_clear == true) {
+            memset((void *)(((lldesc_t *)finish_desc)->buf), 0, p_i2s->tx->buf_size);
         }
         xQueueSendFromISR(p_i2s->tx->queue, &(((lldesc_t *)finish_desc)->buf), &tmp);
         need_awoke |= tmp;
@@ -533,7 +538,7 @@ static esp_err_t i2s_alloc_dma_buffer(i2s_port_t i2s_num, i2s_dma_t *dma_obj)
     if (p_i2s[i2s_num]->dir & I2S_DIR_RX) {
         i2s_ll_rx_set_eof_num(p_i2s[i2s_num]->hal.dev, dma_obj->buf_size);
     }
-    ESP_LOGD(TAG, "DMA Malloc info, datalen=blocksize=%d, dma_desc_num=%d", dma_obj->buf_size, buf_cnt);
+    ESP_LOGD(TAG, "DMA Malloc info, datalen=blocksize=%d, dma_desc_num=%"PRIu32, dma_obj->buf_size, buf_cnt);
     return ESP_OK;
 err:
     /* Delete DMA buffer if failed to allocate memory */
@@ -622,6 +627,7 @@ err:
 /*-------------------------------------------------------------
                    I2S clock operation
   -------------------------------------------------------------*/
+  // [clk_tree] TODO: replace the following switch table by clk_tree API
 static uint32_t i2s_config_source_clock(i2s_port_t i2s_num, bool use_apll, uint32_t mclk)
 {
 #if SOC_I2S_SUPPORTS_APLL
@@ -642,18 +648,18 @@ static uint32_t i2s_config_source_clock(i2s_port_t i2s_num, bool use_apll, uint3
             return 0;
         }
         if (ret == ESP_ERR_INVALID_STATE) {
-            ESP_LOGW(TAG, "APLL is occupied already, it is working at %d Hz", real_freq);
+            ESP_LOGW(TAG, "APLL is occupied already, it is working at %"PRIu32" Hz", real_freq);
         }
-        ESP_LOGD(TAG, "APLL expected frequency is %d Hz, real frequency is %d Hz", expt_freq, real_freq);
+        ESP_LOGD(TAG, "APLL expected frequency is %"PRIu32" Hz, real frequency is %"PRIu32" Hz", expt_freq, real_freq);
         /* In APLL mode, there is no sclk but only mclk, so return 0 here to indicate APLL mode */
         return real_freq;
     }
-    return I2S_LL_BASE_CLK;
+    return I2S_LL_DEFAULT_PLL_CLK_FREQ;
 #else
     if (use_apll) {
         ESP_LOGW(TAG, "APLL not supported on current chip, use I2S_CLK_SRC_DEFAULT as default clock source");
     }
-    return I2S_LL_BASE_CLK;
+    return I2S_LL_DEFAULT_PLL_CLK_FREQ;
 #endif
 }
 
@@ -802,6 +808,8 @@ static esp_err_t i2s_calculate_clock(i2s_port_t i2s_num, i2s_hal_clock_info_t *c
 
     /* Calculate clock for common mode */
     ESP_RETURN_ON_ERROR(i2s_calculate_common_clock(i2s_num, clk_info), TAG, "Common clock calculate failed");
+    ESP_LOGD(TAG, "[sclk] %"PRIu32" [mclk] %"PRIu32" [mclk_div] %d [bclk] %"PRIu32" [bclk_div] %d",
+             clk_info->sclk, clk_info->mclk, clk_info->mclk_div, clk_info->bclk, clk_info->bclk_div);
     return ESP_OK;
 }
 
@@ -830,20 +838,22 @@ esp_err_t i2s_set_dac_mode(i2s_dac_mode_t dac_mode)
 {
     ESP_RETURN_ON_FALSE((dac_mode < I2S_DAC_CHANNEL_MAX), ESP_ERR_INVALID_ARG, TAG, "i2s dac mode error");
     if (dac_mode == I2S_DAC_CHANNEL_DISABLE) {
-        dac_output_disable(DAC_CHANNEL_1);
-        dac_output_disable(DAC_CHANNEL_2);
-        dac_i2s_disable();
+        dac_ll_power_down(DAC_CHAN_0);
+        dac_ll_power_down(DAC_CHAN_1);
+        dac_ll_digi_enable_dma(false);
     } else {
-        dac_i2s_enable();
+        dac_ll_digi_enable_dma(true);
     }
 
     if (dac_mode & I2S_DAC_CHANNEL_RIGHT_EN) {
         //DAC1, right channel
-        dac_output_enable(DAC_CHANNEL_1);
+        dac_ll_power_on(DAC_CHAN_0);
+        dac_ll_rtc_sync_by_adc(false);
     }
     if (dac_mode & I2S_DAC_CHANNEL_LEFT_EN) {
         //DAC2, left channel
-        dac_output_enable(DAC_CHANNEL_2);
+        dac_ll_power_on(DAC_CHAN_1);
+        dac_ll_rtc_sync_by_adc(false);
     }
     return ESP_OK;
 }
@@ -1055,15 +1065,15 @@ esp_err_t i2s_set_clk(i2s_port_t i2s_num, uint32_t rate, uint32_t bits_cfg, i2s_
     slot_cfg->slot_mode = ((ch & 0xFFFF) == I2S_CHANNEL_MONO) ? I2S_SLOT_MODE_MONO : I2S_SLOT_MODE_STEREO;
     if (p_i2s[i2s_num]->mode == I2S_COMM_MODE_STD) {
         if (slot_cfg->slot_mode == I2S_SLOT_MODE_MONO) {
-            if (slot_cfg->std.slot_mask == I2S_STD_SLOT_LEFT_RIGHT) {
-                slot_cfg->std.slot_mask = I2S_STD_SLOT_ONLY_LEFT;
+            if (slot_cfg->std.slot_mask == I2S_STD_SLOT_BOTH) {
+                slot_cfg->std.slot_mask = I2S_STD_SLOT_LEFT;
 #if SOC_I2S_HW_VERSION_1
                 // Enable right first to get correct data sequence
                 slot_cfg->std.ws_pol = !slot_cfg->std.ws_pol;
 #endif
             }
         } else {
-            slot_cfg->std.slot_mask = I2S_STD_SLOT_LEFT_RIGHT;
+            slot_cfg->std.slot_mask = I2S_STD_SLOT_BOTH;
         }
     }
 #if SOC_I2S_SUPPORTS_TDM
@@ -1073,7 +1083,7 @@ esp_err_t i2s_set_clk(i2s_port_t i2s_num, uint32_t rate, uint32_t bits_cfg, i2s_
             slot_mask = (slot_cfg->slot_mode == I2S_SLOT_MODE_MONO) ? 1 : 2;
         }
         ESP_RETURN_ON_FALSE(p_i2s[i2s_num]->total_slot >= (32 - __builtin_clz(slot_mask)), ESP_ERR_INVALID_ARG, TAG,
-                            "The max channel number can't be greater than CH%d\n", p_i2s[i2s_num]->total_slot);
+                            "The max channel number can't be greater than CH%"PRIu32, p_i2s[i2s_num]->total_slot);
         p_i2s[i2s_num]->active_slot = __builtin_popcount(slot_mask);
     } else
 #endif
@@ -1192,6 +1202,7 @@ esp_err_t i2s_set_pdm_tx_up_sample(i2s_port_t i2s_num, const i2s_pdm_tx_upsample
     p_i2s[i2s_num]->clk_cfg.up_sample_fp = upsample_cfg->fp;
     p_i2s[i2s_num]->clk_cfg.up_sample_fs = upsample_cfg->fs;
     i2s_ll_tx_set_pdm_fpfs(p_i2s[i2s_num]->hal.dev, upsample_cfg->fp, upsample_cfg->fs);
+    i2s_ll_tx_set_pdm_over_sample_ratio(p_i2s[i2s_num]->hal.dev, upsample_cfg->fp / upsample_cfg->fs);
     i2s_start(i2s_num);
     xSemaphoreGive(p_i2s[i2s_num]->tx->mux);
     return i2s_set_clk(i2s_num, p_i2s[i2s_num]->clk_cfg.sample_rate_hz, p_i2s[i2s_num]->slot_cfg.data_bit_width, p_i2s[i2s_num]->slot_cfg.slot_mode);
@@ -1277,12 +1288,12 @@ static esp_err_t i2s_config_transfer(i2s_port_t i2s_num, const i2s_config_t *i2s
         SLOT_CFG(std).ws_width = i2s_config->bits_per_sample;
         SLOT_CFG(std).ws_pol = false;
         if (i2s_config->channel_format == I2S_CHANNEL_FMT_RIGHT_LEFT) {
-            SLOT_CFG(std).slot_mask = I2S_STD_SLOT_LEFT_RIGHT;
+            SLOT_CFG(std).slot_mask = I2S_STD_SLOT_BOTH;
         } else if (i2s_config->channel_format == I2S_CHANNEL_FMT_ALL_LEFT ||
                    i2s_config->channel_format == I2S_CHANNEL_FMT_ONLY_LEFT) {
-            SLOT_CFG(std).slot_mask = I2S_STD_SLOT_ONLY_LEFT;
+            SLOT_CFG(std).slot_mask = I2S_STD_SLOT_LEFT;
         } else {
-            SLOT_CFG(std).slot_mask = I2S_STD_SLOT_ONLY_RIGHT;
+            SLOT_CFG(std).slot_mask = I2S_STD_SLOT_RIGHT;
         }
         if (i2s_config->communication_format == I2S_COMM_FORMAT_STAND_I2S) {
             SLOT_CFG(std).bit_shift = true;
@@ -1313,11 +1324,11 @@ static esp_err_t i2s_config_transfer(i2s_port_t i2s_num, const i2s_config_t *i2s
         SLOT_CFG(pdm_tx).lp_scale = I2S_PDM_SIG_SCALING_MUL_1;
         SLOT_CFG(pdm_tx).sinc_scale = I2S_PDM_SIG_SCALING_MUL_1;
 #if SOC_I2S_HW_VERSION_2
-        SLOT_CFG(pdm_tx).sd_en = true;
+        SLOT_CFG(pdm_tx).line_mode = I2S_PDM_TX_ONE_LINE_CODEC;
         SLOT_CFG(pdm_tx).hp_en = true;
         SLOT_CFG(pdm_tx).hp_cut_off_freq_hz = 49;
         SLOT_CFG(pdm_tx).sd_dither = 0;
-        SLOT_CFG(pdm_tx).sd_dither2 = 0;
+        SLOT_CFG(pdm_tx).sd_dither2 = 1;
 #endif // SOC_I2S_HW_VERSION_2
 
         /* Generate PDM TX clock configuration */
@@ -1443,7 +1454,7 @@ static esp_err_t i2s_init_legacy(i2s_port_t i2s_num, int intr_alloc_flag)
 #if SOC_I2S_SUPPORTS_ADC_DAC
     if ((int)p_i2s[i2s_num]->mode == I2S_COMM_MODE_ADC_DAC) {
         if (p_i2s[i2s_num]->dir & I2S_DIR_RX) {
-            adc_power_acquire();
+            sar_periph_ctrl_adc_continuous_power_acquire();
             adc_set_i2s_data_source(ADC_I2S_DATA_SRC_ADC);
             i2s_ll_enable_builtin_adc(p_i2s[i2s_num]->hal.dev, true);
         }
@@ -1498,7 +1509,7 @@ esp_err_t i2s_driver_uninstall(i2s_port_t i2s_num)
         if (obj->dir & I2S_DIR_RX) {
             // Deinit ADC
             adc_set_i2s_data_source(ADC_I2S_DATA_SRC_IO_SIG);
-            adc_power_release();
+            sar_periph_ctrl_adc_continuous_power_release();
         }
     }
 #endif
@@ -1596,7 +1607,7 @@ esp_err_t i2s_driver_install(i2s_port_t i2s_num, const i2s_config_t *i2s_config,
         i2s_obj->i2s_queue = xQueueCreate(queue_size, sizeof(i2s_event_t));
         ESP_GOTO_ON_FALSE(i2s_obj->i2s_queue, ESP_ERR_NO_MEM, err, TAG, "I2S queue create failed");
         *((QueueHandle_t *) i2s_queue) = i2s_obj->i2s_queue;
-        ESP_LOGD(TAG, "queue free spaces: %d", uxQueueSpacesAvailable(i2s_obj->i2s_queue));
+        ESP_LOGD(TAG, "queue free spaces: %" PRIu32, (uint32_t)uxQueueSpacesAvailable(i2s_obj->i2s_queue));
     } else {
         i2s_obj->i2s_queue = NULL;
     }
@@ -1719,7 +1730,7 @@ esp_err_t i2s_write_expand(i2s_port_t i2s_num, const void *src, size_t size, siz
 
 esp_err_t i2s_read(i2s_port_t i2s_num, void *dest, size_t size, size_t *bytes_read, TickType_t ticks_to_wait)
 {
-    char *data_ptr;;
+    char *data_ptr;
     char *dest_byte;
     int bytes_can_read;
     *bytes_read = 0;
@@ -1917,7 +1928,7 @@ esp_err_t i2s_platform_release_occupation(int id)
 }
 
 /**
- * @brief This function will be called during start up, to check that pulse_cnt driver is not running along with the legacy i2s driver
+ * @brief This function will be called during start up, to check that the new i2s driver is not running along with the legacy i2s driver
  */
 static __attribute__((constructor)) void check_i2s_driver_conflict(void)
 {

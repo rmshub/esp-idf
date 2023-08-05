@@ -12,7 +12,7 @@ Wi-Fi 库支持配置及监控 {IDF_TARGET_NAME} Wi-Fi 连网功能。支持配�
 - AP 模式（即 Soft-AP 模式或接入点模式），此时基站连接到 {IDF_TARGET_NAME}。
 - station/AP 共存模式（{IDF_TARGET_NAME} 既是接入点，同时又作为基站连接到另外一个接入点）。
 
-- 上述模式的各种安全模式（WPA、WPA2 及 WEP 等）。
+- 上述模式的各种安全模式（WPA、WPA2、WPA3 等）。
 - 扫描接入点（包括主动扫描及被动扫描）。
 - 使用混杂模式监控 IEEE802.11 Wi-Fi 数据包。
 
@@ -20,11 +20,7 @@ Wi-Fi 库支持配置及监控 {IDF_TARGET_NAME} Wi-Fi 连网功能。支持配�
 应用示例
 ----------
 
-ESP-IDF 示例项目的 :example:`wifi` 目录下包含以下应用程序：
-
-* Wi-Fi 示例代码；
-
-* 一个简单的应用程序 `esp-idf-template <https://github.com/espressif/esp-idf-template>`_，展示了最基础的 IDF 项目结构。
+ESP-IDF 仓库的 :example:`wifi` 目录下提供了演示 Wi-Fi 库功能的几个应用示例，请查看 :example_file:`README <wifi/README.md>` 了解更多详细信息。
 
 
 API 参考

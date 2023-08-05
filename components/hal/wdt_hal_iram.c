@@ -24,7 +24,7 @@ void wdt_hal_init(wdt_hal_context_t *hal, wdt_inst_t wdt_inst, uint32_t prescale
     }
 #endif
     else {
-        hal->rwdt_dev = &RTCCNTL;
+        hal->rwdt_dev = RWDT_DEV_GET();
     }
     hal->inst = wdt_inst;
 
@@ -67,7 +67,7 @@ void wdt_hal_init(wdt_hal_context_t *hal, wdt_inst_t wdt_inst, uint32_t prescale
         mwdt_ll_disable_stage(hal->mwdt_dev, 1);
         mwdt_ll_disable_stage(hal->mwdt_dev, 2);
         mwdt_ll_disable_stage(hal->mwdt_dev, 3);
-#if !CONFIG_IDF_TARGET_ESP32C3 && !CONFIG_IDF_TARGET_ESP32H2 && !CONFIG_IDF_TARGET_ESP32C2
+#if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S2 || CONFIG_IDF_TARGET_ESP32S3
         //Enable or disable level interrupt. Edge interrupt is always disabled.
         mwdt_ll_set_edge_intr(hal->mwdt_dev, false);
         mwdt_ll_set_level_intr(hal->mwdt_dev, enable_intr);
@@ -77,6 +77,8 @@ void wdt_hal_init(wdt_hal_context_t *hal, wdt_inst_t wdt_inst, uint32_t prescale
         //Set default values
         mwdt_ll_set_cpu_reset_length(hal->mwdt_dev, WDT_RESET_SIG_LENGTH_3_2us);
         mwdt_ll_set_sys_reset_length(hal->mwdt_dev, WDT_RESET_SIG_LENGTH_3_2us);
+        mwdt_ll_set_clock_source(hal->mwdt_dev, MWDT_CLK_SRC_DEFAULT);
+        mwdt_ll_enable_clock(hal->mwdt_dev, true);
         //Set tick period
         mwdt_ll_set_prescaler(hal->mwdt_dev, prescaler);
         //Lock WDT
@@ -104,6 +106,7 @@ void wdt_hal_deinit(wdt_hal_context_t *hal)
         mwdt_ll_disable(hal->mwdt_dev);
         mwdt_ll_clear_intr_status(hal->mwdt_dev);
         mwdt_ll_set_intr_enable(hal->mwdt_dev, false);
+        mwdt_ll_enable_clock(hal->mwdt_dev, false);
         //Lock WDT
         mwdt_ll_write_protect_enable(hal->mwdt_dev);
     }

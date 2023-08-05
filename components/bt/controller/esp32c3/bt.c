@@ -21,7 +21,6 @@
 #include "esp_mac.h"
 #include "esp_random.h"
 #include "esp_task.h"
-#include "riscv/interrupt.h"
 #include "esp_attr.h"
 #include "esp_phy_init.h"
 #include "esp_bt.h"
@@ -31,22 +30,30 @@
 #include "esp_ipc.h"
 #include "esp_private/periph_ctrl.h"
 #include "esp_private/esp_clk.h"
+#include "soc/soc_caps.h"
 #include "soc/rtc.h"
 #include "soc/rtc_cntl_reg.h"
 #include "soc/soc_memory_layout.h"
 #include "esp_coexist_internal.h"
-#include "esp32c3/rom/rom_layout.h"
 #include "esp_timer.h"
 #include "esp_sleep.h"
-#include "phy.h"
-
+#include "esp_rom_sys.h"
+#include "esp_private/phy.h"
+#if CONFIG_IDF_TARGET_ESP32C3
+#include "riscv/interrupt.h"
+#include "esp32c3/rom/rom_layout.h"
+#else //CONFIG_IDF_TARGET_ESP32S3
+#include "freertos/xtensa_api.h"
+#include "xtensa/core-macros.h"
+#include "esp32s3/rom/rom_layout.h"
+#endif
 #if CONFIG_BT_ENABLED
 
 /* Macro definition
  ************************************************************************
  */
 
-#define BTDM_LOG_TAG                        "BTDM_INIT"
+#define BT_LOG_TAG                          "BLE_INIT"
 
 #define BTDM_INIT_PERIOD                    (5000)    /* ms */
 
@@ -72,7 +79,8 @@ typedef union {
         uint32_t mac_bb_pd               :  1; // whether hardware(MAC, BB) force-power-down is required during sleep
         uint32_t wakeup_timer_required   :  1; // whether system timer is needed
         uint32_t no_light_sleep          :  1; // do not allow system to enter light sleep after bluetooth is enabled
-        uint32_t reserved                : 26; // reserved
+        uint32_t main_xtal_pu            :  1; // power up main XTAL
+        uint32_t reserved                : 25; // reserved
     };
     uint32_t val;
 } btdm_lpcntl_t;
@@ -125,12 +133,9 @@ typedef struct vhci_host_callback {
     int (*notify_host_recv)(uint8_t *data, uint16_t len);   /*!< callback used to notify that the controller has a packet to send to the host*/
 } vhci_host_callback_t;
 
-/* Dram region */
 typedef struct {
-    esp_bt_mode_t mode;
-    intptr_t start;
-    intptr_t end;
-} btdm_dram_available_region_t;
+    void *handle;
+} btdm_queue_item_t;
 
 typedef void (* osi_intr_handler)(void);
 
@@ -206,7 +211,6 @@ extern void btdm_controller_disable(void);
 extern uint8_t btdm_controller_get_mode(void);
 extern const char *btdm_controller_get_compile_version(void);
 extern void btdm_rf_bb_init_phase2(void); // shall be called after PHY/RF is enabled
-
 /* Sleep */
 extern void btdm_controller_enable_sleep(bool enable);
 extern uint8_t btdm_controller_get_sleep_mode(void);
@@ -217,8 +221,8 @@ extern void btdm_in_wakeup_requesting_set(bool in_wakeup_requesting);
 /* vendor dependent tasks to be posted and handled by controller task*/
 extern int btdm_vnd_offload_task_register(btdm_vnd_ol_sig_t sig, btdm_vnd_ol_task_func_t func);
 extern int btdm_vnd_offload_task_deregister(btdm_vnd_ol_sig_t sig);
-extern int btdm_vnd_offload_post_from_isr(btdm_vnd_ol_sig_t sig, void *param, bool need_yield);
-extern int btdm_vnd_offload_post(btdm_vnd_ol_sig_t sig, void *param);
+extern int r_btdm_vnd_offload_post_from_isr(btdm_vnd_ol_sig_t sig, void *param, bool need_yield);
+extern int r_btdm_vnd_offload_post(btdm_vnd_ol_sig_t sig, void *param);
 
 /* Low Power Clock */
 extern bool btdm_lpclk_select_src(uint32_t sel);
@@ -234,13 +238,12 @@ extern int ble_txpwr_set(int power_type, int power_level);
 extern int ble_txpwr_get(int power_type);
 
 extern uint16_t l2c_ble_link_get_tx_buf_num(void);
-extern int coex_core_ble_conn_dyn_prio_get(bool *low, bool *high);
+extern void coex_pti_v2(void);
 
 extern bool btdm_deep_sleep_mem_init(void);
 extern void btdm_deep_sleep_mem_deinit(void);
 extern void btdm_ble_power_down_dma_copy(bool copy);
 extern uint8_t btdm_sleep_clock_sync(void);
-extern void sdk_config_extend_set_pll_track(bool enable);
 
 #if CONFIG_MAC_BB_PD
 extern void esp_mac_bb_power_down(void);
@@ -248,24 +251,18 @@ extern void esp_mac_bb_power_up(void);
 extern void ets_backup_dma_copy(uint32_t reg, uint32_t mem_addr, uint32_t num, bool to_mem);
 #endif
 
-extern char _bss_start_btdm;
-extern char _bss_end_btdm;
-extern char _data_start_btdm;
-extern char _data_end_btdm;
-extern uint32_t _data_start_btdm_rom;
-extern uint32_t _data_end_btdm_rom;
-
 extern uint32_t _bt_bss_start;
 extern uint32_t _bt_bss_end;
 extern uint32_t _btdm_bss_start;
 extern uint32_t _btdm_bss_end;
+extern uint32_t _nimble_bss_start;
+extern uint32_t _nimble_bss_end;
 extern uint32_t _bt_data_start;
 extern uint32_t _bt_data_end;
 extern uint32_t _btdm_data_start;
 extern uint32_t _btdm_data_end;
-
-extern char _bt_tmp_bss_start;
-extern char _bt_tmp_bss_end;
+extern uint32_t _nimble_data_start;
+extern uint32_t _nimble_data_end;
 
 /* Local Function Declare
  *********************************************************************
@@ -315,6 +312,11 @@ static void btdm_hw_mac_power_down_wrapper(void);
 static void btdm_backup_dma_copy_wrapper(uint32_t reg, uint32_t mem_addr, uint32_t num,  bool to_mem);
 
 static void btdm_slp_tmr_callback(void *arg);
+
+static esp_err_t try_heap_caps_add_region(intptr_t start, intptr_t end);
+
+static void bt_controller_deinit_internal(void);
+
 /* Local variable definition
  ***************************************************************************
  */
@@ -364,7 +366,7 @@ static const struct osi_funcs_t osi_funcs_ro = {
     ._btdm_sleep_exit_phase2 = NULL,
     ._btdm_sleep_exit_phase3 = btdm_sleep_exit_phase3_wrapper,
     ._coex_wifi_sleep_set = coex_wifi_sleep_set_hook,
-    ._coex_core_ble_conn_dyn_prio_get = coex_core_ble_conn_dyn_prio_get,
+    ._coex_core_ble_conn_dyn_prio_get = NULL,
     ._coex_schm_status_bit_set = coex_schm_status_bit_set_wrapper,
     ._coex_schm_status_bit_clear = coex_schm_status_bit_clear_wrapper,
     ._interrupt_on = interrupt_on_wrapper,
@@ -403,10 +405,11 @@ static DRAM_ATTR esp_pm_lock_handle_t s_light_sleep_pm_lock;
 void IRAM_ATTR btdm_hw_mac_power_down_wrapper(void)
 {
 #if CONFIG_MAC_BB_PD
+#if SOC_PM_SUPPORT_BT_PD
     // Bluetooth module power down
     SET_PERI_REG_MASK(RTC_CNTL_DIG_ISO_REG, RTC_CNTL_BT_FORCE_ISO);
     SET_PERI_REG_MASK(RTC_CNTL_DIG_PWC_REG, RTC_CNTL_BT_FORCE_PD);
-
+#endif
     esp_mac_bb_power_down();
 #endif
 }
@@ -414,28 +417,13 @@ void IRAM_ATTR btdm_hw_mac_power_down_wrapper(void)
 void IRAM_ATTR btdm_hw_mac_power_up_wrapper(void)
 {
 #if CONFIG_MAC_BB_PD
+#if SOC_PM_SUPPORT_BT_PD
     // Bluetooth module power up
     CLEAR_PERI_REG_MASK(RTC_CNTL_DIG_PWC_REG, RTC_CNTL_BT_FORCE_PD);
     CLEAR_PERI_REG_MASK(RTC_CNTL_DIG_ISO_REG, RTC_CNTL_BT_FORCE_ISO);
-
+#endif
     esp_mac_bb_power_up();
 #endif
-}
-
-static inline void esp_bt_power_domain_on(void)
-{
-    // Bluetooth module power up
-    CLEAR_PERI_REG_MASK(RTC_CNTL_DIG_PWC_REG, RTC_CNTL_BT_FORCE_PD);
-    CLEAR_PERI_REG_MASK(RTC_CNTL_DIG_ISO_REG, RTC_CNTL_BT_FORCE_ISO);
-    esp_wifi_bt_power_domain_on();
-}
-
-static inline void esp_bt_power_domain_off(void)
-{
-    // Bluetooth module power down
-    SET_PERI_REG_MASK(RTC_CNTL_DIG_ISO_REG, RTC_CNTL_BT_FORCE_ISO);
-    SET_PERI_REG_MASK(RTC_CNTL_DIG_PWC_REG, RTC_CNTL_BT_FORCE_PD);
-    esp_wifi_bt_power_domain_off();
 }
 
 void IRAM_ATTR btdm_backup_dma_copy_wrapper(uint32_t reg, uint32_t mem_addr, uint32_t num,  bool to_mem)
@@ -445,12 +433,34 @@ void IRAM_ATTR btdm_backup_dma_copy_wrapper(uint32_t reg, uint32_t mem_addr, uin
 #endif
 }
 
+static inline void esp_bt_power_domain_on(void)
+{
+    // Bluetooth module power up
+#if SOC_PM_SUPPORT_BT_PD
+    CLEAR_PERI_REG_MASK(RTC_CNTL_DIG_PWC_REG, RTC_CNTL_BT_FORCE_PD);
+    CLEAR_PERI_REG_MASK(RTC_CNTL_DIG_ISO_REG, RTC_CNTL_BT_FORCE_ISO);
+#endif
+    esp_wifi_bt_power_domain_on();
+}
+
+static inline void esp_bt_power_domain_off(void)
+{
+    // Bluetooth module power down
+#if SOC_PM_SUPPORT_BT_PD
+    SET_PERI_REG_MASK(RTC_CNTL_DIG_ISO_REG, RTC_CNTL_BT_FORCE_ISO);
+    SET_PERI_REG_MASK(RTC_CNTL_DIG_PWC_REG, RTC_CNTL_BT_FORCE_PD);
+#endif
+    esp_wifi_bt_power_domain_off();
+}
+
 static void interrupt_set_wrapper(int cpu_no, int intr_source, int intr_num, int intr_prio)
 {
-    intr_matrix_route(intr_source, intr_num);
+    esp_rom_route_intr_matrix(cpu_no, intr_source, intr_num);
+#if __riscv
     esprv_intc_int_set_priority(intr_num, intr_prio);
     //esprv_intc_int_enable_level(1 << intr_num);
     esprv_intc_int_set_type(intr_num, 0);
+#endif
 }
 
 static void interrupt_clear_wrapper(int intr_source, int intr_num)
@@ -459,17 +469,17 @@ static void interrupt_clear_wrapper(int intr_source, int intr_num)
 
 static void interrupt_handler_set_wrapper(int n, intr_handler_t fn, void *arg)
 {
-    intr_handler_set(n, fn, arg);
+    esp_cpu_intr_set_handler(n, fn, arg);
 }
 
 static void interrupt_on_wrapper(int intr_num)
 {
-    esprv_intc_int_enable(1 << intr_num);
+    esp_cpu_intr_enable(1 << intr_num);
 }
 
 static void interrupt_off_wrapper(int intr_num)
 {
-    esprv_intc_int_disable(1<<intr_num);
+    esp_cpu_intr_disable(1<<intr_num);
 }
 
 static void IRAM_ATTR interrupt_disable(void)
@@ -497,36 +507,53 @@ static void IRAM_ATTR task_yield_from_isr(void)
 
 static void *semphr_create_wrapper(uint32_t max, uint32_t init)
 {
-    return (void *)xSemaphoreCreateCounting(max, init);
+    btdm_queue_item_t *semphr = heap_caps_calloc(1, sizeof(btdm_queue_item_t), MALLOC_CAP_8BIT|MALLOC_CAP_INTERNAL);
+    assert(semphr);
+
+    /* IDF FreeRTOS guarantees that all dynamic memory allocation goes to internal RAM. */
+    semphr->handle = (void *)xSemaphoreCreateCounting(max, init);
+    assert(semphr->handle);
+
+    return semphr;
 }
 
 static void semphr_delete_wrapper(void *semphr)
 {
-    vSemaphoreDelete(semphr);
+    if (semphr == NULL) {
+        return;
+    }
+
+    btdm_queue_item_t *semphr_item = (btdm_queue_item_t *)semphr;
+
+    if (semphr_item->handle) {
+        vSemaphoreDelete(semphr_item->handle);
+    }
+
+    free(semphr);
 }
 
 static int IRAM_ATTR semphr_take_from_isr_wrapper(void *semphr, void *hptw)
 {
-    return (int)xSemaphoreTakeFromISR(semphr, hptw);
+    return (int)xSemaphoreTakeFromISR(((btdm_queue_item_t *)semphr)->handle, hptw);
 }
 
 static int IRAM_ATTR semphr_give_from_isr_wrapper(void *semphr, void *hptw)
 {
-    return (int)xSemaphoreGiveFromISR(semphr, hptw);
+    return (int)xSemaphoreGiveFromISR(((btdm_queue_item_t *)semphr)->handle, hptw);
 }
 
 static int semphr_take_wrapper(void *semphr, uint32_t block_time_ms)
 {
     if (block_time_ms == OSI_FUNCS_TIME_BLOCKING) {
-        return (int)xSemaphoreTake(semphr, portMAX_DELAY);
+        return (int)xSemaphoreTake(((btdm_queue_item_t *)semphr)->handle, portMAX_DELAY);
     } else {
-        return (int)xSemaphoreTake(semphr, block_time_ms / portTICK_PERIOD_MS);
+        return (int)xSemaphoreTake(((btdm_queue_item_t *)semphr)->handle, block_time_ms / portTICK_PERIOD_MS);
     }
 }
 
 static int semphr_give_wrapper(void *semphr)
 {
-    return (int)xSemaphoreGive(semphr);
+    return (int)xSemaphoreGive(((btdm_queue_item_t *)semphr)->handle);
 }
 
 static void *mutex_create_wrapper(void)
@@ -551,40 +578,55 @@ static int mutex_unlock_wrapper(void *mutex)
 
 static void *queue_create_wrapper(uint32_t queue_len, uint32_t item_size)
 {
-    return (void *)xQueueCreate(queue_len, item_size);
+    btdm_queue_item_t *queue = NULL;
+
+    queue = (btdm_queue_item_t*)heap_caps_malloc(sizeof(btdm_queue_item_t), MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT);
+    assert(queue);
+
+    /* IDF FreeRTOS guarantees that all dynamic memory allocation goes to internal RAM. */
+    queue->handle = xQueueCreate( queue_len, item_size);
+    assert(queue->handle);
+
+    return queue;
 }
 
 static void queue_delete_wrapper(void *queue)
 {
-    vQueueDelete(queue);
+    btdm_queue_item_t *queue_item = (btdm_queue_item_t *)queue;
+    if (queue_item) {
+        if(queue_item->handle){
+            vQueueDelete(queue_item->handle);
+        }
+        free(queue_item);
+    }
 }
 
 static int queue_send_wrapper(void *queue, void *item, uint32_t block_time_ms)
 {
     if (block_time_ms == OSI_FUNCS_TIME_BLOCKING) {
-        return (int)xQueueSend(queue, item, portMAX_DELAY);
+        return (int)xQueueSend(((btdm_queue_item_t*)queue)->handle, item, portMAX_DELAY);
     } else {
-        return (int)xQueueSend(queue, item, block_time_ms / portTICK_PERIOD_MS);
+        return (int)xQueueSend(((btdm_queue_item_t*)queue)->handle, item, block_time_ms / portTICK_PERIOD_MS);
     }
 }
 
 static int IRAM_ATTR queue_send_from_isr_wrapper(void *queue, void *item, void *hptw)
 {
-    return (int)xQueueSendFromISR(queue, item, hptw);
+    return (int)xQueueSendFromISR(((btdm_queue_item_t*)queue)->handle, item, hptw);
 }
 
 static int queue_recv_wrapper(void *queue, void *item, uint32_t block_time_ms)
 {
     if (block_time_ms == OSI_FUNCS_TIME_BLOCKING) {
-        return (int)xQueueReceive(queue, item, portMAX_DELAY);
+        return (int)xQueueReceive(((btdm_queue_item_t*)queue)->handle, item, portMAX_DELAY);
     } else {
-        return (int)xQueueReceive(queue, item, block_time_ms / portTICK_PERIOD_MS);
+        return (int)xQueueReceive(((btdm_queue_item_t*)queue)->handle, item, block_time_ms / portTICK_PERIOD_MS);
     }
 }
 
 static int IRAM_ATTR queue_recv_from_isr_wrapper(void *queue, void *item, void *hptw)
 {
-    return (int)xQueueReceiveFromISR(queue, item, hptw);
+    return (int)xQueueReceiveFromISR(((btdm_queue_item_t*)queue)->handle, item, hptw);
 }
 
 static int task_create_wrapper(void *task_func, const char *name, uint32_t stack_depth, void *param, uint32_t prio, void *task_handle, uint32_t core_id)
@@ -604,13 +646,17 @@ static bool IRAM_ATTR is_in_isr_wrapper(void)
 
 static void *malloc_internal_wrapper(size_t size)
 {
-    return heap_caps_malloc(size, MALLOC_CAP_DEFAULT|MALLOC_CAP_INTERNAL|MALLOC_CAP_DMA);
+    void *p = heap_caps_malloc(size, MALLOC_CAP_DEFAULT|MALLOC_CAP_INTERNAL|MALLOC_CAP_DMA);
+    if(p == NULL) {
+        ESP_LOGE(BT_LOG_TAG, "Malloc failed");
+    }
+    return p;
 }
 
 static int IRAM_ATTR read_mac_wrapper(uint8_t mac[6])
 {
     int ret = esp_read_mac(mac, ESP_MAC_BT);
-    ESP_LOGI(BTDM_LOG_TAG, "Bluetooth MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
+    ESP_LOGI(BT_LOG_TAG, "Bluetooth MAC: %02x:%02x:%02x:%02x:%02x:%02x",
                mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
     return ret;
@@ -685,7 +731,7 @@ static void btdm_sleep_enter_phase1_wrapper(uint32_t lpcycles)
     if (esp_timer_start_once(s_btdm_slp_tmr, us_to_sleep - uncertainty) == ESP_OK) {
         s_lp_stat.wakeup_timer_started = 1;
     } else {
-        ESP_LOGE(BTDM_LOG_TAG, "timer start failed");
+        ESP_LOGE(BT_LOG_TAG, "timer start failed");
         assert(0);
     }
 }
@@ -772,7 +818,7 @@ static void IRAM_ATTR btdm_sleep_exit_phase0(void *param)
 static void IRAM_ATTR btdm_slp_tmr_callback(void *arg)
 {
 #ifdef CONFIG_PM_ENABLE
-    btdm_vnd_offload_post(BTDM_VND_OL_SIG_WAKEUP_TMR, (void *)BTDM_ASYNC_WAKEUP_SRC_TMR);
+    r_btdm_vnd_offload_post(BTDM_VND_OL_SIG_WAKEUP_TMR, (void *)BTDM_ASYNC_WAKEUP_SRC_TMR);
 #endif
 }
 
@@ -789,7 +835,7 @@ static bool async_wakeup_request(int event)
         case BTDM_ASYNC_WAKEUP_SRC_DISA:
             btdm_in_wakeup_requesting_set(true);
             if (!btdm_power_state_active()) {
-                btdm_vnd_offload_post(BTDM_VND_OL_SIG_WAKEUP_TMR, (void *)event);
+                r_btdm_vnd_offload_post(BTDM_VND_OL_SIG_WAKEUP_TMR, (void *)event);
                 do_wakeup_request = true;
                 semphr_take_wrapper(s_wakeup_req_sem, OSI_FUNCS_TIME_BLOCKING);
             }
@@ -875,13 +921,142 @@ static void btdm_controller_mem_init(void)
 
 esp_err_t esp_bt_controller_mem_release(esp_bt_mode_t mode)
 {
-    ESP_LOGW(BTDM_LOG_TAG, "%s not implemented, return OK", __func__);
+    intptr_t mem_start=(intptr_t) NULL, mem_end=(intptr_t) NULL;
+    if (btdm_controller_status != ESP_BT_CONTROLLER_STATUS_IDLE) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (mode & ESP_BT_MODE_BLE) {
+        /* if the addresses of rom btdm .data and .bss are consecutive,
+           they are registered in the system heap as a piece of memory
+        */
+        if(ets_rom_layout_p->data_end_btdm == ets_rom_layout_p->bss_start_btdm) {
+            mem_start = (intptr_t)ets_rom_layout_p->data_start_btdm;
+            mem_end = (intptr_t)ets_rom_layout_p->bss_end_btdm;
+            if (mem_start != mem_end) {
+                ESP_LOGD(BT_LOG_TAG, "Release rom btdm [0x%08x] - [0x%08x], len %d", mem_start, mem_end, mem_end - mem_start);
+                ESP_ERROR_CHECK(try_heap_caps_add_region(mem_start, mem_end));
+            }
+        } else {
+            mem_start = (intptr_t)ets_rom_layout_p->bss_start_btdm;
+            mem_end = (intptr_t)ets_rom_layout_p->bss_end_btdm;
+            if (mem_start != mem_end) {
+                ESP_LOGD(BT_LOG_TAG, "Release rom btdm BSS [0x%08x] - [0x%08x], len %d", mem_start, mem_end, mem_end - mem_start);
+                ESP_ERROR_CHECK(try_heap_caps_add_region(mem_start, mem_end));
+            }
+
+            mem_start = (intptr_t)ets_rom_layout_p->data_start_btdm;
+            mem_end = (intptr_t)ets_rom_layout_p->data_end_btdm;
+            if (mem_start != mem_end) {
+                ESP_LOGD(BT_LOG_TAG, "Release rom btdm Data [0x%08x] - [0x%08x], len %d", mem_start, mem_end, mem_end - mem_start);
+                ESP_ERROR_CHECK(try_heap_caps_add_region(mem_start, mem_end));
+            }
+        }
+        /* if the addresses of rom interface btdm .data and .bss are consecutive,
+           they are registered in the system heap as a piece of memory
+        */
+        if(ets_rom_layout_p->data_end_interface_btdm == ets_rom_layout_p->bss_start_interface_btdm) {
+            mem_start = (intptr_t)ets_rom_layout_p->data_start_interface_btdm;
+            mem_end = (intptr_t)ets_rom_layout_p->bss_end_interface_btdm;
+            if (mem_start != mem_end) {
+                ESP_LOGD(BT_LOG_TAG, "Release rom interface btdm [0x%08x] - [0x%08x], len %d", mem_start, mem_end, mem_end - mem_start);
+                ESP_ERROR_CHECK(try_heap_caps_add_region(mem_start, mem_end));
+            }
+        } else {
+            mem_start = (intptr_t)ets_rom_layout_p->data_start_interface_btdm;
+            mem_end = (intptr_t)ets_rom_layout_p->data_end_interface_btdm;
+            if (mem_start != mem_end) {
+                ESP_LOGD(BT_LOG_TAG, "Release rom interface btdm Data [0x%08x] - [0x%08x], len %d", mem_start, mem_end, mem_end - mem_start);
+                ESP_ERROR_CHECK(try_heap_caps_add_region(mem_start, mem_end));
+            }
+
+            mem_start = (intptr_t)ets_rom_layout_p->bss_start_interface_btdm;
+            mem_end = (intptr_t)ets_rom_layout_p->bss_end_interface_btdm;
+            if (mem_start != mem_end) {
+                ESP_LOGD(BT_LOG_TAG, "Release rom interface btdm BSS [0x%08x] - [0x%08x], len %d", mem_start, mem_end, mem_end - mem_start);
+                ESP_ERROR_CHECK(try_heap_caps_add_region(mem_start, mem_end));
+            }
+        }
+
+    }
     return ESP_OK;
 }
 
 esp_err_t esp_bt_mem_release(esp_bt_mode_t mode)
 {
-    ESP_LOGW(BTDM_LOG_TAG, "%s not implemented, return OK", __func__);
+    int ret;
+    intptr_t mem_start, mem_end;
+
+    ret = esp_bt_controller_mem_release(mode);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    if (mode & ESP_BT_MODE_BLE) {
+        /* if the addresses of btdm .bss and bt .bss are consecutive,
+           they are registered in the system heap as a piece of memory
+        */
+        if(_bt_bss_end == _btdm_bss_start) {
+            mem_start = (intptr_t)&_bt_bss_start;
+            mem_end = (intptr_t)&_btdm_bss_end;
+            if (mem_start != mem_end) {
+                ESP_LOGD(BT_LOG_TAG, "Release BSS [0x%08x] - [0x%08x], len %d", mem_start, mem_end, mem_end - mem_start);
+                ESP_ERROR_CHECK(try_heap_caps_add_region(mem_start, mem_end));
+            }
+        } else {
+            mem_start = (intptr_t)&_bt_bss_start;
+            mem_end = (intptr_t)&_bt_bss_end;
+            if (mem_start != mem_end) {
+                ESP_LOGD(BT_LOG_TAG, "Release BT BSS [0x%08x] - [0x%08x], len %d", mem_start, mem_end, mem_end - mem_start);
+                ESP_ERROR_CHECK(try_heap_caps_add_region(mem_start, mem_end));
+            }
+
+            mem_start = (intptr_t)&_btdm_bss_start;
+            mem_end = (intptr_t)&_btdm_bss_end;
+            if (mem_start != mem_end) {
+                ESP_LOGD(BT_LOG_TAG, "Release BTDM BSS [0x%08x] - [0x%08x], len %d", mem_start, mem_end, mem_end - mem_start);
+                ESP_ERROR_CHECK(try_heap_caps_add_region(mem_start, mem_end));
+            }
+        }
+        /* if the addresses of btdm .data and bt .data are consecutive,
+           they are registered in the system heap as a piece of memory
+        */
+        if(_bt_data_end == _btdm_data_start) {
+            mem_start = (intptr_t)&_bt_data_start;
+            mem_end = (intptr_t)&_btdm_data_end;
+            if (mem_start != mem_end) {
+                ESP_LOGD(BT_LOG_TAG, "Release data [0x%08x] - [0x%08x], len %d", mem_start, mem_end, mem_end - mem_start);
+                ESP_ERROR_CHECK(try_heap_caps_add_region(mem_start, mem_end));
+            }
+        } else {
+            mem_start = (intptr_t)&_bt_data_start;
+            mem_end = (intptr_t)&_bt_data_end;
+            if (mem_start != mem_end) {
+                ESP_LOGD(BT_LOG_TAG, "Release BT Data [0x%08x] - [0x%08x], len %d", mem_start, mem_end, mem_end - mem_start);
+                ESP_ERROR_CHECK(try_heap_caps_add_region(mem_start, mem_end));
+            }
+
+            mem_start = (intptr_t)&_btdm_data_start;
+            mem_end = (intptr_t)&_btdm_data_end;
+            if (mem_start != mem_end) {
+                ESP_LOGD(BT_LOG_TAG, "Release BTDM Data [0x%08x] - [0x%08x], len %d", mem_start, mem_end, mem_end - mem_start);
+                ESP_ERROR_CHECK(try_heap_caps_add_region(mem_start, mem_end));
+            }
+        }
+
+        mem_start = (intptr_t)&_nimble_bss_start;
+        mem_end = (intptr_t)&_nimble_bss_end;
+        if (mem_start != mem_end) {
+            ESP_LOGD(BT_LOG_TAG, "Release NimBLE BSS [0x%08x] - [0x%08x], len %d", mem_start, mem_end, mem_end - mem_start);
+            ESP_ERROR_CHECK(try_heap_caps_add_region(mem_start, mem_end));
+        }
+        mem_start = (intptr_t)&_nimble_data_start;
+        mem_end = (intptr_t)&_nimble_data_end;
+        if (mem_start != mem_end) {
+            ESP_LOGD(BT_LOG_TAG, "Release NimBLE Data [0x%08x] - [0x%08x], len %d", mem_start, mem_end, mem_end - mem_start);
+            ESP_ERROR_CHECK(try_heap_caps_add_region(mem_start, mem_end));
+        }
+    }
     return ESP_OK;
 }
 
@@ -892,17 +1067,11 @@ static esp_err_t try_heap_caps_add_region(intptr_t start, intptr_t end)
      * is too small to fit a heap. This cannot be termed as a fatal error and hence
      * we replace it by ESP_OK
      */
+
     if (ret == ESP_ERR_INVALID_SIZE) {
         return ESP_OK;
     }
     return ret;
-}
-
-// release wifi and coex memory, free about 720 bytes,
-void esp_release_wifi_and_coex_mem(void)
-{
-    ESP_ERROR_CHECK(try_heap_caps_add_region((intptr_t)ets_rom_layout_p->dram_start_coexist, (intptr_t)ets_rom_layout_p->dram_end_pp));
-    ESP_ERROR_CHECK(try_heap_caps_add_region((intptr_t)ets_rom_layout_p->data_start_interface_coexist,(intptr_t)ets_rom_layout_p->bss_end_interface_pp));
 }
 
 #if CONFIG_MAC_BB_PD
@@ -937,25 +1106,25 @@ esp_err_t esp_bt_controller_init(esp_bt_controller_config_t *cfg)
 
     if (cfg->controller_task_prio != ESP_TASK_BT_CONTROLLER_PRIO
         || cfg->controller_task_stack_size < ESP_TASK_BT_CONTROLLER_STACK) {
-        ESP_LOGE(BTDM_LOG_TAG, "Invalid controller task prioriy or stack size");
+        ESP_LOGE(BT_LOG_TAG, "Invalid controller task prioriy or stack size");
         return ESP_ERR_INVALID_ARG;
     }
 
     if (cfg->bluetooth_mode != ESP_BT_MODE_BLE) {
-        ESP_LOGE(BTDM_LOG_TAG, "%s controller only support BLE only mode", __func__);
+        ESP_LOGE(BT_LOG_TAG, "%s controller only support BLE only mode", __func__);
         return ESP_ERR_NOT_SUPPORTED;
     }
 
     if (cfg->bluetooth_mode & ESP_BT_MODE_BLE) {
         if ((cfg->ble_max_act <= 0) || (cfg->ble_max_act > BT_CTRL_BLE_MAX_ACT_LIMIT)) {
-            ESP_LOGE(BTDM_LOG_TAG, "Invalid value of ble_max_act");
+            ESP_LOGE(BT_LOG_TAG, "Invalid value of ble_max_act");
             return ESP_ERR_INVALID_ARG;
         }
     }
 
     if (cfg->sleep_mode == ESP_BT_SLEEP_MODE_1) {
         if (cfg->sleep_clock == ESP_BT_SLEEP_CLOCK_NONE) {
-            ESP_LOGE(BTDM_LOG_TAG, "SLEEP_MODE_1 enabled but sleep clock not configured");
+            ESP_LOGE(BT_LOG_TAG, "SLEEP_MODE_1 enabled but sleep clock not configured");
             return ESP_ERR_INVALID_ARG;
         }
     }
@@ -963,12 +1132,10 @@ esp_err_t esp_bt_controller_init(esp_bt_controller_config_t *cfg)
     // overwrite some parameters
     cfg->magic = ESP_BT_CTRL_CONFIG_MAGIC_VAL;
 
-    sdk_config_extend_set_pll_track(false);
-
 #if CONFIG_MAC_BB_PD
     esp_mac_bb_pd_mem_init();
 #endif
-    esp_phy_pd_mem_init();
+    esp_phy_modem_init();
     esp_bt_power_domain_on();
 
     btdm_controller_mem_init();
@@ -995,19 +1162,20 @@ esp_err_t esp_bt_controller_init(esp_bt_controller_config_t *cfg)
         return ESP_ERR_INVALID_ARG;
     }
 
-    ESP_LOGI(BTDM_LOG_TAG, "BT controller compile version [%s]", btdm_controller_get_compile_version());
+    ESP_LOGI(BT_LOG_TAG, "BT controller compile version [%s]", btdm_controller_get_compile_version());
 
     // init low-power control resources
     do {
         // set default values for global states or resources
         s_lp_stat.val = 0;
         s_lp_cntl.val = 0;
+        s_lp_cntl.main_xtal_pu = 0;
         s_wakeup_req_sem = NULL;
         s_btdm_slp_tmr = NULL;
 
         // configure and initialize resources
         s_lp_cntl.enable = (cfg->sleep_mode == ESP_BT_SLEEP_MODE_1) ? 1 : 0;
-        s_lp_cntl.no_light_sleep = 1;
+        s_lp_cntl.no_light_sleep = 0;
 
         if (s_lp_cntl.enable) {
 #if CONFIG_MAC_BB_PD
@@ -1045,38 +1213,46 @@ esp_err_t esp_bt_controller_init(esp_bt_controller_config_t *cfg)
         btdm_lpcycle_us = 2 << (btdm_lpcycle_us_frac);
 
         // set default bluetooth sleep clock source
-        s_lp_cntl.lpclk_sel = BTDM_LPCLK_SEL_XTAL;  // set default value
+        s_lp_cntl.lpclk_sel = BTDM_LPCLK_SEL_XTAL; // set default value
 #if CONFIG_BT_CTRL_LPCLK_SEL_EXT_32K_XTAL
         // check whether or not EXT_CRYS is working
         if (rtc_clk_slow_src_get() == SOC_RTC_SLOW_CLK_SRC_XTAL32K) {
             s_lp_cntl.lpclk_sel = BTDM_LPCLK_SEL_XTAL32K; // External 32 kHz XTAL
-            s_lp_cntl.no_light_sleep = 0;
         } else {
-            ESP_LOGW(BTDM_LOG_TAG, "32.768kHz XTAL not detected, fall back to main XTAL as Bluetooth sleep clock\n"
-                 "light sleep mode will not be able to apply when bluetooth is enabled");
+            ESP_LOGW(BT_LOG_TAG, "32.768kHz XTAL not detected, fall back to main XTAL as Bluetooth sleep clock");
+#if !CONFIG_BT_CTRL_MAIN_XTAL_PU_DURING_LIGHT_SLEEP
+            s_lp_cntl.no_light_sleep = 1;
+#endif
         }
-#elif CONFIG_BT_CTRL_LPCLK_SEL_RTC_SLOW
-        // check whether or not EXT_CRYS is working
+#elif (CONFIG_BT_CTRL_LPCLK_SEL_MAIN_XTAL)
+        ESP_LOGI(BT_LOG_TAG, "Bluetooth will use main XTAL as Bluetooth sleep clock.");
+#if !CONFIG_BT_CTRL_MAIN_XTAL_PU_DURING_LIGHT_SLEEP
+        s_lp_cntl.no_light_sleep = 1;
+#endif
+#elif (CONFIG_BT_CTRL_LPCLK_SEL_RTC_SLOW)
+        // check whether or not internal 150 kHz RC oscillator is working
         if (rtc_clk_slow_src_get() == SOC_RTC_SLOW_CLK_SRC_RC_SLOW) {
             s_lp_cntl.lpclk_sel = BTDM_LPCLK_SEL_RTC_SLOW; // Internal 150 kHz RC oscillator
-            ESP_LOGW(BTDM_LOG_TAG, "Internal 150kHz RC osciallator. The accuracy of this clock is a lot larger than 500ppm which is "
+            ESP_LOGW(BT_LOG_TAG, "Internal 150kHz RC osciallator. The accuracy of this clock is a lot larger than 500ppm which is "
                  "required in Bluetooth communication, so don't select this option in scenarios such as BLE connection state.");
         } else {
             ESP_LOGW(BT_LOG_TAG, "Internal 150kHz RC oscillator not detected.");
             assert(0);
         }
-#else
-        s_lp_cntl.no_light_sleep = 1;
 #endif
 
         bool select_src_ret __attribute__((unused));
         bool set_div_ret __attribute__((unused));
         if (s_lp_cntl.lpclk_sel == BTDM_LPCLK_SEL_XTAL) {
+#ifdef CONFIG_BT_CTRL_MAIN_XTAL_PU_DURING_LIGHT_SLEEP
+            ESP_ERROR_CHECK(esp_sleep_pd_config(ESP_PD_DOMAIN_XTAL, ESP_PD_OPTION_ON));
+            s_lp_cntl.main_xtal_pu = 1;
+#endif
             select_src_ret = btdm_lpclk_select_src(BTDM_LPCLK_SEL_XTAL);
-            set_div_ret = btdm_lpclk_set_div(esp_clk_xtal_freq() * 2 / MHZ);
+            set_div_ret = btdm_lpclk_set_div(esp_clk_xtal_freq() / MHZ);
             assert(select_src_ret && set_div_ret);
             btdm_lpcycle_us_frac = RTC_CLK_CAL_FRACT;
-            btdm_lpcycle_us = 2 << (btdm_lpcycle_us_frac);
+            btdm_lpcycle_us = 1 << (btdm_lpcycle_us_frac);
         } else if (s_lp_cntl.lpclk_sel == BTDM_LPCLK_SEL_XTAL32K) {
             select_src_ret = btdm_lpclk_select_src(BTDM_LPCLK_SEL_XTAL32K);
             set_div_ret = btdm_lpclk_set_div(0);
@@ -1095,6 +1271,9 @@ esp_err_t esp_bt_controller_init(esp_bt_controller_config_t *cfg)
             err = ESP_ERR_INVALID_ARG;
             goto error;
         }
+#if CONFIG_SW_COEXIST_ENABLE
+        coex_update_lpclk_interval();
+#endif
 
 #ifdef CONFIG_PM_ENABLE
         if (s_lp_cntl.no_light_sleep) {
@@ -1102,6 +1281,7 @@ esp_err_t esp_bt_controller_init(esp_bt_controller_config_t *cfg)
                 err = ESP_ERR_NO_MEM;
                 goto error;
             }
+            ESP_LOGW(BT_LOG_TAG, "light sleep mode will not be able to apply when bluetooth is enabled.");
         }
         if ((err = esp_pm_lock_create(ESP_PM_APB_FREQ_MAX, 0, "bt", &s_pm_lock)) != ESP_OK) {
             err = ESP_ERR_NO_MEM;
@@ -1117,6 +1297,7 @@ esp_err_t esp_bt_controller_init(esp_bt_controller_config_t *cfg)
 #endif
 
     periph_module_enable(PERIPH_BT_MODULE);
+    periph_module_reset(PERIPH_BT_MODULE);
 
     esp_phy_enable();
     s_lp_stat.phy_enabled = 1;
@@ -1125,63 +1306,16 @@ esp_err_t esp_bt_controller_init(esp_bt_controller_config_t *cfg)
         err = ESP_ERR_NO_MEM;
         goto error;
     }
+    coex_pti_v2();
 
     btdm_controller_status = ESP_BT_CONTROLLER_STATUS_INITED;
 
     return ESP_OK;
 
 error:
-    if (s_lp_stat.phy_enabled) {
-        esp_phy_disable();
-        s_lp_stat.phy_enabled = 0;
-    }
 
-    do {
-        // deinit low power control resources
-#ifdef CONFIG_PM_ENABLE
-        if (s_lp_cntl.no_light_sleep) {
-            if (s_light_sleep_pm_lock != NULL) {
-                esp_pm_lock_delete(s_light_sleep_pm_lock);
-                s_light_sleep_pm_lock = NULL;
-            }
-        }
-        if (s_pm_lock != NULL) {
-            esp_pm_lock_delete(s_pm_lock);
-            s_pm_lock = NULL;
-            s_lp_stat.pm_lock_released = 0;
-        }
+    bt_controller_deinit_internal();
 
-#endif
-        if (s_lp_cntl.wakeup_timer_required && s_btdm_slp_tmr != NULL) {
-            esp_timer_delete(s_btdm_slp_tmr);
-            s_btdm_slp_tmr = NULL;
-        }
-
-#if CONFIG_MAC_BB_PD
-        if (s_lp_cntl.mac_bb_pd) {
-            btdm_deep_sleep_mem_deinit();
-            s_lp_cntl.mac_bb_pd = 0;
-        }
-#endif
-        if (s_lp_cntl.enable) {
-            btdm_vnd_offload_task_deregister(BTDM_VND_OL_SIG_WAKEUP_TMR);
-            if (s_wakeup_req_sem != NULL) {
-                semphr_delete_wrapper(s_wakeup_req_sem);
-                s_wakeup_req_sem = NULL;
-            }
-        }
-    } while (0);
-
-#if CONFIG_MAC_BB_PD
-    esp_unregister_mac_bb_pd_callback(btdm_mac_bb_power_down_cb);
-
-    esp_unregister_mac_bb_pu_callback(btdm_mac_bb_power_up_cb);
-#endif
-
-    if (osi_funcs_p != NULL) {
-        free(osi_funcs_p);
-        osi_funcs_p = NULL;
-    }
     return err;
 }
 
@@ -1192,31 +1326,47 @@ esp_err_t esp_bt_controller_deinit(void)
     }
 
     btdm_controller_deinit();
+
+    bt_controller_deinit_internal();
+
+    return ESP_OK;
+}
+
+static void bt_controller_deinit_internal(void)
+{
     periph_module_disable(PERIPH_BT_MODULE);
 
     if (s_lp_stat.phy_enabled) {
         esp_phy_disable();
         s_lp_stat.phy_enabled = 0;
-    } else {
-        assert(0);
     }
 
     // deinit low power control resources
     do {
+
 #if CONFIG_MAC_BB_PD
-        btdm_deep_sleep_mem_deinit();
+        if (s_lp_cntl.mac_bb_pd) {
+            btdm_deep_sleep_mem_deinit();
+            s_lp_cntl.mac_bb_pd = 0;
+        }
 #endif
 
 #ifdef CONFIG_PM_ENABLE
         if (s_lp_cntl.no_light_sleep) {
-            esp_pm_lock_delete(s_light_sleep_pm_lock);
-            s_light_sleep_pm_lock = NULL;
+            if (s_light_sleep_pm_lock != NULL) {
+                esp_pm_lock_delete(s_light_sleep_pm_lock);
+                s_light_sleep_pm_lock = NULL;
+            }
         }
 
-        esp_pm_lock_delete(s_pm_lock);
-        s_pm_lock = NULL;
-        s_lp_stat.pm_lock_released = 0;
+        if (s_pm_lock != NULL) {
+            esp_pm_lock_delete(s_pm_lock);
+            s_pm_lock = NULL;
+            s_lp_stat.pm_lock_released = 0;
+        }
+
 #endif
+
         if (s_lp_cntl.wakeup_timer_required) {
             if (s_lp_stat.wakeup_timer_started) {
                 esp_timer_stop(s_btdm_slp_tmr);
@@ -1228,10 +1378,27 @@ esp_err_t esp_bt_controller_deinit(void)
 
         if (s_lp_cntl.enable) {
             btdm_vnd_offload_task_deregister(BTDM_VND_OL_SIG_WAKEUP_TMR);
-
-            semphr_delete_wrapper(s_wakeup_req_sem);
-            s_wakeup_req_sem = NULL;
+            if (s_wakeup_req_sem != NULL) {
+                semphr_delete_wrapper(s_wakeup_req_sem);
+                s_wakeup_req_sem = NULL;
+            }
         }
+
+        if (s_lp_cntl.lpclk_sel == BTDM_LPCLK_SEL_XTAL) {
+#ifdef CONFIG_BT_CTRL_MAIN_XTAL_PU_DURING_LIGHT_SLEEP
+            if (s_lp_cntl.main_xtal_pu) {
+                ESP_ERROR_CHECK(esp_sleep_pd_config(ESP_PD_DOMAIN_XTAL, ESP_PD_OPTION_OFF));
+                s_lp_cntl.main_xtal_pu = 0;
+            }
+#endif
+            btdm_lpclk_select_src(BTDM_LPCLK_SEL_RTC_SLOW);
+            btdm_lpclk_set_div(0);
+#if CONFIG_SW_COEXIST_ENABLE
+            coex_update_lpclk_interval();
+#endif
+        }
+
+        btdm_lpcycle_us = 0;
     } while (0);
 
 #if CONFIG_MAC_BB_PD
@@ -1239,28 +1406,23 @@ esp_err_t esp_bt_controller_deinit(void)
     esp_unregister_mac_bb_pu_callback(btdm_mac_bb_power_up_cb);
 #endif
 
-    /* Fix the issue caused by the power off the bt power domain.
-     * This issue is only on ESP32C3.
-     */
-    phy_init_flag();
-
     esp_bt_power_domain_off();
 #if CONFIG_MAC_BB_PD
     esp_mac_bb_pd_mem_deinit();
 #endif
-    esp_phy_pd_mem_deinit();
+    esp_phy_modem_deinit();
 
-    free(osi_funcs_p);
-    osi_funcs_p = NULL;
+    if (osi_funcs_p != NULL) {
+        free(osi_funcs_p);
+        osi_funcs_p = NULL;
+    }
 
     btdm_controller_status = ESP_BT_CONTROLLER_STATUS_IDLE;
-    btdm_lpcycle_us = 0;
-    return ESP_OK;
 }
 
 esp_err_t esp_bt_controller_enable(esp_bt_mode_t mode)
 {
-    int ret = ESP_OK;
+    esp_err_t ret = ESP_OK;
 
     if (btdm_controller_status != ESP_BT_CONTROLLER_STATUS_INITED) {
         return ESP_ERR_INVALID_STATE;
@@ -1268,7 +1430,7 @@ esp_err_t esp_bt_controller_enable(esp_bt_mode_t mode)
 
     //As the history reason, mode should be equal to the mode which set in esp_bt_controller_init()
     if (mode != btdm_controller_get_mode()) {
-        ESP_LOGE(BTDM_LOG_TAG, "invalid mode %d, controller support mode is %d", mode, btdm_controller_get_mode());
+        ESP_LOGE(BT_LOG_TAG, "invalid mode %d, controller support mode is %d", mode, btdm_controller_get_mode());
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -1315,6 +1477,9 @@ error:
 #endif
     } while (0);
 
+#if CONFIG_SW_COEXIST_ENABLE
+    coex_disable();
+#endif
     return ret;
 }
 

@@ -21,6 +21,16 @@ extern "C" {
 /** The content of this file is to be kept in sync with the common section of esp_memory_utils.h **/
 
 /**
+ * @brief Check if the IRAM and DRAM are separate or using the same memory space
+ *
+ * @return true if the DRAM and IRAM are sharing the same memory space, false otherwise
+ */
+__attribute__((always_inline))
+inline static bool esp_dram_match_iram(void) {
+    return (SOC_DRAM_LOW == SOC_IRAM_LOW && SOC_DRAM_HIGH == SOC_IRAM_HIGH);
+}
+
+/**
  * @brief Check if the pointer is in iram
  *
  * @param p pointer
@@ -69,7 +79,12 @@ inline static bool esp_ptr_in_diram_dram(const void *p) {
  */
 __attribute__((always_inline))
 inline static bool esp_ptr_in_diram_iram(const void *p) {
+// TODO: IDF-5980 esp32c6 D/I RAM share the same address
+#if SOC_DIRAM_IRAM_LOW == SOC_DIRAM_DRAM_LOW
+    return false;
+#else
     return ((intptr_t)p >= SOC_DIRAM_IRAM_LOW && (intptr_t)p < SOC_DIRAM_IRAM_HIGH);
+#endif
 }
 
 /**

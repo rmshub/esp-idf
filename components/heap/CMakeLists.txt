@@ -1,10 +1,22 @@
+idf_build_get_property(target IDF_TARGET)
+
+# On Linux, we only support a few features, hence this simple component registration
+if(${target} STREQUAL "linux")
+    idf_component_register(SRCS "heap_caps_linux.c"
+                           INCLUDE_DIRS "include")
+    return()
+endif()
+
 set(srcs
     "heap_caps.c"
     "heap_caps_init.c"
     "multi_heap.c")
 
+set(includes "include")
+
 if(NOT CONFIG_HEAP_TLSF_USE_ROM_IMPL)
-    list(APPEND srcs "heap_tlsf.c")
+    set(priv_includes "tlsf")
+    list(APPEND srcs "tlsf/tlsf.c")
 endif()
 
 if(NOT CONFIG_HEAP_POISONING_DISABLED)
@@ -31,7 +43,8 @@ endif()
 
 
 idf_component_register(SRCS "${srcs}"
-                    INCLUDE_DIRS include
+                    INCLUDE_DIRS ${includes}
+                    PRIV_INCLUDE_DIRS ${priv_includes}
                     LDFRAGMENTS linker.lf
                     PRIV_REQUIRES soc)
 

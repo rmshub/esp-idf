@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2020-2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2020-2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -28,8 +28,6 @@ extern "C" {
 // Get I2S hardware instance with giving i2s num
 #define I2S_LL_GET_HW(num)             (((num) == 0) ? (&I2S0) : NULL)
 
-#define I2S_LL_BASE_CLK                (2 * APB_CLK_FREQ)
-
 #define I2S_LL_BCK_MAX_PRESCALE  (64)
 
 #define I2S_LL_MCLK_DIVIDER_BIT_WIDTH  (6)
@@ -44,11 +42,17 @@ extern "C" {
 #define I2S_LL_TX_EVENT_MASK        I2S_LL_EVENT_TX_EOF
 #define I2S_LL_RX_EVENT_MASK        I2S_LL_EVENT_RX_EOF
 
-/* I2S clock configuration structure */
+#define I2S_LL_PLL_F160M_CLK_FREQ   (160 * 1000000) // PLL_F160M_CLK: 160MHz
+#define I2S_LL_DEFAULT_PLL_CLK_FREQ     I2S_LL_PLL_F160M_CLK_FREQ    // The default PLL clock frequency while using I2S_CLK_SRC_DEFAULT
+
+/**
+ * @brief I2S clock configuration structure
+ * @note Fmclk = Fsclk /(integ+numer/denom)
+ */
 typedef struct {
-    uint16_t mclk_div; // I2S module clock divider, Fmclk = Fsclk /(mclk_div+b/a)
-    uint16_t a;
-    uint16_t b;        // The decimal part of module clock divider, the decimal is: b/a
+    uint16_t integ;     // Integer part of I2S module clock divider
+    uint16_t denom;     // Denominator part of I2S module clock divider
+    uint16_t numer;     // Numerator part of I2S module clock divider
 } i2s_ll_mclk_div_t;
 
 /**
@@ -276,54 +280,6 @@ static inline void i2s_ll_tx_set_bck_div_num(i2s_dev_t *hw, uint32_t val)
 }
 
 /**
- * @brief Configure I2S TX module clock divider
- * @note mclk on ESP32S2 is shared by both TX and RX channel
- *
- * @param hw Peripheral I2S hardware instance address.
- * @param sclk system clock, 0 means use apll
- * @param mclk module clock
- * @param mclk_div integer part of the division from sclk to mclk
- */
-static inline void i2s_ll_tx_set_mclk(i2s_dev_t *hw, uint32_t sclk, uint32_t mclk, uint32_t mclk_div)
-{
-    int ma = 0;
-    int mb = 0;
-    int denominator = 1;
-    int numerator = 0;
-
-    uint32_t freq_diff = abs((int)sclk - (int)(mclk * mclk_div));
-    if (!freq_diff) {
-        goto finish;
-    }
-    float decimal = freq_diff / (float)mclk;
-    // Carry bit if the decimal is greater than 1.0 - 1.0 / (63.0 * 2) = 125.0 / 126.0
-    if (decimal > 125.0 / 126.0) {
-        mclk_div++;
-        goto finish;
-    }
-    uint32_t min = ~0;
-    for (int a = 2; a <= I2S_LL_MCLK_DIVIDER_MAX; a++) {
-        int b = (int)(a * (freq_diff / (double)mclk) + 0.5);
-        ma = freq_diff * a;
-        mb = mclk * b;
-        if (ma == mb) {
-            denominator = a;
-            numerator = b;
-            goto finish;
-        }
-        if (abs((mb - ma)) < min) {
-            denominator = a;
-            numerator = b;
-            min = abs(mb - ma);
-        }
-    }
-finish:
-    HAL_FORCE_MODIFY_U32_REG_FIELD(hw->clkm_conf, clkm_div_num, mclk_div);
-    hw->clkm_conf.clkm_div_b = numerator;
-    hw->clkm_conf.clkm_div_a = denominator;
-}
-
-/**
  * @brief Configure I2S module clock divider
  * @note mclk on ESP32 is shared by both TX and RX channel
  *       mclk = sclk / (mclk_div + b/a)
@@ -341,6 +297,23 @@ static inline void i2s_ll_set_raw_mclk_div(i2s_dev_t *hw, uint32_t mclk_div, uin
 }
 
 /**
+ * @brief Configure I2S TX module clock divider
+ * @note mclk on ESP32 is shared by both TX and RX channel
+ *
+ * @param hw Peripheral I2S hardware instance address.
+ * @param mclk_div The mclk division coefficients
+ */
+static inline void i2s_ll_tx_set_mclk(i2s_dev_t *hw, const i2s_ll_mclk_div_t *mclk_div)
+{
+    /* Workaround for inaccurate clock while switching from a relatively low sample rate to a high sample rate
+     * Set to particular coefficients first then update to the target coefficients,
+     * otherwise the clock division might be inaccurate.
+     * the general idea is to set a value that unlike to calculate from the regular decimal */
+    i2s_ll_set_raw_mclk_div(hw, 7, 47, 3);
+    i2s_ll_set_raw_mclk_div(hw, mclk_div->integ, mclk_div->denom, mclk_div->numer);
+}
+
+/**
  * @brief Set I2S rx bck div num
  *
  * @param hw Peripheral I2S hardware instance address.
@@ -353,16 +326,15 @@ static inline void i2s_ll_rx_set_bck_div_num(i2s_dev_t *hw, uint32_t val)
 
 /**
  * @brief Configure I2S RX module clock divider
- * @note mclk on ESP32S2 is shared by both TX and RX channel
+ * @note mclk on ESP32 is shared by both TX and RX channel
  *
  * @param hw Peripheral I2S hardware instance address.
- * @param sclk system clock, 0 means use apll
- * @param mclk module clock
- * @param mclk_div integer part of the division from sclk to mclk
+ * @param mclk_div The mclk division coefficients
  */
-static inline void i2s_ll_rx_set_mclk(i2s_dev_t *hw, uint32_t sclk, uint32_t mclk, uint32_t mclk_div)
+static inline void i2s_ll_rx_set_mclk(i2s_dev_t *hw, const i2s_ll_mclk_div_t *mclk_div)
 {
-    i2s_ll_tx_set_mclk(hw, sclk, mclk, mclk_div);
+    // TX and RX channel on ESP32 shares a same mclk
+    i2s_ll_tx_set_mclk(hw, mclk_div);
 }
 
 /**
@@ -374,11 +346,13 @@ static inline void i2s_ll_rx_set_mclk(i2s_dev_t *hw, uint32_t sclk, uint32_t mcl
  */
 static inline void i2s_ll_enable_intr(i2s_dev_t *hw, uint32_t mask, bool en)
 {
+    uint32_t int_ena_mask = hw->int_ena.val;
     if (en) {
-        hw->int_ena.val |= mask;
+        int_ena_mask |= mask;
     } else {
-        hw->int_ena.val &= ~mask;
+        int_ena_mask &= ~mask;
     }
+    hw->int_ena.val = int_ena_mask;
 }
 
 /**
@@ -439,6 +413,7 @@ static inline volatile void *i2s_ll_get_intr_status_reg(i2s_dev_t *hw)
  * @return
  *        - module interrupt status
  */
+__attribute__((always_inline))
 static inline uint32_t i2s_ll_get_intr_status(i2s_dev_t *hw)
 {
     return hw->int_st.val;
@@ -458,6 +433,7 @@ static inline volatile void *i2s_ll_get_interrupt_status_reg(i2s_dev_t *hw)
  * @param hw Peripheral I2S hardware instance address.
  * @param clr_mask Interrupt mask to be cleared.
  */
+__attribute__((always_inline))
 static inline void i2s_ll_clear_intr_status(i2s_dev_t *hw, uint32_t clr_mask)
 {
     hw->int_clr.val = clr_mask;
@@ -640,6 +616,7 @@ static inline void i2s_ll_rx_stop_link(i2s_dev_t *hw)
  * @param hw Peripheral I2S hardware instance address.
  * @param eof_addr Pointer to accept out eof des address
  */
+__attribute__((always_inline))
 static inline void i2s_ll_tx_get_eof_des_addr(i2s_dev_t *hw, uint32_t *eof_addr)
 {
     *eof_addr = hw->out_eof_des_addr;
@@ -651,6 +628,7 @@ static inline void i2s_ll_tx_get_eof_des_addr(i2s_dev_t *hw, uint32_t *eof_addr)
  * @param hw Peripheral I2S hardware instance address.
  * @param eof_addr Pointer to accept in eof des address
  */
+__attribute__((always_inline))
 static inline void i2s_ll_rx_get_eof_des_addr(i2s_dev_t *hw, uint32_t *eof_addr)
 {
     *eof_addr = hw->in_eof_des_addr;
@@ -705,22 +683,22 @@ static inline void i2s_ll_enable_dma(i2s_dev_t *hw, bool ena)
 }
 
 /**
- * @brief Set I2S TX to philip standard
+ * @brief Set I2S TX to philips standard
  *
  * @param hw Peripheral I2S hardware instance address.
  */
-static inline void i2s_ll_tx_set_format_philip(i2s_dev_t *hw)
+static inline void i2s_ll_tx_set_format_philips(i2s_dev_t *hw)
 {
     hw->conf.tx_short_sync = 0;
     hw->conf.tx_msb_shift = 1;
 }
 
 /**
- * @brief Set I2S RX to philip standard
+ * @brief Set I2S RX to philips standard
  *
  * @param hw Peripheral I2S hardware instance address.
  */
-static inline void i2s_ll_rx_set_format_philip(i2s_dev_t *hw)
+static inline void i2s_ll_rx_set_format_philips(i2s_dev_t *hw)
 {
     hw->conf.rx_short_sync = 0;
     hw->conf.rx_msb_shift = 1;
@@ -841,22 +819,40 @@ static inline void i2s_ll_rx_enable_msb_shift(i2s_dev_t *hw, bool msb_shift_enab
  *
  * @param hw Peripheral I2S hardware instance address.
  * @param slot_mask select slot to send data
+ * @param is_mono is mono mode
  */
-static inline void i2s_ll_tx_select_slot(i2s_dev_t *hw, i2s_std_slot_mask_t slot_mask, bool is_msb_right)
+static inline void i2s_ll_tx_select_std_slot(i2s_dev_t *hw, i2s_std_slot_mask_t slot_mask, bool is_mono)
 {
-    switch (slot_mask)
-    {
-    case I2S_STD_SLOT_ONLY_RIGHT:
-        hw->conf_chan.tx_chan_mod = is_msb_right ? 1 : 2;
-        break;
-    case I2S_STD_SLOT_ONLY_LEFT:
-        hw->conf_chan.tx_chan_mod = is_msb_right ? 2 : 1;
-        break;
-    case I2S_STD_SLOT_LEFT_RIGHT:
-        hw->conf_chan.tx_chan_mod = 0;
-        break;
-    default:
-        break;
+    if (is_mono) {
+        switch (slot_mask)
+        {
+        case I2S_STD_SLOT_RIGHT:
+            hw->conf_chan.tx_chan_mod = 3;
+            break;
+        case I2S_STD_SLOT_LEFT:
+            hw->conf_chan.tx_chan_mod = 4;
+            break;
+        case I2S_STD_SLOT_BOTH:
+            hw->conf_chan.tx_chan_mod = 1; // 1 & 2 has same effect
+            break;
+        default:
+            break;
+        }
+    } else {
+        switch (slot_mask)
+        {
+        case I2S_STD_SLOT_RIGHT:
+            hw->conf_chan.tx_chan_mod = 1;
+            break;
+        case I2S_STD_SLOT_LEFT:
+            hw->conf_chan.tx_chan_mod = 2;
+            break;
+        case I2S_STD_SLOT_BOTH:
+            hw->conf_chan.tx_chan_mod = 0;
+            break;
+        default:
+            break;
+        }
     }
 }
 
@@ -866,17 +862,17 @@ static inline void i2s_ll_tx_select_slot(i2s_dev_t *hw, i2s_std_slot_mask_t slot
  * @param hw Peripheral I2S hardware instance address.
  * @param slot_mask select slot to receive data
  */
-static inline void i2s_ll_rx_select_slot(i2s_dev_t *hw, i2s_std_slot_mask_t slot_mask, bool is_msb_right)
+static inline void i2s_ll_rx_select_std_slot(i2s_dev_t *hw, i2s_std_slot_mask_t slot_mask, bool is_msb_right)
 {
     switch (slot_mask)
     {
-    case I2S_STD_SLOT_ONLY_RIGHT:
+    case I2S_STD_SLOT_RIGHT:
         hw->conf_chan.rx_chan_mod = is_msb_right ? 1 : 2;
         break;
-    case I2S_STD_SLOT_ONLY_LEFT:
+    case I2S_STD_SLOT_LEFT:
         hw->conf_chan.rx_chan_mod = is_msb_right ? 2 : 1;
         break;
-    case I2S_STD_SLOT_LEFT_RIGHT:
+    case I2S_STD_SLOT_BOTH:
         hw->conf_chan.rx_chan_mod = 0;
         break;
     default:

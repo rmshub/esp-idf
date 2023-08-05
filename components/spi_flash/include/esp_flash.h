@@ -18,7 +18,9 @@ extern "C" {
 struct spi_flash_chip_t;
 typedef struct spi_flash_chip_t spi_flash_chip_t;
 
+/** @cond */
 typedef struct esp_flash_t esp_flash_t;
+/** @endcond */
 
 /** @brief Structure for describing a region of flash */
 typedef struct {
@@ -97,10 +99,11 @@ struct esp_flash_t {
     void *os_func_data;                         ///< Pointer to argument for os-specific hooks. Left NULL and will be initialized with ``os_func``.
 
     esp_flash_io_mode_t read_mode; ///< Configured SPI flash read mode. Set before ``esp_flash_init`` is called.
-    uint32_t size;                   ///< Size of SPI flash in bytes. If 0, size will be detected during initialisation.
+    uint32_t size;                   ///< Size of SPI flash in bytes. If 0, size will be detected during initialisation. Note: this stands for the size in the binary image header. If you want to get the flash physical size, please call `esp_flash_get_physical_size`.
     uint32_t chip_id;               ///< Detected chip id.
     uint32_t busy             :1;   ///< This flag is used to verify chip's status.
-    uint32_t reserved_flags   :31;  ///< reserved.
+    uint32_t hpm_dummy_ena    :1;   ///< This flag is used to verify whether flash works under HPM status.
+    uint32_t reserved_flags   :30;  ///< reserved.
 };
 
 
@@ -144,14 +147,28 @@ esp_err_t esp_flash_read_id(esp_flash_t *chip, uint32_t *out_id);
 /** @brief Detect flash size based on flash ID.
  *
  * @param chip Pointer to identify flash chip. Must have been successfully initialised via esp_flash_init()
- * @param[out] out_size Detected size in bytes.
+ * @param[out] out_size Detected size in bytes, standing for the size in the binary image header.
+ *
+ * @note 1. Most flash chips use a common format for flash ID, where the lower 4 bits specify the size as a power of 2. If
+ * the manufacturer doesn't follow this convention, the size may be incorrectly detected.
+ *       2. The out_size returned only stands for The out_size stands for the size in the binary image header.
+ *  If you want to get the real size of the chip, please call `esp_flash_get_physical_size` instead.
+ *
+ * @return ESP_OK on success, or a flash error code if operation failed.
+ */
+esp_err_t esp_flash_get_size(esp_flash_t *chip, uint32_t *out_size);
+
+/** @brief Detect flash size based on flash ID.
+ *
+ * @param chip Pointer to identify flash chip. Must have been successfully initialised via esp_flash_init()
+ * @param[out] flash_size Detected size in bytes.
  *
  * @note Most flash chips use a common format for flash ID, where the lower 4 bits specify the size as a power of 2. If
  * the manufacturer doesn't follow this convention, the size may be incorrectly detected.
  *
  * @return ESP_OK on success, or a flash error code if operation failed.
  */
-esp_err_t esp_flash_get_size(esp_flash_t *chip, uint32_t *out_size);
+esp_err_t esp_flash_get_physical_size(esp_flash_t *chip, uint32_t *flash_size);
 
 /** @brief Read flash unique ID via the common "RDUID" SPI flash command.
  *
@@ -180,7 +197,7 @@ esp_err_t esp_flash_erase_chip(esp_flash_t *chip);
 
 /** @brief Erase a region of the flash chip
  *
- * @param chip Pointer to identify flash chip. Must have been successfully initialised via esp_flash_init()
+ * @param chip Pointer to identify flash chip. If NULL, esp_flash_default_chip is substituted. Must have been successfully initialised via esp_flash_init()
  * @param start Address to start erasing flash. Must be sector aligned.
  * @param len Length of region to erase. Must also be sector aligned.
  *
@@ -200,7 +217,7 @@ esp_err_t esp_flash_erase_region(esp_flash_t *chip, uint32_t start, uint32_t len
 
 /** @brief Read if the entire chip is write protected
  *
- * @param chip Pointer to identify flash chip. Must have been successfully initialised via esp_flash_init()
+ * @param chip Pointer to identify flash chip. If NULL, esp_flash_default_chip is substituted. Must have been successfully initialised via esp_flash_init()
  * @param[out] write_protected Pointer to boolean, set to the value of the write protect flag.
  *
  * @note A correct result for this flag depends on the SPI flash chip model and chip_drv in use (via the 'chip->drv'
@@ -212,7 +229,7 @@ esp_err_t esp_flash_get_chip_write_protect(esp_flash_t *chip, bool *write_protec
 
 /** @brief Set write protection for the SPI flash chip
  *
- * @param chip Pointer to identify flash chip. Must have been successfully initialised via esp_flash_init()
+ * @param chip Pointer to identify flash chip. If NULL, esp_flash_default_chip is substituted. Must have been successfully initialised via esp_flash_init()
  * @param write_protect Boolean value for the write protect flag
  *
  * @note Correct behaviour of this function depends on the SPI flash chip model and chip_drv in use (via the 'chip->drv'
@@ -272,7 +289,7 @@ esp_err_t esp_flash_set_protected_region(esp_flash_t *chip, const esp_flash_regi
 
 /** @brief Read data from the SPI flash chip
  *
- * @param chip Pointer to identify flash chip. Must have been successfully initialised via esp_flash_init()
+ * @param chip Pointer to identify flash chip. If NULL, esp_flash_default_chip is substituted. Must have been successfully initialised via esp_flash_init()
  * @param buffer Pointer to a buffer where the data will be read. To get better performance, this should be in the DRAM and word aligned.
  * @param address Address on flash to read from. Must be less than chip->size field.
  * @param length Length (in bytes) of data to read.
@@ -291,7 +308,7 @@ esp_err_t esp_flash_read(esp_flash_t *chip, void *buffer, uint32_t address, uint
 
 /** @brief Write data to the SPI flash chip
  *
- * @param chip Pointer to identify flash chip. Must have been successfully initialised via esp_flash_init()
+ * @param chip Pointer to identify flash chip. If NULL, esp_flash_default_chip is substituted. Must have been successfully initialised via esp_flash_init()
  * @param address Address on flash to write to. Must be previously erased (SPI NOR flash can only write bits 1->0).
  * @param buffer Pointer to a buffer with the data to write. To get better performance, this should be in the DRAM and word aligned.
  * @param length Length (in bytes) of data to write.
@@ -300,6 +317,7 @@ esp_err_t esp_flash_read(esp_flash_t *chip, void *buffer, uint32_t address, uint
  *
  * @return
  *      - ESP_OK on success,
+ *      - ESP_FAIL, bad write, this will be detected only when CONFIG_SPI_FLASH_VERIFY_WRITE is enabled
  *      - ESP_ERR_NOT_SUPPORTED if the chip is not able to perform the operation. This is indicated by WREN = 1 after the command is sent.
  *      - Other flash error code if operation failed.
  */
@@ -316,9 +334,9 @@ esp_err_t esp_flash_write(esp_flash_t *chip, const void *buffer, uint32_t addres
  *
  * @return
  *  - ESP_OK: on success
+ *  - ESP_FAIL: bad write, this will be detected only when CONFIG_SPI_FLASH_VERIFY_WRITE is enabled
  *  - ESP_ERR_NOT_SUPPORTED: encrypted write not supported for this chip.
  *  - ESP_ERR_INVALID_ARG: Either the address, buffer or length is invalid.
- *  - or other flash error code from spi_flash_write_encrypted().
  */
 esp_err_t esp_flash_write_encrypted(esp_flash_t *chip, uint32_t address, const void *buffer, uint32_t length);
 
@@ -332,7 +350,6 @@ esp_err_t esp_flash_write_encrypted(esp_flash_t *chip, uint32_t address, const v
  * @return
  *  - ESP_OK: on success
  *  - ESP_ERR_NOT_SUPPORTED: encrypted read not supported for this chip.
- *  - or other flash error code from spi_flash_read_encrypted().
  */
 esp_err_t esp_flash_read_encrypted(esp_flash_t *chip, uint32_t address, void *out_buffer, uint32_t length);
 

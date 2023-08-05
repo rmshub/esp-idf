@@ -10,14 +10,18 @@ Wi-Fi
    :maxdepth: 1
 
    esp_now
-   esp-wifi-mesh
+   :SOC_WIFI_MESH_SUPPORT: esp-wifi-mesh
    esp_smartconfig
    esp_wifi
    esp_dpp
+   esp_nan
 
 本部分的 Wi-Fi API 示例代码存放在 ESP-IDF 示例项目的 :example:`wifi` 目录下。
 
-ESP-WIFI-MESH 的示例代码存放在 ESP-IDF 示例项目的 :example:`mesh` 目录下。
+.. only:: SOC_WIFI_MESH_SUPPORT
+
+      ESP-WIFI-MESH 的示例代码存放在 ESP-IDF 示例项目的 :example:`mesh` 目录下。
+
 
 
 以太网
@@ -39,6 +43,7 @@ Thread
    esp_openthread
 
 Thread 是一种基于 IPv6 的物联网网状网络技术。
+
 本部分的Thread API 示例代码存放在 ESP-IDF 示例项目的 :example:`openthread` 目录下。
 
 IP 网络层协议

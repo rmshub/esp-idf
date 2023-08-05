@@ -32,7 +32,7 @@ __attribute__((always_inline)) static inline uint32_t efuse_ll_get_wdt_delay_sel
 
 __attribute__((always_inline)) static inline uint32_t efuse_ll_get_mac0(void)
 {
-    return EFUSE.rd_mac_spi_sys_0;
+    return EFUSE.rd_mac_spi_sys_0.mac_0;
 }
 
 __attribute__((always_inline)) static inline uint32_t efuse_ll_get_mac1(void)
@@ -50,14 +50,77 @@ __attribute__((always_inline)) static inline bool efuse_ll_get_err_rst_enable(vo
     return EFUSE.rd_repeat_data3.err_rst_enable;
 }
 
-__attribute__((always_inline)) static inline uint32_t efuse_ll_get_chip_revision(void)
+// use efuse_hal_get_major_chip_version() to get major chip version
+__attribute__((always_inline)) static inline uint32_t efuse_ll_get_chip_wafer_version_major(void)
 {
-    return EFUSE.rd_mac_spi_sys_3.wafer_version;
+    return EFUSE.rd_mac_spi_sys_5.wafer_version_major;
+}
+
+// use efuse_hal_get_minor_chip_version() to get minor chip version
+__attribute__((always_inline)) static inline uint32_t efuse_ll_get_chip_wafer_version_minor(void)
+{
+    return (EFUSE.rd_mac_spi_sys_5.wafer_version_minor_hi << 3) + EFUSE.rd_mac_spi_sys_3.wafer_version_minor_lo;
+}
+
+__attribute__((always_inline)) static inline bool efuse_ll_get_disable_wafer_version_major(void)
+{
+    return EFUSE.rd_repeat_data4.disable_wafer_version_major;
+}
+
+__attribute__((always_inline)) static inline uint32_t efuse_ll_get_blk_version_major(void)
+{
+    return EFUSE.rd_sys_part1_data4.blk_version_major;
+}
+
+__attribute__((always_inline)) static inline uint32_t efuse_ll_get_blk_version_minor(void)
+{
+    return EFUSE.rd_mac_spi_sys_3.blk_version_minor;
+}
+
+__attribute__((always_inline)) static inline bool efuse_ll_get_disable_blk_version_major(void)
+{
+    return EFUSE.rd_repeat_data4.disable_blk_version_major;
 }
 
 __attribute__((always_inline)) static inline uint32_t efuse_ll_get_chip_ver_pkg(void)
 {
     return EFUSE.rd_mac_spi_sys_3.pkg_version;
+}
+
+__attribute__((always_inline)) static inline uint32_t efuse_ll_get_ocode(void)
+{
+    // EFUSE_BLK2,  140,    8,     ADC OCode
+    return EFUSE.rd_sys_part1_data4.ocode;
+}
+
+__attribute__((always_inline)) static inline uint32_t efuse_ll_get_k_rtc_ldo(void)
+{
+    // EFUSE_BLK1,    135,    7,      BLOCK1 K_RTC_LDO
+    return EFUSE.rd_mac_spi_sys_4.k_rtc_ldo;
+}
+
+__attribute__((always_inline)) static inline uint32_t efuse_ll_get_k_dig_ldo(void)
+{
+    // EFUSE_BLK1,    142,    7,      BLOCK1 K_DIG_LDO
+    return EFUSE.rd_mac_spi_sys_4.k_dig_ldo;
+}
+
+__attribute__((always_inline)) static inline uint32_t efuse_ll_get_v_rtc_dbias20(void)
+{
+    // EFUSE_BLK1,    149,    8,      BLOCK1 voltage of rtc dbias20
+    return EFUSE.rd_mac_spi_sys_4.v_rtc_dbias20;
+}
+
+__attribute__((always_inline)) static inline uint32_t efuse_ll_get_v_dig_dbias20(void)
+{
+    // EFUSE_BLK1,    157,    8,      BLOCK1 voltage of digital dbias20
+    return (EFUSE.rd_mac_spi_sys_5.v_dig_dbias20_1 << 3) + EFUSE.rd_mac_spi_sys_4.v_dig_dbias20;
+}
+
+__attribute__((always_inline)) static inline uint32_t efuse_ll_get_dig_dbias_hvt(void)
+{
+    // EFUSE_BLK1,    165,    5,      BLOCK1 digital dbias when hvt
+    return EFUSE.rd_mac_spi_sys_5.dig_dbias_hvt;
 }
 
 /******************* eFuse control functions *************************/
@@ -91,6 +154,21 @@ __attribute__((always_inline)) static inline void efuse_ll_set_conf_read_op_code
 __attribute__((always_inline)) static inline void efuse_ll_set_conf_write_op_code(void)
 {
     EFUSE.conf.op_code = EFUSE_WRITE_OP_CODE;
+}
+
+__attribute__((always_inline)) static inline void efuse_ll_set_dac_num(uint8_t val)
+{
+    EFUSE.dac_conf.dac_num = val;
+}
+
+__attribute__((always_inline)) static inline void efuse_ll_set_dac_clk_div(uint8_t val)
+{
+    EFUSE.dac_conf.dac_clk_div = val;
+}
+
+__attribute__((always_inline)) static inline void efuse_ll_set_pwr_on_num(uint16_t val)
+{
+    EFUSE.wr_tim_conf1.pwr_on_num = val;
 }
 
 __attribute__((always_inline)) static inline void efuse_ll_set_pwr_off_num(uint16_t value)

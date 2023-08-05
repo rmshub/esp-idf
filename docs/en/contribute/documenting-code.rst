@@ -123,7 +123,7 @@ When writing codes, please follow the guidelines below:
 
    For practical example see :component_file:`nvs_flash/include/nvs.h`.
 
-4. You may want to go even further and skip some code like repetitive defines or enumerations. In such case, enclose the code within ``/** @cond */`` and ``/** @endcond */`` commands. Example of such implementation is provided in :component_file:`driver/include/driver/gpio.h`.
+4. You may want to go even further and skip some code like repetitive defines or enumerations. In such case, enclose the code within ``/** @cond */`` and ``/** @endcond */`` commands. Example of such implementation is provided in :component_file:`driver/gpio/include/driver/gpio.h`.
 
 5. Use markdown to make your documentation even more readable. You will add headers, links, tables and more. ::
 
@@ -183,7 +183,7 @@ or for specific target and language with::
 
     build-docs -t esp32 -l en build
 
-For more in-depth documentation about `esp-docs` features please see the documentation in the `esp-docs repository <https://github.com/espressif/esp-docs/blob/master/docs/building-documention.md>`_.
+For more in-depth documentation about `esp-docs` features please see the documentation at `esp-docs <https://docs.espressif.com/projects/esp-docs/en/latest/>`_.
 
 Wrap up
 -------

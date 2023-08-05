@@ -122,7 +122,7 @@ typedef struct rtc_clk_config_s {
  * Default initializer for rtc_clk_config_t
  */
 #define RTC_CLK_CONFIG_DEFAULT() { \
-    .xtal_freq = RTC_XTAL_FREQ_AUTO, \
+    .xtal_freq = CONFIG_XTAL_FREQ, \
     .cpu_freq_mhz = 80, \
     .fast_clk_src = SOC_RTC_FAST_CLK_SRC_RC_FAST, \
     .slow_clk_src = SOC_RTC_SLOW_CLK_SRC_RC_SLOW, \
@@ -394,6 +394,11 @@ uint32_t rtc_clk_apb_freq_get(void);
  * 32k XTAL is being calibrated, but the oscillator has not started up (due to
  * incorrect loading capacitance, board design issue, or lack of 32 XTAL on board).
  *
+ * @note When 32k CLK is being calibrated, this function will check the accuracy
+ * of the clock. Since the xtal 32k or ext osc 32k is generally very stable, if
+ * the check fails, then consider this an invalid 32k clock and return 0. This
+ * check can filter some jamming signal.
+ *
  * @param cal_clk  clock to be measured
  * @param slow_clk_cycles  number of slow clock cycles to average
  * @return average slow clock period in microseconds, Q13.19 fixed point format,
@@ -488,7 +493,7 @@ typedef struct rtc_sleep_config_s {
     uint32_t rtc_fastmem_pd_en : 1;     //!< power down RTC fast memory
     uint32_t rtc_slowmem_pd_en : 1;     //!< power down RTC slow memory
     uint32_t rtc_peri_pd_en : 1;        //!< power down RTC peripherals
-    uint32_t wifi_pd_en : 1;            //!< power down WiFi
+    uint32_t modem_pd_en : 1;           //!< power down Modem(wifi and btdm)
     uint32_t int_8m_pd_en : 1;          //!< Power down Internal 8M oscillator
     uint32_t rom_mem_pd_en : 1;         //!< power down main RAM and ROM
     uint32_t deep_slp : 1;              //!< power down digital domain
@@ -502,6 +507,7 @@ typedef struct rtc_sleep_config_s {
     uint32_t xtal_fpu : 1;              //!< keep main XTAL powered up in sleep
     uint32_t deep_slp_reject : 1;       //!< enable deep sleep reject
     uint32_t light_slp_reject : 1;      //!< enable light sleep reject
+    uint32_t dbg_atten_slp : 2;             //!< voltage parameter
 } rtc_sleep_config_t;
 
 #define RTC_SLEEP_PD_DIG                BIT(0)  //!< Deep sleep (power down digital domain)
@@ -510,8 +516,9 @@ typedef struct rtc_sleep_config_s {
 #define RTC_SLEEP_PD_RTC_FAST_MEM       BIT(3)  //!< Power down RTC FAST memory
 #define RTC_SLEEP_PD_RTC_MEM_FOLLOW_CPU BIT(4)  //!< RTC FAST and SLOW memories are automatically powered up and down along with the CPU
 #define RTC_SLEEP_PD_VDDSDIO            BIT(5)  //!< Power down VDDSDIO regulator
-#define RTC_SLEEP_PD_XTAL               BIT(6)  //!< Power down main XTAL
-#define RTC_SLEEP_PD_INT_8M             BIT(7)  //!< Power down Internal 8M oscillator
+#define RTC_SLEEP_PD_MODEM              BIT(6)  //!< Power down Modem(wifi and btdm)
+#define RTC_SLEEP_PD_XTAL               BIT(7)  //!< Power down main XTAL
+#define RTC_SLEEP_PD_INT_8M             BIT(8)  //!< Power down Internal 8M oscillator
 
 //These flags are not power domains, but will affect some sleep parameters
 #define RTC_SLEEP_DIG_USE_8M            BIT(16)
@@ -529,12 +536,13 @@ typedef struct rtc_sleep_config_s {
 void rtc_sleep_get_default_config(uint32_t sleep_flags, rtc_sleep_config_t *out_config);
 
 /* Various delays to be programmed into power control state machines */
-#define RTC_CNTL_XTL_BUF_WAIT_SLP_US        (500)
+#define RTC_CNTL_XTL_BUF_WAIT_SLP_US        (1000)
 #define RTC_CNTL_PLL_BUF_WAIT_SLP_CYCLES    (1)
 #define RTC_CNTL_CK8M_WAIT_SLP_CYCLES       (4)
 #define RTC_CNTL_WAKEUP_DELAY_CYCLES        (7)
 #define RTC_CNTL_OTHER_BLOCKS_POWERUP_CYCLES    (1)
 #define RTC_CNTL_OTHER_BLOCKS_WAIT_CYCLES       (1)
+#define RTC_CNTL_MIN_SLP_VAL_MIN            (128)
 
 #define RTC_CNTL_CK8M_WAIT_DEFAULT          20
 #define RTC_CK8M_ENABLE_WAIT_DEFAULT        5
@@ -565,14 +573,6 @@ void rtc_sleep_init(rtc_sleep_config_t cfg);
  * @param slowclk_period re-calibrated slow clock period
  */
 void rtc_sleep_low_init(uint32_t slowclk_period);
-
-/**
- * @brief Set target value of RTC counter for RTC_TIMER_TRIG_EN wakeup source
- * @param t value of RTC counter at which wakeup from sleep will happen;
- *          only the lower 48 bits are used
- */
-void rtc_sleep_set_wakeup_time(uint64_t t);
-
 
 #define RTC_EXT0_TRIG_EN    BIT(0)  //!< EXT0 GPIO wakeup
 #define RTC_EXT1_TRIG_EN    BIT(1)  //!< EXT1 GPIO wakeup

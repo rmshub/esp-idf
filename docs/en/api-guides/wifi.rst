@@ -3,20 +3,65 @@ Wi-Fi Driver
 
 :link_to_translation:`zh_CN:[中文]`
 
+{IDF_TARGET_MAX_CONN_STA_NUM:default="15", esp32c2="4", esp32c3="10", esp32c6="10"}
+
+{IDF_TARGET_SUB_MAX_NUM_FROM_KEYS:default="2", esp32c3="7", esp32c6="7"}
+
 {IDF_TARGET_NAME} Wi-Fi Feature List
 ------------------------------------
-- Support 4 virtual WiFi interfaces, which are STA, AP, Sniffer and reserved. 
-- Support station-only mode, AP-only mode, station/AP-coexistence mode
-- Support IEEE 802.11b, IEEE 802.11g, IEEE 802.11n, and APIs to configure the protocol mode
-- Support WPA/WPA2/WPA3/WPA2-Enterprise and WPS
-- Support AMPDU, HT40, QoS, and other key features
-- Support Modem-sleep
-- Support the Espressif-specific ESP-NOW protocol and Long Range mode, which supports up to **1 km** of data traffic
-- Up to 20 MBit/s TCP throughput and 30 MBit/s UDP throughput over the air
-- Support Sniffer
-- Support both fast scan and all-channel scan
-- Support multiple antennas
-- Support channel state information
+The following features are supported:
+
+.. only:: esp32 or esp32s2 or esp32c3 or esp32s3
+
+    - 4 virtual Wi-Fi interfaces, which are STA, AP, Sniffer and reserved.
+    - Station-only mode, AP-only mode, station/AP-coexistence mode
+    - IEEE 802.11b, IEEE 802.11g, IEEE 802.11n, and APIs to configure the protocol mode
+    - WPA/WPA2/WPA3/WPA2-Enterprise/WPA3-Enterprise/WAPI/WPS and DPP
+    - AMSDU, AMPDU, HT40, QoS, and other key features
+    - Modem-sleep
+    - The Espressif-specific ESP-NOW protocol and Long Range mode, which supports up to **1 km** of data traffic
+    - Up to 20 MBit/s TCP throughput and 30 MBit/s UDP throughput over the air
+    - Sniffer
+    - Both fast scan and all-channel scan
+    - Multiple antennas
+    - Channel state information
+
+    .. only:: SOC_WIFI_NAN_SUPPORT
+
+     - Wi-Fi Aware (NAN)
+
+.. only:: esp32c6
+
+    - 4 virtual Wi-Fi interfaces, which are STA, AP, Sniffer and reserved.
+    - Station-only mode, AP-only mode, station/AP-coexistence mode
+    - IEEE 802.11b, IEEE 802.11g, IEEE 802.11n, IEEE 802.11ax, and APIs to configure the protocol mode
+    - WPA/WPA2/WPA3/WPA2-Enterprise/WPA3-Enterprise/WAPI/WPS and DPP
+    - AMSDU, AMPDU, HT40, QoS, and other key features
+    - Modem-sleep
+    - The Espressif-specific ESP-NOW protocol and Long Range mode, which supports up to **1 km** of data traffic
+    - Up to 20 MBit/s TCP throughput and 30 MBit/s UDP throughput over the air
+    - Sniffer
+    - Both fast scan and all-channel scan
+    - Multiple antennas
+    - Channel state information
+    - TWT
+    - Downlink MU-MIMO
+    - OFDMA
+    - BSS Color
+
+.. only:: esp32c2
+
+    - 3 virtual Wi-Fi interfaces, which are STA, AP and Sniffer.
+    - Station-only mode, AP-only mode, station/AP-coexistence mode
+    - IEEE 802.11b, IEEE 802.11g, IEEE 802.11n, and APIs to configure the protocol mode
+    - WPA/WPA2/WPA3/WPA2-Enterprise/WPA3-Enterprise/WPS and DPP
+    - AMPDU, QoS, and other key features
+    - Modem-sleep
+    - Up to 20 MBit/s TCP throughput and 30 MBit/s UDP throughput over the air
+    - Sniffer
+    - Both fast scan and all-channel scan
+    - Multiple antennas
+
 
 How To Write a Wi-Fi Application
 ----------------------------------
@@ -41,7 +86,7 @@ Refer to `{IDF_TARGET_NAME} Wi-Fi station General Scenario`_ and `{IDF_TARGET_NA
 
 Event-Handling
 ++++++++++++++
-Generally, it is easy to write code in "sunny-day" scenarios, such as `WIFI_EVENT_STA_START`_ and `WIFI_EVENT_STA_CONNECTED`_. The hard part is to write routines in "rainy-day" scenarios, such as `WIFI_EVENT_STA_DISCONNECTED`_. Good handling of "rainy-day" scenarios is fundamental to robust Wi-Fi applications. Refer to `{IDF_TARGET_NAME} Wi-Fi Event Description`_, `{IDF_TARGET_NAME} Wi-Fi station General Scenario`_, and `{IDF_TARGET_NAME} Wi-Fi AP General Scenario`_. See also :doc:`an overview of event handling in ESP-IDF<event-handling>`.
+Generally, it is easy to write code in "sunny-day" scenarios, such as `WIFI_EVENT_STA_START`_ and `WIFI_EVENT_STA_CONNECTED`_. The hard part is to write routines in "rainy-day" scenarios, such as `WIFI_EVENT_STA_DISCONNECTED`_. Good handling of "rainy-day" scenarios is fundamental to robust Wi-Fi applications. Refer to `{IDF_TARGET_NAME} Wi-Fi Event Description`_, `{IDF_TARGET_NAME} Wi-Fi station General Scenario`_, and `{IDF_TARGET_NAME} Wi-Fi AP General Scenario`_. See also the :doc:`overview of the Event Loop Library in ESP-IDF<../api-reference/system/esp_event>`.
 
 Write Error-Recovery Routines Correctly at All Times
 ++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -52,8 +97,8 @@ Just like the handling of "rainy-day" scenarios, a good error-recovery routine i
 --------------------------------------
 All of the {IDF_TARGET_NAME} Wi-Fi APIs have well-defined return values, namely, the error code. The error code can be categorized into:
 
- - No errors, e.g., ESP_OK means that the API returns successfully.
- - Recoverable errors, such as ESP_ERR_NO_MEM.
+ - No errors, e.g., :c:macro:`ESP_OK` means that the API returns successfully.
+ - Recoverable errors, such as :c:macro:`ESP_ERR_NO_MEM`.
  - Non-recoverable, non-critical errors.
  - Non-recoverable, critical errors.
 
@@ -61,11 +106,11 @@ Whether the error is critical or not depends on the API and the application scen
 
 **The primary principle to write a robust application with Wi-Fi API is to always check the error code and write the error-handling code.** Generally, the error-handling code can be used:
 
- - For recoverable errors, in which case you can write a recoverable-error code. For example, when :cpp:func:`esp_wifi_start()` returns ESP_ERR_NO_MEM, the recoverable-error code vTaskDelay can be called in order to get a microseconds' delay for another try.
+ - For recoverable errors, in which case you can write a recoverable-error code. For example, when :cpp:func:`esp_wifi_start()` returns :c:macro:`ESP_ERR_NO_MEM`, the recoverable-error code vTaskDelay can be called in order to get a microseconds' delay for another try.
  - For non-recoverable, yet non-critical errors, in which case printing the error code is a good method for error handling.
- - For non-recoverable and also critical errors, in which case "assert" may be a good method for error handling. For example, if :cpp:func:`esp_wifi_set_mode()` returns ESP_ERR_WIFI_NOT_INIT, it means that the Wi-Fi driver is not initialized by :cpp:func:`esp_wifi_init()` successfully. You can detect this kind of error very quickly in the application development phase.
+ - For non-recoverable and also critical errors, in which case "assert" may be a good method for error handling. For example, if :cpp:func:`esp_wifi_set_mode()` returns ``ESP_ERR_WIFI_NOT_INIT``, it means that the Wi-Fi driver is not initialized by :cpp:func:`esp_wifi_init()` successfully. You can detect this kind of error very quickly in the application development phase.
 
-In esp_err.h, ESP_ERROR_CHECK checks the return values. It is a rather commonplace error-handling code and can be used as the default error-handling code in the application development phase. However, it is strongly recommended that API users write their own error-handling code.
+In :component_file:`esp_common/include/esp_err.h`, ``ESP_ERROR_CHECK`` checks the return values. It is a rather commonplace error-handling code and can be used as the default error-handling code in the application development phase. However, it is strongly recommended that API users write their own error-handling code.
 
 {IDF_TARGET_NAME} Wi-Fi API Parameter Initialization
 ----------------------------------------------------
@@ -155,15 +200,15 @@ Refer to `{IDF_TARGET_NAME} Wi-Fi Scan`_ for a more detailed description.
 
 WIFI_EVENT_STA_START
 ++++++++++++++++++++++++++++++++++++
-If :cpp:func:`esp_wifi_start()` returns ESP_OK and the current Wi-Fi mode is station or station/AP, then this event will arise. Upon receiving this event, the event task will initialize the LwIP network interface (netif). Generally, the application event callback needs to call :cpp:func:`esp_wifi_connect()` to connect to the configured AP.
+If :cpp:func:`esp_wifi_start()` returns :c:macro:`ESP_OK` and the current Wi-Fi mode is station or station/AP, then this event will arise. Upon receiving this event, the event task will initialize the LwIP network interface (netif). Generally, the application event callback needs to call :cpp:func:`esp_wifi_connect()` to connect to the configured AP.
 
 WIFI_EVENT_STA_STOP
 ++++++++++++++++++++++++++++++++++++
-If :cpp:func:`esp_wifi_stop()` returns ESP_OK and the current Wi-Fi mode is station or station/AP, then this event will arise. Upon receiving this event, the event task will release the station's IP address, stop the DHCP client, remove TCP/UDP-related connections, and clear the LwIP station netif, etc. The application event callback generally does not need to do anything.
+If :cpp:func:`esp_wifi_stop()` returns :c:macro:`ESP_OK` and the current Wi-Fi mode is station or station/AP, then this event will arise. Upon receiving this event, the event task will release the station's IP address, stop the DHCP client, remove TCP/UDP-related connections, and clear the LwIP station netif, etc. The application event callback generally does not need to do anything.
 
 WIFI_EVENT_STA_CONNECTED
 ++++++++++++++++++++++++++++++++++++
-If :cpp:func:`esp_wifi_connect()` returns ESP_OK and the station successfully connects to the target AP, the connection event will arise. Upon receiving this event, the event task starts the DHCP client and begins the DHCP process of getting the IP address. Then, the Wi-Fi driver is ready for sending and receiving data. This moment is good for beginning the application work, provided that the application does not depend on LwIP, namely the IP address. However, if the application is LwIP-based, then you need to wait until the *got ip* event comes in.
+If :cpp:func:`esp_wifi_connect()` returns :c:macro:`ESP_OK` and the station successfully connects to the target AP, the connection event will arise. Upon receiving this event, the event task starts the DHCP client and begins the DHCP process of getting the IP address. Then, the Wi-Fi driver is ready for sending and receiving data. This moment is good for beginning the application work, provided that the application does not depend on LwIP, namely the IP address. However, if the application is LwIP-based, then you need to wait until the *got ip* event comes in.
 
 WIFI_EVENT_STA_DISCONNECTED
 ++++++++++++++++++++++++++++++++++++
@@ -180,7 +225,7 @@ Upon receiving this event, the default behaviors of the event task are:
 
 The most common event handle code for this event in application is to call :cpp:func:`esp_wifi_connect()` to reconnect the Wi-Fi. However, if the event is raised because :cpp:func:`esp_wifi_disconnect()` is called, the application should not call :cpp:func:`esp_wifi_connect()` to reconnect. It is the application's responsibility to distinguish whether the event is caused by :cpp:func:`esp_wifi_disconnect()` or other reasons. Sometimes a better reconnection strategy is required. Refer to `Wi-Fi Reconnect`_ and `Scan When Wi-Fi Is Connecting`_.
 
-Another thing that deserves attention is that the default behavior of LwIP is to abort all TCP socket connections on receiving the disconnect. In mose cases, it is not a problem. However, for some special applications, this may not be what they want. Consider the following scenarios:
+Another thing that deserves attention is that the default behavior of LwIP is to abort all TCP socket connections on receiving the disconnect. In most cases, it is not a problem. However, for some special applications, this may not be what they want. Consider the following scenarios:
 
 - The application creates a TCP connection to maintain the application-level keep-alive data that is sent out every 60 seconds.
 - Due to certain reasons, the Wi-Fi connection is cut off, and the `WIFI_EVENT_STA_DISCONNECTED`_ is raised. According to the current implementation, all TCP connections will be removed and the keep-alive socket will be in a wrong status. However, since the application designer believes that the network layer should **ignore** this error at the Wi-Fi layer, the application does not close the socket.
@@ -242,6 +287,16 @@ WIFI_EVENT_AP_PROBEREQRECVED
 
 This event is disabled by default. The application can enable it via API :cpp:func:`esp_wifi_set_event_mask()`.
 When this event is enabled, it will be raised each time the AP receives a probe request.
+
+WIFI_EVENT_STA_BEACON_TIMEOUT
+++++++++++++++++++++++++++++++++++++
+
+If the station does not receive the beacon of the connected AP within the inactive time, the beacon timeout happens, the `WIFI_EVENT_STA_BEACON_TIMEOUT`_ will arise. The application can set inactive time via API :cpp:func:`esp_wifi_set_inactive_time()`.
+
+WIFI_EVENT_CONNECTIONLESS_MODULE_WAKE_INTERVAL_START
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+The `WIFI_EVENT_CONNECTIONLESS_MODULE_WAKE_INTERVAL_START`_ will arise at the start of connectionless module `Interval`. See :ref:`connectionless module power save <connectionless-module-power-save>`.
 
 {IDF_TARGET_NAME} Wi-Fi Station General Scenario
 ------------------------------------------------
@@ -313,7 +368,7 @@ Below is a "big scenario" which describes some small scenarios in station mode:
 
  - s1.5: The main task calls OS API to create the application task.
 
-Step 1.1 ~ 1.5 is a recommended sequence that initializes a Wi-Fi-/LwIP-based application. However, it is **NOT** a must-follow sequence, which means that you can create the application task in step 1.1 and put all other initializations in the application task. Moreover, you may not want to create the application task in the initialization phase if the application task depends on the sockets. Rather, you can defer the task creation until the IP is obtained.
+Step 1.1 ~ 1.5 is a recommended sequence that initializes a Wi-Fi-/LwIP-based application. However, it is **NOT** a must-follow sequence, which means that you can create the application task in step 1.1 and put all other initialization in the application task. Moreover, you may not want to create the application task in the initialization phase if the application task depends on the sockets. Rather, you can defer the task creation until the IP is obtained.
 
 2. Wi-Fi Configuration Phase
 +++++++++++++++++++++++++++++++
@@ -321,7 +376,7 @@ Once the Wi-Fi driver is initialized, you can start configuring the Wi-Fi driver
 
 Generally, the Wi-Fi driver should be configured before the Wi-Fi connection is set up. But this is **NOT** mandatory, which means that you can configure the Wi-Fi connection anytime, provided that the Wi-Fi driver is initialized successfully. However, if the configuration does not need to change after the Wi-Fi connection is set up, you should configure the Wi-Fi driver at this stage, because the configuration APIs (such as :cpp:func:`esp_wifi_set_protocol()`) will cause the Wi-Fi to reconnect, which may not be desirable.
 
-If the Wi-Fi NVS flash is enabled by menuconfig, all Wi-Fi configuration in this phase, or later phases, will be stored into flash. When the board powers on/reboots, you do not need to configure the Wi-Fi driver from scratch. You only need to call esp_wifi_get_xxx APIs to fetch the configuration stored in flash previously. You can also configure the Wi-Fi driver if the previous configuration is not what you want.
+If the Wi-Fi NVS flash is enabled by menuconfig, all Wi-Fi configuration in this phase, or later phases, will be stored into flash. When the board powers on/reboots, you do not need to configure the Wi-Fi driver from scratch. You only need to call ``esp_wifi_get_xxx`` APIs to fetch the configuration stored in flash previously. You can also configure the Wi-Fi driver if the previous configuration is not what you want.
 
 3. Wi-Fi Start Phase
 ++++++++++++++++++++++++++++++++
@@ -431,15 +486,15 @@ Scan Type
    * - Active Scan
      - Scan by sending a probe request. The default scan is an active scan.
    * - Passive Scan
-     - No probe request is sent out. Just switch to the specific channel and wait for a beacon. Application can enable it via the scan_type field of wifi_scan_config_t.
+     - No probe request is sent out. Just switch to the specific channel and wait for a beacon. Application can enable it via the scan_type field of :cpp:type:`wifi_scan_config_t`.
    * - Foreground Scan
      - This scan is applicable when there is no Wi-Fi connection in station mode. Foreground or background scanning is controlled by the Wi-Fi driver and cannot be configured by the application.
    * - Background Scan
      - This scan is applicable when there is a Wi-Fi connection in station mode or in station/AP mode. Whether it is a foreground scan or background scan depends on the Wi-Fi driver and cannot be configured by the application.
    * - All-Channel Scan
-     - It scans all of the channels. If the channel field of wifi_scan_config_t is set to 0, it is an all-channel scan.
+     - It scans all of the channels. If the channel field of :cpp:type:`wifi_scan_config_t` is set to 0, it is an all-channel scan.
    * - Specific Channel Scan
-     - It scans specific channels only. If the channel field of wifi_scan_config_t set to 1-14, it is a specific-channel scan.
+     - It scans specific channels only. If the channel field of :cpp:type:`wifi_scan_config_t` set to 1-14, it is a specific-channel scan.
 
 The scan modes in above table can be combined arbitrarily, so there are in total 8 different scans:
 
@@ -455,7 +510,7 @@ The scan modes in above table can be combined arbitrarily, so there are in total
 Scan Configuration
 +++++++++++++++++++++++++++++++++++++++
 
-The scan type and other per-scan attributes are configured by :cpp:func:`esp_wifi_scan_start()`. The table below provides a detailed description of wifi_scan_config_t.
+The scan type and other per-scan attributes are configured by :cpp:func:`esp_wifi_scan_start()`. The table below provides a detailed description of :cpp:type:`wifi_scan_config_t`.
 
 .. list-table::
    :header-rows: 1
@@ -485,7 +540,7 @@ The scan type and other per-scan attributes are configured by :cpp:func:`esp_wif
        - min=0, max>0: scan dwells on each channel for ``max`` ms.
        - min>0, max>0: the minimum time the scan dwells on each channel is ``min`` ms. If no AP is found during this time frame, the scan switches to the next channel. Otherwise, the scan dwells on the channel for ``max`` ms.
 
-       If you want to improve the performance of the the scan, you can try to modify these two parameters.
+       If you want to improve the performance of the scan, you can try to modify these two parameters.
 
 
 There are also some global scan attributes which are configured by API :cpp:func:`esp_wifi_set_config()`, refer to `Station Basic Configuration`_
@@ -617,9 +672,9 @@ Scenario:
 This scan is similar to `Scan All APs on All Channels (Foreground)`_. The differences are:
 
  - s1.1: In step 1.2, the target AP will be configured to SSID/BSSID.
- - s2.1 ~ s2.N: Each time the Wi-Fi driver scans an AP, it will check whether it is a target AP or not. If the scan is WIFI_FAST_SCAN scan and the target AP is found, then the scan-done event will arise and scanning will end; otherwise, the scan will continue. Please note that the first scanned channel may not be channel 1, because the Wi-Fi driver optimizes the scanning sequence.
+ - s2.1 ~ s2.N: Each time the Wi-Fi driver scans an AP, it will check whether it is a target AP or not. If the scan is ``WIFI_FAST_SCAN`` scan and the target AP is found, then the scan-done event will arise and scanning will end; otherwise, the scan will continue. Please note that the first scanned channel may not be channel 1, because the Wi-Fi driver optimizes the scanning sequence.
 
-It is a possible situation that there are multiple APs that match the target AP info, e.g., two APs with the SSID of "ap" are scanned. In this case, if the scan is WIFI_FAST_SCAN, then only the first scanned "ap" will be found. If the scan is WIFI_ALL_CHANNEL_SCAN, both "ap" will be found and the station will connect the "ap" according to the configured strategy. Refer to `Station Basic Configuration`_.
+It is a possible situation that there are multiple APs that match the target AP info, e.g., two APs with the SSID of "ap" are scanned. In this case, if the scan is ``WIFI_FAST_SCAN``, then only the first scanned "ap" will be found. If the scan is ``WIFI_ALL_CHANNEL_SCAN``, both "ap" will be found and the station will connect the "ap" according to the configured strategy. Refer to `Station Basic Configuration`_.
 
 You can scan a specific AP, or all of them, in any given channel. These two scenarios are very similar.
 
@@ -710,21 +765,21 @@ Scan Phase
 +++++++++++++++++++++
 
  - s1.1: The Wi-Fi driver begins scanning in "Wi-Fi Connect". Refer to `Scan in Wi-Fi Connect`_ for more details.
- - s1.2: If the scan fails to find the target AP, `WIFI_EVENT_STA_DISCONNECTED`_ will arise and the reason code will be WIFI_REASON_NO_AP_FOUND. Refer to `Wi-Fi Reason Code`_.
+ - s1.2: If the scan fails to find the target AP, `WIFI_EVENT_STA_DISCONNECTED`_ will arise and the reason code will be ``WIFI_REASON_NO_AP_FOUND``. Refer to `Wi-Fi Reason Code`_.
 
 Auth Phase
 +++++++++++++++++++++
 
  - s2.1: The authentication request packet is sent and the auth timer is enabled.
- - s2.2: If the authentication response packet is not received before the authentication timer times out, `WIFI_EVENT_STA_DISCONNECTED`_ will arise and the reason code will be WIFI_REASON_AUTH_EXPIRE. Refer to `Wi-Fi Reason Code`_.
+ - s2.2: If the authentication response packet is not received before the authentication timer times out, `WIFI_EVENT_STA_DISCONNECTED`_ will arise and the reason code will be ``WIFI_REASON_AUTH_EXPIRE``. Refer to `Wi-Fi Reason Code`_.
  - s2.3: The auth-response packet is received and the auth-timer is stopped.
- - s2.4: The AP rejects authentication in the response and `WIFI_EVENT_STA_DISCONNECTED`_ arises, while the reason code is WIFI_REASON_AUTH_FAIL or the reasons specified by the AP. Refer to `Wi-Fi Reason Code`_.
+ - s2.4: The AP rejects authentication in the response and `WIFI_EVENT_STA_DISCONNECTED`_ arises, while the reason code is ``WIFI_REASON_AUTH_FAIL`` or the reasons specified by the AP. Refer to `Wi-Fi Reason Code`_.
 
 Association Phase
 +++++++++++++++++++++
 
  - s3.1: The association request is sent and the association timer is enabled.
- - s3.2: If the association response is not received before the association timer times out, `WIFI_EVENT_STA_DISCONNECTED`_ will arise and the reason code will be WIFI_REASON_ASSOC_EXPIRE. Refer to `Wi-Fi Reason Code`_.
+ - s3.2: If the association response is not received before the association timer times out, `WIFI_EVENT_STA_DISCONNECTED`_ will arise and the reason code will be ``WIFI_REASON_ASSOC_EXPIRE``. Refer to `Wi-Fi Reason Code`_.
  - s3.3: The association response is received and the association timer is stopped.
  - s3.4: The AP rejects the association in the response and `WIFI_EVENT_STA_DISCONNECTED`_ arises, while the reason code is the one specified in the association response. Refer to `Wi-Fi Reason Code`_.
 
@@ -732,10 +787,10 @@ Association Phase
 Four-way Handshake Phase
 ++++++++++++++++++++++++++
 
- - s4.1: The handshake timer is enabled, and the 1/4 EAPOL is not received before the handshake timer expires. `WIFI_EVENT_STA_DISCONNECTED`_ will arise and the reason code will be WIFI_REASON_HANDSHAKE_TIMEOUT. Refer to `Wi-Fi Reason Code`_.
+ - s4.1: The handshake timer is enabled, and the 1/4 EAPOL is not received before the handshake timer expires. `WIFI_EVENT_STA_DISCONNECTED`_ will arise and the reason code will be ``WIFI_REASON_HANDSHAKE_TIMEOUT``. Refer to `Wi-Fi Reason Code`_.
  - s4.2: The 1/4 EAPOL is received.
  - s4.3: The station replies 2/4 EAPOL.
- - s4.4: If the 3/4 EAPOL is not received before the handshake timer expires, `WIFI_EVENT_STA_DISCONNECTED`_ will arise and the reason code will be WIFI_REASON_HANDSHAKE_TIMEOUT. Refer to `Wi-Fi Reason Code`_.
+ - s4.4: If the 3/4 EAPOL is not received before the handshake timer expires, `WIFI_EVENT_STA_DISCONNECTED`_ will arise and the reason code will be ``WIFI_REASON_HANDSHAKE_TIMEOUT``. Refer to `Wi-Fi Reason Code`_.
  - s4.5: The 3/4 EAPOL is received.
  - s4.6: The station replies 4/4 EAPOL.
  - s4.7: The station raises `WIFI_EVENT_STA_CONNECTED`_.
@@ -744,7 +799,7 @@ Four-way Handshake Phase
 Wi-Fi Reason Code
 +++++++++++++++++++++
 
-The table below shows the reason code defined in {IDF_TARGET_NAME}. The first column is the macro name defined in esp_wifi_types.h. The common prefix *WIFI_REASON* is removed, which means that *UNSPECIFIED* actually stands for *WIFI_REASON_UNSPECIFIED* and so on. The second column is the value of the reason. The third column is the standard value to which this reason is mapped in section 8.4.1.7 of IEEE 802.11-2012 (For more information, refer to the standard mentioned above). The last column describes the reason.
+The table below shows the reason-code defined in {IDF_TARGET_NAME}. The first column is the macro name defined in :component_file:`esp_wifi/include/esp_wifi_types.h`. The common prefix ``WIFI_REASON`` is removed, which means that ``UNSPECIFIED`` actually stands for ``WIFI_REASON_UNSPECIFIED`` and so on. The second column is the value of the reason. The third column is the standard value to which this reason is mapped in section 9.4.1.7 of IEEE 802.11-2020. (For more information, refer to the standard mentioned above.) The last column describes the reason.
 
 .. list-table::
    :header-rows: 1
@@ -891,7 +946,7 @@ The table below shows the reason code defined in {IDF_TARGET_NAME}. The first co
    * - 4WAY_HANDSHAKE_TIMEOUT
      - 15
      - 15
-     - Four-way handshake times out. For legacy reasons, in ESP this reason code is replaced with WIFI_REASON_HANDSHAKE_TIMEOUT.
+     - Four-way handshake times out. For legacy reasons, in ESP this reason code is replaced with ``WIFI_REASON_HANDSHAKE_TIMEOUT``.
 
        For the ESP station, this reason is reported when:
 
@@ -973,6 +1028,102 @@ The table below shows the reason code defined in {IDF_TARGET_NAME}. The first co
        For the ESP station, this reason is reported when:
 
        - it is received from the AP.
+   * - TDLS_PEER_UNREACHABLE
+     - 25
+     - 25
+     - TDLS direct-link teardown due to TDLS peer STA unreachable via the TDLS direct link.
+   * - TDLS_UNSPECIFIED
+     - 26
+     - 26
+     - TDLS direct-link teardown for unspecified reason.
+   * - SSP_REQUESTED_DISASSOC
+     - 27
+     - 27
+     - Disassociated because session terminated by SSP request.
+   * - NO_SSP_ROAMING_AGREEMENT
+     - 28
+     - 28
+     - Disassociated because of lack of SSP roaming agreement.
+   * - BAD_CIPHER_OR_AKM
+     - 29
+     - 29
+     - Requested service rejected because of SSP cipher suite or AKM requirement.
+   * - NOT_AUTHORIZED_THIS_LOCATION
+     - 30
+     - 30
+     - Requested service not authorized in this location.
+   * - SERVICE_CHANGE_PRECLUDES_TS
+     - 31
+     - 31
+     - TS deleted because QoS AP lacks sufficient bandwidth for this QoS STA due to a change in BSS service characteristics or operational mode (e.g., an HT BSS change from 40 MHz channel to 20 MHz channel).
+   * - UNSPECIFIED_QOS
+     - 32
+     - 32
+     - Disassociated for unspecified, QoS-related reason.
+   * - NOT_ENOUGH_BANDWIDTH
+     - 33
+     - 33
+     - Disassociated because QoS AP lacks sufficient bandwidth for this QoS STA.
+   * - MISSING_ACKS
+     - 34
+     - 34
+     - Disassociated because excessive number of frames need to be acknowledged, but are not acknowledged due to AP transmissions and/or poor channel conditions.
+   * - EXCEEDED_TXOP
+     - 35
+     - 35
+     - Disassociated because STA is transmitting outside the limits of its TXOPs.
+   * - STA_LEAVING
+     - 36
+     - 36
+     - Requesting STA is leaving the BSS (or resetting).
+   * - END_BA
+     - 37
+     - 37
+     - Requesting STA is no longer using the stream or session.
+   * - UNKNOWN_BA
+     - 38
+     - 38
+     - Requesting STA received frames using a mechanism for which a setup has not been completed.
+   * - TIMEOUT
+     - 39
+     - 39
+     - Requested from peer STA due to timeout
+   * - Reserved
+     - 40 ~ 45
+     - 40 ~ 45
+     -
+   * - PEER_INITIATED
+     - 46
+     - 46
+     - In a Disassociation frame: Disassociated because authorized access limit reached.
+   * - AP_INITIATED
+     - 47
+     - 47
+     - In a Disassociation frame: Disassociated due to external service requirements.
+   * - INVALID_FT_ACTION_FRAME_COUNT
+     - 48
+     - 48
+     - Invalid FT Action frame count.
+   * - INVALID_PMKID
+     - 49
+     - 49
+     - Invalid pairwise master key identifier (PMKID).
+   * - INVALID_MDE
+     - 50
+     - 50
+     - Invalid MDE.
+   * - INVALID_FTE
+     - 51
+     - 51
+     - Invalid FTE
+   * - TRANSMISSION_LINK_ESTABLISHMENT_FAILED
+     - 67
+     - 67
+     - Transmission link establishment in alternative channel failed.
+   * - ALTERATIVE_CHANNEL_OCCUPIED
+     - 68
+     - 68
+     - The alternative channel is occupied.
    * - BEACON_TIMEOUT
      - 200
      - reserved
@@ -999,6 +1150,51 @@ The table below shows the reason code defined in {IDF_TARGET_NAME}. The first co
      - Espressif-specific Wi-Fi reason code: the connection to the AP has failed.
 
 
+Wi-Fi Reason code related to wrong password
+++++++++++++++++++++++++++++++++++++++++++++++
+
+The table below shows the Wi-Fi reason-code may related to wrong password.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 5 10 40
+
+   * - Reason code
+     - Value
+     - Description
+   * - 4WAY_HANDSHAKE_TIMEOUT
+     - 15
+     - Four-way handshake times out. Setting wrong password when STA connecting to an encrpyted AP.
+   * - NO_AP_FOUND
+     - 201
+     - This may related to wrong password in the two scenarios:
+
+       - Setting password when STA connecting to an unencrypted AP.
+       - Doesn't setting password when STA connecting to an encrypted AP.
+   * - HANDSHAKE_TIMEOUT
+     - 204
+     - Four-way handshake fails.
+
+Wi-Fi Reason code related to low RSSI
+++++++++++++++++++++++++++++++++++++++++++++++
+
+The table below shows the Wi-Fi reason-code may related to low RSSI.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 5 10 40
+
+   * - Reason code
+     - Value
+     - Description
+   * - NO_AP_FOUND
+     - 201
+     - The station fails to scan the target AP due to low RSSI
+   * - HANDSHAKE_TIMEOUT
+     - 204
+     - Four-way handshake fails.
+
+
 {IDF_TARGET_NAME} Wi-Fi Station Connecting When Multiple APs Are Found
 ----------------------------------------------------------------------
 
@@ -1019,9 +1215,11 @@ Another thing that need to be considered is that the reconnection may not connec
 Wi-Fi Beacon Timeout
 ---------------------------
 
-The beacon timeout mechanism is used by {IDF_TARGET_NAME} station to detect whether the AP is alive or not. If the station continuously loses 60 beacons of the connected AP, the beacon timeout happens.
+The beacon timeout mechanism is used by {IDF_TARGET_NAME} station to detect whether the AP is alive or not. If the station does not receive the beacon of the connected AP within the inactive time, the beacon timeout happens. The application can set inactive time via API :cpp:func:`esp_wifi_set_inactive_time()`.
 
 After the beacon times out, the station sends 5 probe requests to the AP. If still no probe response or beacon is received from AP, the station disconnects from the AP and raises the event `WIFI_EVENT_STA_DISCONNECTED`_.
+
+It should be considered that the timer used for beacon timeout will be reset during the scanning process. It means that the scan process will affect the triggering of the event `WIFI_EVENT_STA_BEACON_TIMEOUT`_.
 
 {IDF_TARGET_NAME} Wi-Fi Configuration
 -------------------------------------
@@ -1038,20 +1236,20 @@ Call :cpp:func:`esp_wifi_set_mode()` to set the Wi-Fi mode.
 
    * - Mode
      - Description
-   * - WIFI_MODE_NULL
+   * - ``WIFI_MODE_NULL``
      - NULL mode: in this mode, the internal data struct is not allocated to the station and the AP, while both the station and AP interfaces are not initialized for RX/TX Wi-Fi data. Generally, this mode is used for Sniffer, or when you only want to stop both the station and the AP without calling :cpp:func:`esp_wifi_deinit()` to unload the whole Wi-Fi driver.
-   * - WIFI_MODE_STA
+   * - ``WIFI_MODE_STA``
      - Station mode: in this mode, :cpp:func:`esp_wifi_start()` will init the internal station data, while the station’s interface is ready for the RX and TX Wi-Fi data. After :cpp:func:`esp_wifi_connect()`, the station will connect to the target AP.
-   * - WIFI_MODE_AP
+   * - ``WIFI_MODE_AP``
      - AP mode: in this mode, :cpp:func:`esp_wifi_start()` will init the internal AP data, while the AP’s interface is ready for RX/TX Wi-Fi data. Then, the Wi-Fi driver starts broad-casting beacons, and the AP is ready to get connected to other stations.
-   * - WIFI_MODE_APSTA
-     - Station/AP coexistence mode: in this mode, :cpp:func:`esp_wifi_start()` will simultaneously init both the station and the AP. This is done in station mode and AP mode. Please note that the channel of the external AP, which the ESP station is connected to, has higher priority over the ESP AP channel.
+   * - ``WIFI_MODE_APSTA``
+     - Station/AP coexistence mode: in this mode, :cpp:func:`esp_wifi_start()` will simultaneously initialize both the station and the AP. This is done in station mode and AP mode. Please note that the channel of the external AP, which the ESP station is connected to, has higher priority over the ESP AP channel.
 
 
 Station Basic Configuration
 +++++++++++++++++++++++++++++++++++++
 
-API esp_wifi_set_config() can be used to configure the station. The table below describes the fields in detail.
+API :cpp:func:`esp_wifi_set_config()` can be used to configure the station. And the configuration will be stored in NVS. The table below describes the fields in detail.
 
 .. list-table::
    :header-rows: 1
@@ -1064,19 +1262,19 @@ API esp_wifi_set_config() can be used to configure the station. The table below 
    * - password
      - Password of the target AP.
    * - scan_method
-     - For WIFI_FAST_SCAN scan, the scan ends when the first matched AP is found. For WIFI_ALL_CHANNEL_SCAN, the scan finds all matched APs on all channels. The default scan is WIFI_FAST_SCAN.
+     - For ``WIFI_FAST_SCAN`` scan, the scan ends when the first matched AP is found. For ``WIFI_ALL_CHANNEL_SCAN``, the scan finds all matched APs on all channels. The default scan is ``WIFI_FAST_SCAN``.
    * - bssid_set
      - If bssid_set is 0, the station connects to the AP whose SSID is the same as the field “ssid”, while the field “bssid” is ignored. In all other cases, the station connects to the AP whose SSID is the same as the “ssid” field, while its BSSID is the same the “bssid” field .
    * - bssid
      - This is valid only when bssid_set is 1; see field “bssid_set”.
    * - channel
-     - If the channel is 0, the station scans the channel 1 ~ N to search for the target AP; otherwise, the station starts by scanning the channel whose value is the same as that of the “channel” field, and then scans others to find the target AP. If you do not know which channel the target AP is running on, set it to 0.
+     - If the channel is 0, the station scans the channel 1 ~ N to search for the target AP; otherwise, the station starts by scanning the channel whose value is the same as that of the “channel” field, and then scans the channel 1 ~ N but skip the specific channel to find the target AP. For example, if the channel is 3, the scan order will be 3, 1, 2, 4,..., N. If you do not know which channel the target AP is running on, set it to 0.
    * - sort_method
-     - This field is only for WIFI_ALL_CHANNEL_SCAN.
+     - This field is only for ``WIFI_ALL_CHANNEL_SCAN``.
 
-       If the sort_method is WIFI_CONNECT_AP_BY_SIGNAL, all matched APs are sorted by signal, and the AP with the best signal will be connected firstly. For example, the station wants to connect an AP whose SSID is “apxx”. If the scan finds two APs whose SSID equals to “apxx”, and the first AP’s signal is -90 dBm while the second AP’s signal is -30 dBm, the station connects the second AP firstly, and it would not connect the first one unless it fails to connect the second one.
+       If the sort_method is ``WIFI_CONNECT_AP_BY_SIGNAL``, all matched APs are sorted by signal, and the AP with the best signal will be connected firstly. For example, the station wants to connect an AP whose SSID is “apxx”. If the scan finds two APs whose SSID equals to “apxx”, and the first AP’s signal is -90 dBm while the second AP’s signal is -30 dBm, the station connects the second AP firstly, and it would not connect the first one unless it fails to connect the second one.
 
-       If the sort_method is WIFI_CONNECT_AP_BY_SECURITY, all matched APs are sorted by security. For example, the station wants to connect an AP whose SSID is “apxx”. If the scan finds two APs whose SSID is “apxx”, and the security of the first found AP is open while the second one is WPA2, the station connects to the second AP firstly, and it would not connect the first one unless it fails to connect the second one.
+       If the sort_method is ``WIFI_CONNECT_AP_BY_SECURITY``, all matched APs are sorted by security. For example, the station wants to connect an AP whose SSID is “apxx”. If the scan finds two APs whose SSID is “apxx”, and the security of the first found AP is open while the second one is WPA2, the station connects to the second AP firstly, and it would not connect the first one unless it fails to connect the second one.
    * - threshold
      - The threshold is used to filter the found AP. If the RSSI or security mode is less than the configured threshold, the AP will be discarded.
 
@@ -1085,35 +1283,63 @@ API esp_wifi_set_config() can be used to configure the station. The table below 
 
 .. attention::
 
-    WEP/WPA security modes are deprecated in IEEE 802.11-2016 specifications and are recommended not to be used. These modes can be rejected using authmode threshold by setting threshold as WPA2 by threshold.authmode as WIFI_AUTH_WPA2_PSK.
+    WEP/WPA security modes are deprecated in IEEE 802.11-2016 specifications and are recommended not to be used. These modes can be rejected using authmode threshold by setting threshold as WPA2 by threshold.authmode as ``WIFI_AUTH_WPA2_PSK``.
 
 AP Basic Configuration
 +++++++++++++++++++++++++++++++++++++
 
-API esp_wifi_set_config() can be used to configure the AP. The table below describes the fields in detail.
+API :cpp:func:`esp_wifi_set_config()` can be used to configure the AP. And the configuration will be stored in NVS. The table below describes the fields in detail.
 
-.. list-table::
-   :header-rows: 1
-   :widths: 15 55
+.. only:: esp32 or esp32s2 or esp32s3 or esp32c3 or esp32c6
 
-   * - Field
-     - Description
-   * - ssid
-     - SSID of AP; if the ssid[0] is 0xFF and ssid[1] is 0xFF, the AP defaults the SSID to ESP_aabbcc, where “aabbcc” is the last three bytes of the AP MAC.
-   * - password
-     - Password of AP; if the auth mode is WIFI_AUTH_OPEN, this field will be ignored.
-   * - ssid_len
-     - Length of SSID; if ssid_len is 0, check the SSID until there is a termination character. If ssid_len > 32, change it to 32; otherwise, set the SSID length according to ssid_len.
-   * - channel
-     - Channel of AP; if the channel is out of range, the Wi-Fi driver defaults the channel to channel 1. So, please make sure the channel is within the required range. For more details, refer to `Wi-Fi Country Code`_.
-   * - authmode
-     - Auth mode of ESP AP; currently, ESP Wi-Fi does not support AUTH_WEP. If the authmode is an invalid value, AP defaults the value to WIFI_AUTH_OPEN.
-   * - ssid_hidden
-     - If ssid_hidden is 1, AP does not broadcast the SSID; otherwise, it does broadcast the SSID.
-   * - max_connection
-     - Currently, ESP Wi-Fi supports up to 10 Wi-Fi connections. If max_connection > 10, AP defaults the value to 10.
-   * - beacon_interval
-     - Beacon interval; the value is 100 ~ 60000 ms, with default value being 100 ms. If the value is out of range, AP defaults it to 100 ms.
+    .. list-table::
+      :header-rows: 1
+      :widths: 15 55
+
+      * - Field
+        - Description
+      * - ssid
+        - SSID of AP; if the ssid[0] is 0xFF and ssid[1] is 0xFF, the AP defaults the SSID to ``ESP_aabbcc``, where “aabbcc” is the last three bytes of the AP MAC.
+      * - password
+        - Password of AP; if the auth mode is ``WIFI_AUTH_OPEN``, this field will be ignored.
+      * - ssid_len
+        - Length of SSID; if ssid_len is 0, check the SSID until there is a termination character. If ssid_len > 32, change it to 32; otherwise, set the SSID length according to ssid_len.
+      * - channel
+        - Channel of AP; if the channel is out of range, the Wi-Fi driver defaults to channel 1. So, please make sure the channel is within the required range. For more details, refer to `Wi-Fi Country Code`_.
+      * - authmode
+        - Auth mode of ESP AP; currently, ESP AP does not support AUTH_WEP. If the authmode is an invalid value, AP defaults the value to ``WIFI_AUTH_OPEN``.
+      * - ssid_hidden
+        - If ssid_hidden is 1, AP does not broadcast the SSID; otherwise, it does broadcast the SSID.
+      * - max_connection
+        - The max number of stations allowed to connect in, the default value is 10. ESP Wi-Fi supports up to {IDF_TARGET_MAX_CONN_STA_NUM} (``ESP_WIFI_MAX_CONN_NUM``) Wi-Fi connections. Please note that ESP AP and ESP-NOW share the same encryption hardware keys, so the max_connection parameter will be affected by the :ref:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM`. The total number of encryption hardware keys is 17, if :ref:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM` <= {IDF_TARGET_SUB_MAX_NUM_FROM_KEYS}, the max_connection can be set up to {IDF_TARGET_MAX_CONN_STA_NUM}, otherwise the max_connection can be set up to (17 - :ref:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM`).
+      * - beacon_interval
+        - Beacon interval; the value is 100 ~ 60000 ms, with default value being 100 ms. If the value is out of range, AP defaults it to 100 ms.
+
+
+.. only:: esp32c2
+
+    .. list-table::
+      :header-rows: 1
+      :widths: 15 55
+
+      * - Field
+        - Description
+      * - ssid
+        - SSID of AP; if the ssid[0] is 0xFF and ssid[1] is 0xFF, the AP defaults the SSID to ``ESP_aabbcc``, where “aabbcc” is the last three bytes of the AP MAC.
+      * - password
+        - Password of AP; if the auth mode is ``WIFI_AUTH_OPEN``, this field will be ignored.
+      * - ssid_len
+        - Length of SSID; if ssid_len is 0, check the SSID until there is a termination character. If ssid_len > 32, change it to 32; otherwise, set the SSID length according to ssid_len.
+      * - channel
+        - Channel of AP; if the channel is out of range, the Wi-Fi driver defaults to channel 1. So, please make sure the channel is within the required range. For more details, refer to `Wi-Fi Country Code`_.
+      * - authmode
+        - Auth mode of ESP AP; currently, ESP AP does not support AUTH_WEP. If the authmode is an invalid value, AP defaults the value to ``WIFI_AUTH_OPEN``.
+      * - ssid_hidden
+        - If ssid_hidden is 1, AP does not broadcast the SSID; otherwise, it does broadcast the SSID.
+      * - max_connection
+        - The max number of stations allowed to connect in, the default value is 2. ESP Wi-Fi supports up to {IDF_TARGET_MAX_CONN_STA_NUM} (``ESP_WIFI_MAX_CONN_NUM``) Wi-Fi connections. Please note that ESP AP and ESP-NOW share the same encryption hardware keys, so the max_connection parameter will be affected by the :ref:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM`. The total number of encryption hardware keys is {IDF_TARGET_MAX_CONN_STA_NUM}, the max_connection can be set up to ({IDF_TARGET_MAX_CONN_STA_NUM} - :ref:`CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM`).
+      * - beacon_interval
+        - Beacon interval; the value is 100 ~ 60000 ms, with default value being 100 ms. If the value is out of range, AP defaults it to 100 ms.
 
 
 Wi-Fi Protocol Mode
@@ -1121,98 +1347,177 @@ Wi-Fi Protocol Mode
 
 Currently, the ESP-IDF supports the following protocol modes:
 
-.. list-table::
-   :header-rows: 1
-   :widths: 15 55
+.. only:: esp32 or esp32s2 or esp32c3 or esp32s3
 
-   * - Protocol Mode
-     - Description
-   * - 802.11b
-     - Call esp_wifi_set_protocol(ifx, WIFI_PROTOCOL_11B) to set the station/AP to 802.11b-only mode.
-   * - 802.11bg
-     - Call esp_wifi_set_protocol(ifx, WIFI_PROTOCOL_11B|WIFI_PROTOCOL_11G) to set the station/AP to 802.11bg mode.
-   * - 802.11g
-     - Call esp_wifi_set_protocol(ifx, WIFI_PROTOCOL_11B|WIFI_PROTOCOL_11G) and esp_wifi_config_11b_rate(ifx, true) to set the station/AP to 802.11g mode.
-   * - 802.11bgn
-     - Call esp_wifi_set_protocol(ifx, WIFI_PROTOCOL_11B| WIFI_PROTOCOL_11G|WIFI_PROTOCOL_11N) to set the station/ AP to BGN mode.
-   * - 802.11gn
-     - Call esp_wifi_set_protocol(ifx, WIFI_PROTOCOL_11B|WIFI_PROTOCOL_11G|WIFI_PROTOCOL_11N) and esp_wifi_config_11b_rate(ifx, true) to set the station/AP to 802.11gn mode.
-   * - 802.11 BGNLR
-     - Call esp_wifi_set_protocol(ifx, WIFI_PROTOCOL_11B| WIFI_PROTOCOL_11G|WIFI_PROTOCOL_11N|WIFI_PROTOCOL_LR) to set the station/AP to BGN and the LR mode.
-   * - 802.11 LR
-     - Call esp_wifi_set_protocol(ifx, WIFI_PROTOCOL_LR) to set the station/AP only to the LR mode.
+    .. list-table::
+      :header-rows: 1
+      :widths: 15 55
 
-       **This mode is an Espressif-patented mode which can achieve a one-kilometer line of sight range. Please make sure both the station and the AP are connected to an ESP device.**
+      * - Protocol Mode
+        - Description
+      * - 802.11b
+        - Call ``esp_wifi_set_protocol(ifx, WIFI_PROTOCOL_11B)`` to set the station/AP to 802.11b-only mode.
+      * - 802.11bg
+        - Call ``esp_wifi_set_protocol(ifx, WIFI_PROTOCOL_11B|WIFI_PROTOCOL_11G)`` to set the station/AP to 802.11bg mode.
+      * - 802.11g
+        - Call ``esp_wifi_set_protocol(ifx, WIFI_PROTOCOL_11B|WIFI_PROTOCOL_11G)`` and esp_wifi_config_11b_rate(ifx, true) to set the station/AP to 802.11g mode.
+      * - 802.11bgn
+        - Call ``esp_wifi_set_protocol(ifx, WIFI_PROTOCOL_11B| WIFI_PROTOCOL_11G|WIFI_PROTOCOL_11N)`` to set the station/ AP to BGN mode.
+      * - 802.11gn
+        - Call ``esp_wifi_set_protocol(ifx, WIFI_PROTOCOL_11B|WIFI_PROTOCOL_11G|WIFI_PROTOCOL_11N)`` and esp_wifi_config_11b_rate(ifx, true) to set the station/AP to 802.11gn mode.
+      * - 802.11 BGNLR
+        - Call ``esp_wifi_set_protocol(ifx, WIFI_PROTOCOL_11B| WIFI_PROTOCOL_11G|WIFI_PROTOCOL_11N|WIFI_PROTOCOL_LR)`` to set the station/AP to BGN and the LR mode.
+      * - 802.11 LR
+        - Call ``esp_wifi_set_protocol(ifx, WIFI_PROTOCOL_LR)`` to set the station/AP only to the LR mode.
+
+          **This mode is an Espressif-patented mode which can achieve a one-kilometer line of sight range. Please make sure both the station and the AP are connected to an ESP device.**
+
+.. only:: esp32c6
+
+    .. list-table::
+      :header-rows: 1
+      :widths: 15 55
+
+      * - Protocol Mode
+        - Description
+      * - 802.11b
+        - Call ``esp_wifi_set_protocol(ifx, WIFI_PROTOCOL_11B)`` to set the station/AP to 802.11b-only mode.
+      * - 802.11bg
+        - Call ``esp_wifi_set_protocol(ifx, WIFI_PROTOCOL_11B|WIFI_PROTOCOL_11G)`` to set the station/AP to 802.11bg mode.
+      * - 802.11g
+        - Call ``esp_wifi_set_protocol(ifx, WIFI_PROTOCOL_11B|WIFI_PROTOCOL_11G)`` and ``esp_wifi_config_11b_rate(ifx, true)`` to set the station/AP to 802.11g mode.
+      * - 802.11bgn
+        - Call ``esp_wifi_set_protocol(ifx, WIFI_PROTOCOL_11B| WIFI_PROTOCOL_11G|WIFI_PROTOCOL_11N)`` to set the station/ AP to BGN mode.
+      * - 802.11gn
+        - Call ``esp_wifi_set_protocol(ifx, WIFI_PROTOCOL_11B|WIFI_PROTOCOL_11G|WIFI_PROTOCOL_11N)`` and esp_wifi_config_11b_rate(ifx, true) to set the station/AP to 802.11gn mode.
+      * - 802.11 BGNLR
+        - Call ``esp_wifi_set_protocol(ifx, WIFI_PROTOCOL_11B| WIFI_PROTOCOL_11G|WIFI_PROTOCOL_11N|WIFI_PROTOCOL_LR)`` to set the station/AP to BGN and the LR mode.
+      * - 802.11bgnax
+        - Call ``esp_wifi_set_protocol(ifx, WIFI_PROTOCOL_11B| WIFI_PROTOCOL_11G|WIFI_PROTOCOL_11N|WIFI_PROTOCOL_11AX)`` to set the station/ AP to 802.11bgnax mode.
+      * - 802.11 BGNAXLR
+        - Call ``esp_wifi_set_protocol(ifx, WIFI_PROTOCOL_11B| WIFI_PROTOCOL_11G|WIFI_PROTOCOL_11N|WIFI_PROTOCOL_11AX|WIFI_PROTOCOL_LR)`` to set the station/ AP to 802.11bgnax and LR mode.
+      * - 802.11 LR
+        - Call ``esp_wifi_set_protocol(ifx, WIFI_PROTOCOL_LR)`` to set the station/AP only to the LR mode.
+
+          **This mode is an Espressif-patented mode which can achieve a one-kilometer line of sight range. Please make sure both the station and the AP are connected to an ESP device.**
+
+.. only:: esp32c2
+
+    .. list-table::
+      :header-rows: 1
+      :widths: 15 55
+
+      * - Protocol Mode
+        - Description
+      * - 802.11b
+        - Call ``esp_wifi_set_protocol(ifx, WIFI_PROTOCOL_11B)`` to set the station/AP to 802.11b-only mode.
+      * - 802.11bg
+        - Call ``esp_wifi_set_protocol(ifx, WIFI_PROTOCOL_11B|WIFI_PROTOCOL_11G)`` to set the station/AP to 802.11bg mode.
+      * - 802.11g
+        - Call ``esp_wifi_set_protocol(ifx, WIFI_PROTOCOL_11B|WIFI_PROTOCOL_11G) and esp_wifi_config_11b_rate(ifx, true)`` to set the station/AP to 802.11g mode.
+      * - 802.11bgn
+        - Call ``esp_wifi_set_protocol(ifx, WIFI_PROTOCOL_11B| WIFI_PROTOCOL_11G|WIFI_PROTOCOL_11N)`` to set the station/ AP to BGN mode.
+      * - 802.11gn
+        - Call ``esp_wifi_set_protocol(ifx, WIFI_PROTOCOL_11B|WIFI_PROTOCOL_11G|WIFI_PROTOCOL_11N)`` and ``esp_wifi_config_11b_rate(ifx, true)`` to set the station/AP to 802.11gn mode.
 
 
-Long Range (LR)
-+++++++++++++++++++++++++
 
-Long Range (LR) mode is an Espressif-patented Wi-Fi mode which can achieve a one-kilometer line of sight range. Compared to the traditional 802.11b mode, it has better reception sensitivity, stronger anti-interference ability, and longer transmission distance.
+.. only:: esp32 or esp32s2 or esp32c3 or esp32s3 or esp32c6
 
-LR Compatibility
-*************************
+    Long Range (LR)
+    +++++++++++++++++++++++++
 
-Since LR is Espressif-unique Wi-Fi mode, only {IDF_TARGET_NAME} devices can transmit and receive the LR data. In other words, the {IDF_TARGET_NAME} device should NOT transmit the data in LR data rate if the connected device does not support LR. The application can achieve this by configuring suitable Wi-Fi mode. If the negotiated mode supports LR, the {IDF_TARGET_NAME} may transmit data in LR rate. Otherwise, {IDF_TARGET_NAME} will transmit all data in traditional Wi-Fi data rate.
+    Long Range (LR) mode is an Espressif-patented Wi-Fi mode which can achieve a one-kilometer line of sight range. Compared to the traditional 802.11b mode, it has better reception sensitivity, stronger anti-interference ability, and longer transmission distance.
 
-The following table depicts the Wi-Fi mode negotiation:
+    LR Compatibility
+    *************************
 
-+-------+-----+----+---+-------+------+-----+----+
-|AP\STA | BGN | BG | B | BGNLR | BGLR | BLR | LR |
-+=======+=====+====+===+=======+======+=====+====+
-| BGN   | BGN | BG | B | BGN   | BG   | B   | -  |
-+-------+-----+----+---+-------+------+-----+----+
-| BG    | BG  | BG | B | BG    | BG   | B   | -  |
-+-------+-----+----+---+-------+------+-----+----+
-| B     | B   | B  | B | B     | B    | B   | -  |
-+-------+-----+----+---+-------+------+-----+----+
-| BGNLR | -   | -  | - | BGNLR | BGLR | BLR | LR |
-+-------+-----+----+---+-------+------+-----+----+
-| BGLR  | -   | -  | - | BGLR  | BGLR | BLR | LR |
-+-------+-----+----+---+-------+------+-----+----+
-| BLR   | -   | -  | - | BLR   | BLR  | BLR | LR |
-+-------+-----+----+---+-------+------+-----+----+
-| LR    | -   | -  | - | LR    | LR   | LR  | LR |
-+-------+-----+----+---+-------+------+-----+----+
+    Since LR is Espressif-unique Wi-Fi mode, only ESP32 chip series devices (except ESP32-C2) can transmit and receive the LR data. In other words, the ESP32 chip series devices (except ESP32-C2) should NOT transmit the data in LR data rate if the connected device does not support LR. The application can achieve this by configuring a suitable Wi-Fi mode. If the negotiated mode supports LR, the ESP32 chip series devices (except ESP32-C2) may transmit data in LR rate. Otherwise, ESP32 chip series devices (except ESP32-C2) will transmit all data in the traditional Wi-Fi data rate.
 
-In the above table, the row is the Wi-Fi mode of AP and the column is the Wi-Fi mode of station. The "-" indicates Wi-Fi mode of the AP and station are not compatible.
+    The following table depicts the Wi-Fi mode negotiation:
 
-According to the table, the following conclusions can be drawn:
+    .. only:: esp32 or esp32s2 or esp32c3 or esp32s3
 
- - For LR-enabled AP of {IDF_TARGET_NAME}, it is incompatible with traditional 802.11 mode, because the beacon is sent in LR mode.
- - For LR-enabled station of {IDF_TARGET_NAME} whose mode is NOT LR-only mode, it is compatible with traditional 802.11 mode.
- - If both station and AP are {IDF_TARGET_NAME} devices and both of them have enabled LR mode, the negotiated mode supports LR.
+        +-------+-----+----+---+-------+------+-----+----+
+        |AP\STA | BGN | BG | B | BGNLR | BGLR | BLR | LR |
+        +=======+=====+====+===+=======+======+=====+====+
+        | BGN   | BGN | BG | B | BGN   | BG   | B   | -  |
+        +-------+-----+----+---+-------+------+-----+----+
+        | BG    | BG  | BG | B | BG    | BG   | B   | -  |
+        +-------+-----+----+---+-------+------+-----+----+
+        | B     | B   | B  | B | B     | B    | B   | -  |
+        +-------+-----+----+---+-------+------+-----+----+
+        | BGNLR | -   | -  | - | BGNLR | BGLR | BLR | LR |
+        +-------+-----+----+---+-------+------+-----+----+
+        | BGLR  | -   | -  | - | BGLR  | BGLR | BLR | LR |
+        +-------+-----+----+---+-------+------+-----+----+
+        | BLR   | -   | -  | - | BLR   | BLR  | BLR | LR |
+        +-------+-----+----+---+-------+------+-----+----+
+        | LR    | -   | -  | - | LR    | LR   | LR  | LR |
+        +-------+-----+----+---+-------+------+-----+----+
 
-If the negotiated Wi-Fi mode supports both traditional 802.11 mode and LR mode, it is the Wi-Fi driver's responsibility to automatically select the best data rate in different Wi-Fi modes and the application can ignore it.
+    .. only:: esp32c6
 
-LR Impacts to Traditional Wi-Fi Device
-***************************************
+        +---------+-------+-----+----+---+---------+-------+------+-----+----+
+        | AP\STA  | BGNAX | BGN | BG | B | BGNAXLR | BGNLR | BGLR | BLR | LR |
+        +=========+=======+=====+====+===+=========+=======+======+=====+====+
+        | BGNAX   | BGAX  | BGN | BG | B | BGAX    | BGN   | BG   | B   | -  |
+        +---------+-------+-----+----+---+---------+-------+------+-----+----+
+        | BGN     | BGN   | BGN | BG | B | BGN     | BGN   | BG   | B   | -  |
+        +---------+-------+-----+----+---+---------+-------+------+-----+----+
+        | BG      | BG    | BG  | BG | B | BG      | BG    | BG   | B   | -  |
+        +---------+-------+-----+----+---+---------+-------+------+-----+----+
+        | B       | B     | B   | B  | B | B       | B     | B    | B   | -  |
+        +---------+-------+-----+----+---+---------+-------+------+-----+----+
+        | BGNAXLR | -     | -   | -  | - | BGAXLR  | BGNLR | BGLR | BLR | LR |
+        +---------+-------+-----+----+---+---------+-------+------+-----+----+
+        | BGNLR   | -     | -   | -  | - | BGNLR   | BGNLR | BGLR | BLR | LR |
+        +---------+-------+-----+----+---+---------+-------+------+-----+----+
+        | BGLR    | -     | -   | -  | - | BGLR    | BGLR  | BGLR | BLR | LR |
+        +---------+-------+-----+----+---+---------+-------+------+-----+----+
+        | BLR     | -     | -   | -  | - | BLR     | BLR   | BLR  | BLR | LR |
+        +---------+-------+-----+----+---+---------+-------+------+-----+----+
+        | LR      | -     | -   | -  | - | LR      | LR    | LR   | LR  | LR |
+        +---------+-------+-----+----+---+---------+-------+------+-----+----+
 
-The data transmission in LR rate has no impacts on the traditional Wi-Fi device because:
+    In the above table, the row is the Wi-Fi mode of AP and the column is the Wi-Fi mode of station. The "-" indicates Wi-Fi mode of the AP and station are not compatible.
 
- - The CCA and backoff process in LR mode are consistent with 802.11 specification.
- - The traditional Wi-Fi device can detect the LR signal via CCA and do backoff.
+    According to the table, the following conclusions can be drawn:
 
-In other words, the transmission impact in LR mode is similar to that in 802.11b mode.
+    - For LR-enabled AP of {IDF_TARGET_NAME}, it is incompatible with traditional 802.11 mode, because the beacon is sent in LR mode.
+    - For LR-enabled station of {IDF_TARGET_NAME} whose mode is NOT LR-only mode, it is compatible with traditional 802.11 mode.
+    - If both station and AP are ESP32 series chips devices (except ESP32-C2) and both of them have enabled LR mode, the negotiated mode supports LR.
 
-LR Transmission Distance
-*************************
+    If the negotiated Wi-Fi mode supports both traditional 802.11 mode and LR mode, it is the Wi-Fi driver's responsibility to automatically select the best data rate in different Wi-Fi modes and the application can ignore it.
 
-The reception sensitivity gain of LR is about 4 dB larger than that of the traditional 802.11b mode. Theoretically, the transmission distance is about 2 to 2.5 times the distance of 11B.
+    LR Impacts to Traditional Wi-Fi Device
+    ***************************************
 
-LR Throughput
-*************************
+    The data transmission in LR rate has no impacts on the traditional Wi-Fi device because:
 
-The LR rate has very limited throughput, because the raw PHY data rate LR is 1/2 Mbps and 1/4 Mbps.
+    - The CCA and backoff process in LR mode are consistent with 802.11 specification.
+    - The traditional Wi-Fi device can detect the LR signal via CCA and do backoff.
 
-When to Use LR
-*************************
+    In other words, the transmission impact in LR mode is similar to that in 802.11b mode.
 
-The general conditions for using LR are:
+    LR Transmission Distance
+    *************************
 
- - Both the AP and station are Espressif devices.
- - Long distance Wi-Fi connection and data transmission is required.
- - Data throughput requirements are very small, such as remote device control.
+    The reception sensitivity gain of LR is about 4 dB larger than that of the traditional 802.11b mode. Theoretically, the transmission distance is about 2 to 2.5 times the distance of 11B.
+
+    LR Throughput
+    *************************
+
+    The LR rate has very limited throughput, because the raw PHY data rate LR is 1/2 Mbps and 1/4 Mbps.
+
+    When to Use LR
+    *************************
+
+    The general conditions for using LR are:
+
+    - Both the AP and station are Espressif devices.
+    - Long distance Wi-Fi connection and data transmission is required.
+    - Data throughput requirements are very small, such as remote device control.
 
 Wi-Fi Country Code
 +++++++++++++++++++++++++
@@ -1226,7 +1531,7 @@ Call :cpp:func:`esp_wifi_set_country()` to set the country info. The table below
    * - Field
      - Description
    * - cc[3]
-     - Country code string. This attribute identifies the country or noncountry entity in which the station/AP is operating. If it is a country, the first two octets of this string is the two-character country info as described in the document ISO/IEC3166-1. The third octect is one of the following:
+     - Country code string. This attribute identifies the country or noncountry entity in which the station/AP is operating. If it is a country, the first two octets of this string is the two-character country info as described in the document ISO/IEC3166-1. The third octet is one of the following:
 
        - an ASCII space character, which means the regulations under which the station/AP is operating encompass all environments for the current frequency band in the country.
        - an ASCII ‘O’ character, which means the regulations under which the station/AP is operating are for an outdoor environment only.
@@ -1285,13 +1590,7 @@ The following table depicts which country info is used in different Wi-Fi modes 
 
        For scan:
 
-       - If schan+nchan-1 >11 :
-
-         Use active scan from schan to 11 and use passive scan from 12 to 14.
-
-       - If schan+nchan-1 <= 11 :
-
-         Use active scan from schan to schan+nchan-1 and use passive scan from schan+nchan to 14.
+         Use active scan from 1 to 11 and use passive scan from 12 to 14.
 
        Always keep in mind that if an AP with hidden SSID and station is set to a passive scan channel, the passive scan will not find it. In other words, if the application hopes to find the AP with hidden SSID in every channel, the policy of country info should be configured to WIFI_COUNTRY_POLICY_MANUAL.
 
@@ -1301,24 +1600,25 @@ The following table depicts which country info is used in different Wi-Fi modes 
 
        For scan:
 
-       - If schan+nchan-1 >11 :
-
-         Use active scan from schan to 11 and use passive scan from 12 to schan+nchan-1.
-
-       - If schan+nchan-1 <= 11 :
-
          Use active scan from schan to schan+nchan-1.
+
    * - AP
      - WIFI_COUNTRY_POLICY_AUTO
      - Always use the configured country info.
+
    * - AP
      - WIFI_COUNTRY_POLICY_MANUAL
      - Always use the configured country info.
+
    * - Station/AP-coexistence
      - WIFI_COUNTRY_POLICY_AUTO
-     - If the station does not connect to any external AP, the AP uses the configured country info. If the station connects to an external AP, the AP has the same country info as the station.
+     - Station: Same as station mode with policy WIFI_COUNTRY_POLICY_AUTO.
+       AP: If the station does not connect to any external AP, the AP uses the configured country info. If the station connects to an external AP, the AP has the same country info as the station.
 
-       Same as station mode with policy WIFI_COUNTRY_POLICY_AUTO.
+   * - Station/AP-coexistence
+     - WIFI_COUNTRY_POLICY_MANUAL
+     - Station: Same as station mode with policy WIFI_COUNTRY_POLICY_MANUAL.
+       AP: Same as AP mode with policy WIFI_COUNTRY_POLICY_MANUAL.
 
 
 Home Channel
@@ -1356,10 +1656,23 @@ For establishing a secure connection, AP and station negotiate and agree on the 
 
 Detailed information on creating certificates and how to run wpa2_enterprise example on {IDF_TARGET_NAME} can be found in :example:`wifi/wifi_enterprise`.
 
+.. only:: SOC_WIFI_NAN_SUPPORT
+
+    Wi-Fi Aware\ :sup:`TM` (NAN)
+    ----------------------------
+
+    Wi-Fi Aware\ :sup:`TM` or NAN (Neighbor Awareness Networking) is a protocol that allows Wi-Fi devices to discover services in their proximity. NAN uses direct device-to-device communication and does not require any Internet or AP connection.
+
+    Multiple NAN devices in the vicinity will form a NAN cluster which allows them to communicate with each other. NAN devices in a cluster synchronise their clocks and listen to each other periodically on Channel 6. Devices can advertise (Publish) or seek for (Subscribe) services within their NAN Cluster using Service Discovery protocols. Matching of services is done by service name and optionally matching filters. Once a Subscriber gets a match with a Publisher, it can either send a message (Follow-up) or establish a datapath (NDP) with the Publisher. After NDP is setup both devices will obtain an IPv6 address and can use it for communication.
+
+    Please note that NAN Datapath security is not supported i.e. the data packets will go out unencrypted. NAN uses a separate interface for Discovery and Datapath, which is other than that used for STA and AP. NAN operates in standalone mode, which means co-existence with STA or AP interface is not supported.
+
+    Refer to ESP-IDF examples :idf_file:`examples/wifi/wifi_aware/nan_publisher/README.md` and :idf_file:`examples/wifi/wifi_aware/nan_subscriber/README.md` to setup a NAN Publisher and Subscriber.
+
 Wireless Network Management
 ----------------------------
 
-Wireless Network Management allows client devices to exchange information about the network topology, including information related to RF environment. This makes each client network-aware, facilitating overall improvement in the performace of the wireless network. It is part of 802.11v specification. It also enables the client to support Network assisted Roaming.
+Wireless Network Management allows client devices to exchange information about the network topology, including information related to RF environment. This makes each client network-aware, facilitating overall improvement in the performance of the wireless network. It is part of 802.11v specification. It also enables the client to support Network assisted Roaming.
 - Network assisted Roaming: Enables WLAN to send messages to associated clients, resulting clients to associate with APs with better link metrics. This is useful for both load balancing and in directing poorly connected clients.
 
 Current implementation of 802.11v includes support for BSS transition management frames.
@@ -1373,7 +1686,7 @@ Current implementation of 802.11k includes support for beacon measurement report
 
 Refer ESP-IDF example :idf_file:`examples/wifi/roaming/README.md` to set up and use these APIs. Example code only demonstrates how these APIs can be used, and the application should define its own algorithm and cases as required.
 
-.. only:: esp32s2 or esp32c3
+.. only:: SOC_WIFI_FTM_SUPPORT
 
     Wi-Fi Location
     -------------------------------
@@ -1392,7 +1705,7 @@ Refer ESP-IDF example :idf_file:`examples/wifi/roaming/README.md` to set up and 
     - {IDF_TARGET_NAME} as FTM Initiator in station mode.
     - {IDF_TARGET_NAME} as FTM Responder in AP mode.
 
-    Distance measurement using RTT is not accurate, and factors such as RF interference, multi-path travel, antenna orientation, and lack of calibration increase these inaccuracies. For better results, it is suggested to perform FTM between two {IDF_TARGET_NAME} devices as station and AP.
+    Distance measurement using RTT is not accurate, and factors such as RF interference, multi-path travel, antenna orientation, and lack of calibration increase these inaccuracies. For better results, it is suggested to perform FTM between two ESP32 chip series devices (except ESP32-C2) as station and AP.
 
     Refer to ESP-IDF example :idf_file:`examples/wifi/ftm/README.md` for steps on how to set up and perform FTM.
 
@@ -1410,7 +1723,11 @@ In maximum power-saving mode, station wakes up in every listen interval to recei
 
 Call ``esp_wifi_set_ps(WIFI_PS_MIN_MODEM)`` to enable Modem-sleep minimum power-saving mode or ``esp_wifi_set_ps(WIFI_PS_MAX_MODEM)`` to enable Modem-sleep maximum power-saving mode after calling :cpp:func:`esp_wifi_init()`. When station connects to AP, Modem-sleep will start. When station disconnects from AP, Modem-sleep will stop.
 
-Call ``esp_wifi_set_ps(WIFI_PS_NONE)`` to disable Modem-sleep entirely. This has much higher power consumption, but provides minimum latency for receiving Wi-Fi data in real time. When Modem-sleep is enabled, received Wi-Fi data can be delayed for as long as the DTIM period (minimum power-saving mode) or the listen interval (maximum power-saving mode). Disabling Modem-sleep entirely is not possible for Wi-Fi and Bluetooth coexist mode.
+Call ``esp_wifi_set_ps(WIFI_PS_NONE)`` to disable Modem-sleep mode entirely. Disabling it increases power consumption, but minimizes the delay in receiving Wi-Fi data in real time. When Modem-sleep mode is enabled, the delay in receiving Wi-Fi data may be the same as the DTIM cycle (minimum power-saving mode) or the listening interval (maximum power-saving mode).
+
+.. only:: SOC_SUPPORT_COEXISTENCE
+
+    Note that in coexist mode, Wi-Fi will remain active only during Wi-Fi time slice, and sleep during non Wi-Fi time slice even if ``esp_wifi_set_ps(WIFI_PS_NONE)`` is called. Please refer to :ref:`coexist policy <coexist_policy>`.
 
 The default Modem-sleep mode is WIFI_PS_MIN_MODEM.
 
@@ -1420,6 +1737,81 @@ AP Sleep
 Currently, {IDF_TARGET_NAME} AP does not support all of the power-saving feature defined in Wi-Fi specification. To be specific, the AP only caches unicast data for the stations connect to this AP, but does not cache the multicast data for the stations. If stations connected to the {IDF_TARGET_NAME} AP are power-saving enabled, they may experience multicast packet loss.
 
 In the future, all power-saving features will be supported on {IDF_TARGET_NAME} AP.
+
+Disconnected State Sleep
++++++++++++++++++++++++++++++++
+
+Disconnected state is the duration without Wi-Fi connection between :cpp:func:`esp_wifi_start` to :cpp:func:`esp_wifi_stop`.
+
+Currently, {IDF_TARGET_NAME} Wi-Fi supports sleep mode in disconnected state if running at station mode. This feature could be configured by Menuconfig choice :ref:`CONFIG_ESP_WIFI_STA_DISCONNECTED_PM_ENABLE`.
+
+If :ref:`CONFIG_ESP_WIFI_STA_DISCONNECTED_PM_ENABLE` is enabled, RF, PHY and BB would be turned off in disconnected state when IDLE. The current would be same with current at modem-sleep.
+
+The choice :ref:`CONFIG_ESP_WIFI_STA_DISCONNECTED_PM_ENABLE` would be selected by default, while it would be selected forcefully in Menuconfig at coexistence mode.
+
+.. _connectionless-module-power-save:
+
+Connectionless Modules Power-saving
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+Connectionless modules are those Wi-Fi modules not relying on Wi-Fi connection, e.g ESP-NOW, DPP, FTM. These modules start from :cpp:func:`esp_wifi_start`, working until :cpp:func:`esp_wifi_stop`.
+
+Currently, if ESP-NOW works at station mode, its supported to sleep at both connected state and disconnected state.
+
+Connectionless Modules TX
+*******************************
+
+For each connectionless module, its supported to TX at any sleeping time without any extra configuration.
+
+Meanwhile, :cpp:func:`esp_wifi_80211_tx` is supported at sleep as well.
+
+Connectionless Modules RX
+*******************************
+
+For each connectionless module, two parameters shall be configured to RX at sleep, which are `Window` and `Interval`.
+
+At the start of `Interval` time, RF, PHY, BB would be turned on and kept for `Window` time. Connectionless Module could RX in the duration.
+
+**Interval**
+
+ - There is only one `Interval`. Its configured by :cpp:func:`esp_wifi_set_connectionless_interval`. The unit is milliseconds.
+
+ - The default value of `Interval` is `ESP_WIFI_CONNECTIONLESS_INTERVAL_DEFAULT_MODE`.
+
+ - Event `WIFI_EVENT_CONNECTIONLESS_MODULE_WAKE_INTERVAL_START`_ would be posted at the start of `Interval`. Since `Window` also starts at that moment, its recommended to TX in that event.
+
+ - At connected state, the start of `Interval` would be aligned with TBTT.
+
+**Window**
+
+ - Each connectionless module has its own `Window` after start. Connectionless Modules Power-saving would work with the max one among them.
+
+ - `Window` is configured by :cpp:func:`module_name_set_wake_window`. The unit is milliseconds.
+
+ - The default value of `Window` is the maximum.
+
+.. table:: RF, PHY and BB usage under different circumstances
+
+    +----------------------+-----------------------------------------------------+---------------------------------------------------------------------------+
+    |                      | Interval                                                                                                                        |
+    +                      +-----------------------------------------------------+---------------------------------------------------------------------------+
+    |                      | ``ESP_WIFI_CONNECTIONLESS_INTERVAL_DEFAULT_MODE``   | 1 - maximum                                                               |
+    +--------+-------------+-----------------------------------------------------+---------------------------------------------------------------------------+
+    | Window | 0           | not used                                                                                                                        |
+    +        +-------------+-----------------------------------------------------+---------------------------------------------------------------------------+
+    |        | 1 - maximum | default mode                                        | used periodically (Window < Interval) / used all time (Window ≥ Interval) |
+    +--------+-------------+-----------------------------------------------------+---------------------------------------------------------------------------+
+
+Default mode
+*******************************
+
+If `Interval` is ``ESP_WIFI_CONNECTIONLESS_INTERVAL_DEFAULT_MODE`` with non-zero `Window`, Connectionless Modules Power-saving would work in default mode.
+
+In default mode, RF, PHY, BB would be kept on if no coexistence with non-Wi-Fi protocol.
+
+With coexistence, RF, PHY, BB resources are allocated by coexistence module to Wi-Fi connectionless module and non-Wi-Fi module， using time-division method. In default mode, Wi-Fi connectionless module is allowed to use RF, BB, PHY periodically under a stable performance.
+
+Its recommended to configure Connectionless Modules Power-saving to default mode if there is Wi-Fi connectionless module coexists with non-Wi-Fi module.
 
 {IDF_TARGET_NAME} Wi-Fi Throughput
 -----------------------------------
@@ -1558,6 +1950,50 @@ The table below shows the best throughput results gained in Espressif's lab and 
 
     When the throughput is tested by iperf example, the sdkconfig is :idf_file:`examples/wifi/iperf/sdkconfig.defaults.esp32c3`.
 
+.. only:: esp32c6
+
+     .. list-table::
+        :header-rows: 1
+        :widths: 10 10 10 15 20
+
+        * - Type/Throughput
+          - Air In Lab
+          - Shield-box
+          - Test Tool
+          - IDF Version (commit ID)
+        * - Raw 802.11 Packet RX
+          - N/A
+          - **130 MBit/s**
+          - Internal tool
+          - NA
+        * - Raw 802.11 Packet TX
+          - N/A
+          - **130 MBit/s**
+          - Internal tool
+          - NA
+        * - UDP RX
+          - 30 MBit/s
+          - 45 MBit/s
+          - iperf example
+          - 420ebd20
+        * - UDP TX
+          - 30 MBit/s
+          - 40 MBit/s
+          - iperf example
+          - 420ebd20
+        * - TCP RX
+          - 20 MBit/s
+          - 30 MBit/s
+          - iperf example
+          - 420ebd20
+        * - TCP TX
+          - 20 MBit/s
+          - 31 MBit/s
+          - iperf example
+          - 420ebd20
+
+    When the throughput is tested by iperf example, the sdkconfig is :idf_file:`examples/wifi/iperf/sdkconfig.defaults.esp32c6`.
+
 .. only:: esp32s3
 
      .. list-table::
@@ -1616,7 +2052,7 @@ Preconditions of Using :cpp:func:`esp_wifi_80211_tx()`
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
  - The Wi-Fi mode is station, or AP, or station/AP.
- - Either esp_wifi_set_promiscuous(true), or :cpp:func:`esp_wifi_start()`, or both of these APIs return ESP_OK. This is because Wi-Fi hardware must be initialized before :cpp:func:`esp_wifi_80211_tx()` is called. In {IDF_TARGET_NAME}, both esp_wifi_set_promiscuous(true) and :cpp:func:`esp_wifi_start()` can trigger the initialization of Wi-Fi hardware.
+ - Either ``esp_wifi_set_promiscuous(true)``, or :cpp:func:`esp_wifi_start()`, or both of these APIs return :c:macro:`ESP_OK`. This is because Wi-Fi hardware must be initialized before :cpp:func:`esp_wifi_80211_tx()` is called. In {IDF_TARGET_NAME}, both ``esp_wifi_set_promiscuous(true)`` and :cpp:func:`esp_wifi_start()` can trigger the initialization of Wi-Fi hardware.
  - The parameters of :cpp:func:`esp_wifi_80211_tx()` are hereby correctly provided.
 
 Data Rate
@@ -1638,7 +2074,7 @@ Theoretically, if the side-effects the API imposes on the Wi-Fi driver or other 
    * - Scenario
      - Description
    * - No Wi-Fi connection
-     - In this scenario, no Wi-Fi connection is set up, so there are no side-effects on the Wi-Fi driver. If en_sys_seq==true, the Wi-Fi driver is responsible for the sequence control. If en_sys_seq==false, the application needs to ensure that the buffer has the correct sequence.
+     - In this scenario, no Wi-Fi connection is set up, so there are no side-effects on the Wi-Fi driver. If ``en_sys_seq==true``, the Wi-Fi driver is responsible for the sequence control. If ``en_sys_seq==false``, the application needs to ensure that the buffer has the correct sequence.
 
        Theoretically, the MAC address can be any address. However, this may impact other stations/APs with the same MAC/BSSID.
 
@@ -1646,14 +2082,14 @@ Theoretically, if the side-effects the API imposes on the Wi-Fi driver or other 
 
        To avoid the above-mentioned side-effects, it is recommended that:
 
-       - If esp_wifi_80211_tx is called in station mode, the first MAC should be a multicast MAC or the exact target-device’s MAC, while the second MAC should be that of the station interface.
+       - If :cpp:func:`esp_wifi_80211_tx` is called in station mode, the first MAC should be a multicast MAC or the exact target-device’s MAC, while the second MAC should be that of the station interface.
 
-       - If esp_wifi_80211_tx is called in AP mode, the first MAC should be a multicast MAC or the exact target-device’s MAC, while the second MAC should be that of the AP interface.
+       - If :cpp:func:`esp_wifi_80211_tx` is called in AP mode, the first MAC should be a multicast MAC or the exact target-device’s MAC, while the second MAC should be that of the AP interface.
 
        The recommendations above are only for avoiding side-effects and can be ignored when there are good reasons.
 
    * - Have Wi-Fi connection
-     - When the Wi-Fi connection is already set up, and the sequence is controlled by the application, the latter may impact the sequence control of the Wi-Fi connection as a whole. So, the en_sys_seq need to be true, otherwise ESP_ERR_WIFI_ARG is returned.
+     - When the Wi-Fi connection is already set up, and the sequence is controlled by the application, the latter may impact the sequence control of the Wi-Fi connection as a whole. So, the ``en_sys_seq`` need to be true, otherwise ``ESP_ERR_WIFI_ARG`` is returned.
 
        The MAC-address recommendations in the “No Wi-Fi connection” scenario also apply to this scenario.
 
@@ -1665,13 +2101,13 @@ Theoretically, if the side-effects the API imposes on the Wi-Fi driver or other 
 
        - If the packet is sent from station to AP or from AP to station, the Power Management, More Data, and Re-Transmission bits should be 0. Otherwise, the packet will be discarded by Wi-Fi driver.
 
-       ESP_ERR_WIFI_ARG is returned if any check fails.
+       ``ESP_ERR_WIFI_ARG`` is returned if any check fails.
 
 
 Wi-Fi Sniffer Mode
 ---------------------------
 
-The Wi-Fi sniffer mode can be enabled by esp_wifi_set_promiscuous(). If the sniffer mode is enabled, the following packets **can** be dumped to the application:
+The Wi-Fi sniffer mode can be enabled by :cpp:func:`esp_wifi_set_promiscuous`. If the sniffer mode is enabled, the following packets **can** be dumped to the application:
 
  - 802.11 Management frame.
  - 802.11 Data frame, including MPDU, AMPDU, and AMSDU.
@@ -1687,7 +2123,7 @@ For frames that the sniffer **can** dump, the application can additionally decid
 
 The Wi-Fi sniffer mode can be enabled in the Wi-Fi mode of :cpp:enumerator:`WIFI_MODE_NULL`, :cpp:enumerator:`WIFI_MODE_STA`, :cpp:enumerator:`WIFI_MODE_AP`, or :cpp:enumerator:`WIFI_MODE_APSTA`. In other words, the sniffer mode is active when the station is connected to the AP, or when the AP has a Wi-Fi connection. Please note that the sniffer has a **great impact** on the throughput of the station or AP Wi-Fi connection. Generally, the sniffer should be enabled **only if** the station/AP Wi-Fi connection does not experience heavy traffic.
 
-Another noteworthy issue about the sniffer is the callback wifi_promiscuous_cb_t. The callback will be called directly in the Wi-Fi driver task, so if the application has a lot of work to do for each filtered packet, the recommendation is to post an event to the application task in the callback and defer the real work to the application task.
+Another noteworthy issue about the sniffer is the callback :cpp:type:`wifi_promiscuous_cb_t`. The callback will be called directly in the Wi-Fi driver task, so if the application has a lot of work to do for each filtered packet, the recommendation is to post an event to the application task in the callback and defer the real work to the application task.
 
 Wi-Fi Multiple Antennas
 --------------------------
@@ -1733,98 +2169,111 @@ Wi-Fi Multiple Antennas Configuration
 
 Generally, following steps can be taken to configure the multiple antennas:
 
- - Configure which GPIOs are connected to the antenna_selects. For example, if four antennas are supported and GPIO20/GPIO21 are connected to antenna_select[0]/antenna_select[1], the configurations look like::
+- Configure which GPIOs are connected to the antenna_selects. For example, if four antennas are supported and GPIO20/GPIO21 are connected to antenna_select[0]/antenna_select[1], the configurations look like:
 
-     wifi_ant_gpio_config_t config = {
-         { .gpio_select = 1, .gpio_num = 20 },
-         { .gpio_select = 1, .gpio_num = 21 }
-     };
- - Configure which antennas are enabled and how RX/TX use the enabled antennas. For example, if antenna1 and antenna3 are enabled, the RX needs to select the better antenna automatically and uses antenna1 as its default antenna, the TX always selects the antenna3. The configuration looks like::
+.. code-block:: c
 
-     wifi_ant_config_t config = {
-         .rx_ant_mode = WIFI_ANT_MODE_AUTO,
-         .rx_ant_default = WIFI_ANT_ANT0,
-         .tx_ant_mode = WIFI_ANT_MODE_ANT1,
-         .enabled_ant0 = 1,
-         .enabled_ant1 = 3
-     };
+    wifi_ant_gpio_config_t ant_gpio_config = {
+        .gpio_cfg[0] = { .gpio_select = 1, .gpio_num = 20 },
+        .gpio_cfg[1] = { .gpio_select = 1, .gpio_num = 21 }
+    };
 
-Wi-Fi Channel State Information
-------------------------------------
+- Configure which antennas are enabled and how RX/TX use the enabled antennas. For example, if antenna1 and antenna3 are enabled, the RX needs to select the better antenna automatically and uses antenna1 as its default antenna, the TX always selects the antenna3. The configuration looks like:
 
-Channel state information (CSI) refers to the channel information of a Wi-Fi connection. In {IDF_TARGET_NAME}, this information consists of channel frequency responses of sub-carriers and is estimated when packets are received from the transmitter. Each channel frequency response of sub-carrier is recorded by two bytes of signed characters. The first one is imaginary part and the second one is real part. There are up to three fields of channel frequency responses according to the type of received packet. They are legacy long training field (LLTF), high throughput LTF (HT-LTF), and space time block code HT-LTF (STBC-HT-LTF). For different types of packets which are received on channels with different state, the sub-carrier index and total bytes of signed characters of CSI are shown in the following table.
+.. code-block:: c
 
-+-------------+--------------------+-----------------------------------------+--------------------------------------------------------+----------------------------------------------------------+
-| channel     | secondary channel  |                   none                  |                           below                        |                            above                         |
-+-------------+--------------------+-------------+---------------------------+----------+---------------------------------------------+----------+-----------------------------------------------+
-| packet      | signal mode        |   non HT    |            HT             |  non HT  |                      HT                     |  non HT  |                       HT                      |
-+             +--------------------+-------------+---------------------------+----------+-----------------+---------------------------+----------+-------------------+---------------------------+
-| information | channel bandwidth  |    20 MHz   |           20 MHz          |   20 MHz |      20 MHz     |            40 MHz         |   20 MHz |       20 MHz      |            40 MHz         |
-+             +--------------------+-------------+-------------+-------------+----------+----------+------+-------------+-------------+----------+----------+--------+-------------+-------------+
-|             | STBC               |  non STBC   |  non STBC   |     STBC    | non STBC | non STBC | STBC |  non STBC   |     STBC    | non STBC | non STBC |  STBC  |  non STBC   |     STBC    |
-+-------------+--------------------+-------------+-------------+-------------+----------+----------+------+-------------+-------------+----------+----------+--------+-------------+-------------+
-| sub-carrier | LLTF               | 0~31, -32~-1| 0~31, -32~-1| 0~31, -32~-1|   0~63   |   0~63   | 0~63 |     0~63    |     0~63    |  -64~-1  |  -64~-1  | -64~-1 |    -64~-1   |    -64~-1   |
-+             +--------------------+-------------+-------------+-------------+----------+----------+------+-------------+-------------+----------+----------+--------+-------------+-------------+
-| index       | HT-LTF             |      -      | 0~31, -32~-1| 0~31, -32~-1|     -    |   0~63   | 0~62 | 0~63, -64~-1| 0~60, -60~-1|     -    |  -64~-1  | -62~-1 | 0~63, -64~-1| 0~60, -60~-1|
-+             +--------------------+-------------+-------------+-------------+----------+----------+------+-------------+-------------+----------+----------+--------+-------------+-------------+
-|             | STBC-HT-LTF        |      -      |      -      | 0~31, -32~-1|     -    |     -    | 0~62 |       -     | 0~60, -60~-1|     -    |     -    | -62~-1 |       -     | 0~60, -60~-1|
-+-------------+--------------------+-------------+-------------+-------------+----------+----------+------+-------------+-------------+----------+----------+--------+-------------+-------------+
-| total bytes                      |     128     |     256     |     384     |    128   |    256   | 380  |      384    |      612    |    128   |    256   |   376  |      384    |      612    |
-+----------------------------------+-------------+-------------+-------------+----------+----------+------+-------------+-------------+----------+----------+--------+-------------+-------------+
+    wifi_ant_config_t config = {
+        .rx_ant_mode = WIFI_ANT_MODE_AUTO,
+        .rx_ant_default = WIFI_ANT_ANT0,
+        .tx_ant_mode = WIFI_ANT_MODE_ANT1,
+        .enabled_ant0 = 1,
+        .enabled_ant1 = 3
+    };
 
-All of the information in the table can be found in the structure wifi_csi_info_t.
+.. only:: SOC_WIFI_CSI_SUPPORT
 
-    - Secondary channel refers to secondary_channel field of rx_ctrl field.
-    - Signal mode of packet refers to sig_mode field of rx_ctrl field.
-    - Channel bandwidth refers to cwb field of rx_ctrl field.
-    - STBC refers to stbc field of rx_ctrl field.
-    - Total bytes refers to len field.
-    - The CSI data corresponding to each Long Training Field (LTF) type is stored in a buffer starting from the buf field. Each item is stored as two bytes: imaginary part followed by real part. The order of each item is the same as the sub-carrier in the table. The order of LTF is: LLTF, HT-LTF, STBC-HT-LTF. However, all 3 LTFs may not be present, depending on the channel and packet information (see above).
-    - If first_word_invalid field of wifi_csi_info_t is true, it means that the first four bytes of CSI data is invalid due to a hardware limitation in {IDF_TARGET_NAME}.
-    - More information like RSSI, noise floor of RF, receiving time and antenna is in the rx_ctrl field.
+    Wi-Fi Channel State Information
+    ------------------------------------
 
-When imaginary part and real part data of sub-carrier are used, please refer to the table below.
+    Channel state information (CSI) refers to the channel information of a Wi-Fi connection. In {IDF_TARGET_NAME}, this information consists of channel frequency responses of sub-carriers and is estimated when packets are received from the transmitter. Each channel frequency response of sub-carrier is recorded by two bytes of signed characters. The first one is imaginary part and the second one is real part. There are up to three fields of channel frequency responses according to the type of received packet. They are legacy long training field (LLTF), high throughput LTF (HT-LTF), and space time block code HT-LTF (STBC-HT-LTF). For different types of packets which are received on channels with different state, the sub-carrier index and total bytes of signed characters of CSI are shown in the following table.
 
-+----------------+-------------------+------------------------------+-------------------------+
-| PHY standard   | Sub-carrier range | Pilot sub-carrier            | Sub-carrier(total/data) |
-+================+===================+==============================+=========================+
-| 802.11a/g      | -26 to +26        | -21, -7, +7, +21             | 52 total, 48 usable     |
-+----------------+-------------------+------------------------------+-------------------------+
-| 802.11n, 20MHz | -28 to +28        | -21, -7, +7, +21             | 56 total, 52 usable     |
-+----------------+-------------------+------------------------------+-------------------------+
-| 802.11n, 40MHz | -57 to +57        | -53, -25, -11, +11, +25, +53 | 114 total, 108 usable   |
-+----------------+-------------------+------------------------------+-------------------------+
+    +-------------+--------------------+-----------------------------------------+--------------------------------------------------------+----------------------------------------------------------+
+    | channel     | secondary channel  |                   none                  |                           below                        |                            above                         |
+    +-------------+--------------------+-------------+---------------------------+----------+---------------------------------------------+----------+-----------------------------------------------+
+    | packet      | signal mode        |   non HT    |            HT             |  non HT  |                      HT                     |  non HT  |                       HT                      |
+    +             +--------------------+-------------+---------------------------+----------+-----------------+---------------------------+----------+-------------------+---------------------------+
+    | information | channel bandwidth  |    20 MHz   |           20 MHz          |   20 MHz |      20 MHz     |            40 MHz         |   20 MHz |       20 MHz      |            40 MHz         |
+    +             +--------------------+-------------+-------------+-------------+----------+----------+------+-------------+-------------+----------+----------+--------+-------------+-------------+
+    |             | STBC               |  non STBC   |  non STBC   |     STBC    | non STBC | non STBC | STBC |  non STBC   |     STBC    | non STBC | non STBC |  STBC  |  non STBC   |     STBC    |
+    +-------------+--------------------+-------------+-------------+-------------+----------+----------+------+-------------+-------------+----------+----------+--------+-------------+-------------+
+    | sub-carrier | LLTF               | 0~31, -32~-1| 0~31, -32~-1| 0~31, -32~-1|   0~63   |   0~63   | 0~63 |     0~63    |     0~63    |  -64~-1  |  -64~-1  | -64~-1 |    -64~-1   |    -64~-1   |
+    +             +--------------------+-------------+-------------+-------------+----------+----------+------+-------------+-------------+----------+----------+--------+-------------+-------------+
+    | index       | HT-LTF             |      -      | 0~31, -32~-1| 0~31, -32~-1|     -    |   0~63   | 0~62 | 0~63, -64~-1| 0~60, -60~-1|     -    |  -64~-1  | -62~-1 | 0~63, -64~-1| 0~60, -60~-1|
+    +             +--------------------+-------------+-------------+-------------+----------+----------+------+-------------+-------------+----------+----------+--------+-------------+-------------+
+    |             | STBC-HT-LTF        |      -      |      -      | 0~31, -32~-1|     -    |     -    | 0~62 |       -     | 0~60, -60~-1|     -    |     -    | -62~-1 |       -     | 0~60, -60~-1|
+    +-------------+--------------------+-------------+-------------+-------------+----------+----------+------+-------------+-------------+----------+----------+--------+-------------+-------------+
+    | total bytes                      |     128     |     256     |     384     |    128   |    256   | 380  |      384    |      612    |    128   |    256   |   376  |      384    |      612    |
+    +----------------------------------+-------------+-------------+-------------+----------+----------+------+-------------+-------------+----------+----------+--------+-------------+-------------+
 
-.. note::
+    All of the information in the table can be found in the structure wifi_csi_info_t.
 
-    - For STBC packet, CSI is provided for every space-time stream without CSD (cyclic shift delay). As each cyclic shift on the additional chains shall be -200 ns, only the CSD angle of first space-time stream is recorded in sub-carrier 0 of HT-LTF and STBC-HT-LTF for there is no channel frequency response in sub-carrier 0. CSD[10:0] is 11 bits, ranging from -pi to pi.
+        - Secondary channel refers to secondary_channel field of rx_ctrl field.
+        - Signal mode of packet refers to sig_mode field of rx_ctrl field.
+        - Channel bandwidth refers to cwb field of rx_ctrl field.
+        - STBC refers to stbc field of rx_ctrl field.
+        - Total bytes refers to len field.
+        - The CSI data corresponding to each Long Training Field (LTF) type is stored in a buffer starting from the buf field. Each item is stored as two bytes: imaginary part followed by real part. The order of each item is the same as the sub-carrier in the table. The order of LTF is: LLTF, HT-LTF, STBC-HT-LTF. However, all 3 LTFs may not be present, depending on the channel and packet information (see above).
+        - If first_word_invalid field of :cpp:type:`wifi_csi_info_t` is true, it means that the first four bytes of CSI data is invalid due to a hardware limitation in {IDF_TARGET_NAME}.
+        - More information like RSSI, noise floor of RF, receiving time and antenna is in the rx_ctrl field.
 
-    - If LLTF, HT-LTF, or STBC-HT-LTF is not enabled by calling API :cpp:func:`esp_wifi_set_csi_config()`, the total bytes of CSI data will be fewer than that in the table. For example, if LLTF and HT-LTF is not enabled and STBC-HT-LTF is enabled, when a packet is received with the condition above/HT/40MHz/STBC, the total bytes of CSI data is 244 ((61 + 60) * 2 + 2 = 244. The result is aligned to four bytes, and the last two bytes are invalid).
+    When imaginary part and real part data of sub-carrier are used, please refer to the table below.
 
-Wi-Fi Channel State Information Configure
--------------------------------------------
+    +----------------+-------------------+------------------------------+-------------------------+
+    | PHY standard   | Sub-carrier range | Pilot sub-carrier            | Sub-carrier(total/data) |
+    +================+===================+==============================+=========================+
+    | 802.11a/g      | -26 to +26        | -21, -7, +7, +21             | 52 total, 48 usable     |
+    +----------------+-------------------+------------------------------+-------------------------+
+    | 802.11n, 20MHz | -28 to +28        | -21, -7, +7, +21             | 56 total, 52 usable     |
+    +----------------+-------------------+------------------------------+-------------------------+
+    | 802.11n, 40MHz | -57 to +57        | -53, -25, -11, +11, +25, +53 | 114 total, 108 usable   |
+    +----------------+-------------------+------------------------------+-------------------------+
 
-To use Wi-Fi CSI, the following steps need to be done.
+    .. note::
 
-    - Select Wi-Fi CSI in menuconfig. Go to ``Menuconfig`` > ``Components config`` > ``Wi-Fi`` > ``Wi-Fi CSI (Channel State Information)``.
-    - Set CSI receiving callback function by calling API :cpp:func:`esp_wifi_set_csi_rx_cb()`.
-    - Configure CSI by calling API :cpp:func:`esp_wifi_set_csi_config()`.
-    - Enable CSI by calling API :cpp:func:`esp_wifi_set_csi()`.
+        - For STBC packet, CSI is provided for every space-time stream without CSD (cyclic shift delay). As each cyclic shift on the additional chains shall be -200 ns, only the CSD angle of first space-time stream is recorded in sub-carrier 0 of HT-LTF and STBC-HT-LTF for there is no channel frequency response in sub-carrier 0. CSD[10:0] is 11 bits, ranging from -pi to pi.
 
-The CSI receiving callback function runs from Wi-Fi task. So, do not do lengthy operations in the callback function. Instead, post necessary data to a queue and handle it from a lower priority task. Because station does not receive any packet when it is disconnected and only receives packets from AP when it is connected, it is suggested to enable sniffer mode to receive more CSI data by calling :cpp:func:`esp_wifi_set_promiscuous()`.
+        - If LLTF, HT-LTF, or STBC-HT-LTF is not enabled by calling API :cpp:func:`esp_wifi_set_csi_config()`, the total bytes of CSI data will be fewer than that in the table. For example, if LLTF and HT-LTF is not enabled and STBC-HT-LTF is enabled, when a packet is received with the condition above/HT/40MHz/STBC, the total bytes of CSI data is 244 ((61 + 60) * 2 + 2 = 244. The result is aligned to four bytes, and the last two bytes are invalid).
+
+    Wi-Fi Channel State Information Configure
+    -------------------------------------------
+
+    To use Wi-Fi CSI, the following steps need to be done.
+
+        - Select Wi-Fi CSI in menuconfig. Go to ``Menuconfig`` > ``Components config`` > ``Wi-Fi`` > ``Wi-Fi CSI (Channel State Information)``.
+        - Set CSI receiving callback function by calling API :cpp:func:`esp_wifi_set_csi_rx_cb()`.
+        - Configure CSI by calling API :cpp:func:`esp_wifi_set_csi_config()`.
+        - Enable CSI by calling API :cpp:func:`esp_wifi_set_csi()`.
+
+    The CSI receiving callback function runs from Wi-Fi task. So, do not do lengthy operations in the callback function. Instead, post necessary data to a queue and handle it from a lower priority task. Because station does not receive any packet when it is disconnected and only receives packets from AP when it is connected, it is suggested to enable sniffer mode to receive more CSI data by calling :cpp:func:`esp_wifi_set_promiscuous()`.
 
 Wi-Fi HT20/40
 -------------------------
 
-{IDF_TARGET_NAME} supports Wi-Fi bandwidth HT20 or HT40 and does not support HT20/40 coexist. :cpp:func:`esp_wifi_set_bandwidth()` can be used to change the default bandwidth of station or AP. The default bandwidth for {IDF_TARGET_NAME} station and AP is HT40.
+.. only:: esp32 or esp32s2 or esp32c3 or esp32s3 or esp32c6
 
-In station mode, the actual bandwidth is firstly negotiated during the Wi-Fi connection. It is HT40 only if both the station and the connected AP support HT40, otherwise it is HT20. If the bandwidth of connected AP is changes, the actual bandwidth is negotiated again without Wi-Fi disconnecting.
+    {IDF_TARGET_NAME} supports Wi-Fi bandwidth HT20 or HT40 and does not support HT20/40 coexist. :cpp:func:`esp_wifi_set_bandwidth()` can be used to change the default bandwidth of station or AP. The default bandwidth for {IDF_TARGET_NAME} station and AP is HT40.
 
-Similarly, in AP mode, the actual bandwidth is negotiated between AP and the stations that connect to the AP. It is HT40 if the AP and one of the stations support HT40, otherwise it is HT20.
+    In station mode, the actual bandwidth is firstly negotiated during the Wi-Fi connection. It is HT40 only if both the station and the connected AP support HT40, otherwise it is HT20. If the bandwidth of connected AP is changes, the actual bandwidth is negotiated again without Wi-Fi disconnecting.
 
-In station/AP coexist mode, the station/AP can configure HT20/40 seperately. If both station and AP are negotiated to HT40, the HT40 channel should be the channel of station because the station always has higher priority than AP in {IDF_TARGET_NAME}. For example, the configured bandwidth of AP is HT40, the configured primary channel is 6, and the configured secondary channel is 10. The station is connected to an router whose primary channel is 6 and secondary channel is 2, then the actual channel of AP is changed to primary 6 and secondary 2 automatically.
+    Similarly, in AP mode, the actual bandwidth is negotiated between AP and the stations that connect to the AP. It is HT40 if the AP and one of the stations support HT40, otherwise it is HT20.
 
-Theoretically, the HT40 can gain better throughput because the maximum raw physicial (PHY) data rate for HT40 is 150 Mbps while it is 72 Mbps for HT20. However, if the device is used in some special environment, e.g., there are too many other Wi-Fi devices around the {IDF_TARGET_NAME} device, the performance of HT40 may be degraded. So if the applications need to support same or similar scenarios, it is recommended that the bandwidth is always configured to HT20.
+    In station/AP coexist mode, the station/AP can configure HT20/40 seperately. If both station and AP are negotiated to HT40, the HT40 channel should be the channel of station because the station always has higher priority than AP in {IDF_TARGET_NAME}. For example, the configured bandwidth of AP is HT40, the configured primary channel is 6, and the configured secondary channel is 10. The station is connected to an router whose primary channel is 6 and secondary channel is 2, then the actual channel of AP is changed to primary 6 and secondary 2 automatically.
+
+    Theoretically, the HT40 can gain better throughput because the maximum raw physicial (PHY) data rate for HT40 is 150 Mbps while it is 72 Mbps for HT20. However, if the device is used in some special environment, e.g., there are too many other Wi-Fi devices around the {IDF_TARGET_NAME} device, the performance of HT40 may be degraded. So if the applications need to support same or similar scenarios, it is recommended that the bandwidth is always configured to HT20.
+
+.. only:: esp32c2
+
+    {IDF_TARGET_NAME} supports Wi-Fi bandwidth HT20 and does not support Wi-Fi bandwidth HT40 or HT20/40 coexist.
 
 Wi-Fi QoS
 -------------------------
@@ -1863,7 +2312,13 @@ Theoretically, the higher priority AC has better performance than the lower prio
 Wi-Fi AMSDU
 -------------------------
 
-{IDF_TARGET_NAME} supports receiving and transmitting AMSDU.
+.. only:: not SOC_SPIRAM_SUPPORTED
+
+    {IDF_TARGET_NAME} supports receiving AMSDU.
+
+.. only:: SOC_SPIRAM_SUPPORTED
+
+    {IDF_TARGET_NAME} supports receiving and transmitting AMSDU. AMSDU TX is disabled by default, since enable AMSDU TX need more memory. Select :ref:`CONFIG_ESP_WIFI_AMSDU_TX_ENABLED` to enable AMSDU Tx feature, it depends on :ref:`CONFIG_SPIRAM`.
 
 Wi-Fi Fragment
 -------------------------
@@ -1872,7 +2327,7 @@ Wi-Fi Fragment
 
     supports Wi-Fi receiving fragment, but does not support Wi-Fi transmitting fragment.
 
-.. only:: esp32c3 or esp32s3
+.. only:: esp32c3 or esp32s3 or esp32c6
 
     {IDF_TARGET_NAME} supports Wi-Fi receiving and transmitting fragment.
 
@@ -1915,14 +2370,16 @@ Peak Wi-Fi Dynamic Buffer
 The Wi-Fi driver supports several types of buffer (refer to `Wi-Fi Buffer Configure`_). However, this section is about the usage of the dynamic Wi-Fi buffer only.
 The peak heap memory that Wi-Fi consumes is the **theoretically-maximum memory** that the Wi-Fi driver consumes. Generally, the peak memory depends on:
 
- - the number of dynamic RX buffers that are configured: wifi_rx_dynamic_buf_num
- - the number of dynamic TX buffers that are configured: wifi_tx_dynamic_buf_num
- - the maximum packet size that the Wi-Fi driver can receive: wifi_rx_pkt_size_max
- - the maximum packet size that the Wi-Fi driver can send: wifi_tx_pkt_size_max
+- :math:`b_{rx}` the number of dynamic RX buffers that are configured
+- :math:`b_{tx}` the number of dynamic TX buffers that are configured
+- :math:`m_{rx}` the maximum packet size that the Wi-Fi driver can receive
+- :math:`m_{tx}` the maximum packet size that the Wi-Fi driver can send
 
-So, the peak memory that the Wi-Fi driver consumes can be calculated with the following formula:
+So, the peak memory that the Wi-Fi driver consumes (:math:`p`) can be calculated with the following formula:
 
-  wifi_dynamic_peek_memory = (wifi_rx_dynamic_buf_num * wifi_rx_pkt_size_max) + (wifi_tx_dynamic_buf_num * wifi_tx_pkt_size_max)
+.. math::
+
+    p = (b_{rx} * m_{rx}) + (b_{tx} * m_{tx})
 
 Generally, the dynamic TX long buffers and dynamic TX long long buffers can be ignored, because they are management frames which only have a small impact on the system.
 
@@ -1956,24 +2413,24 @@ Increasing the size or number of the buffers mentioned above properly can improv
 
 **RX direction:**
 
- - :ref:`CONFIG_ESP32_WIFI_STATIC_RX_BUFFER_NUM`
+ - :ref:`CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM`
     This parameter indicates the number of DMA buffer at the hardware layer. Increasing this parameter will increase the sender's one-time receiving throughput, thereby improving the Wi-Fi protocol stack ability to handle burst traffic.
 
- - :ref:`CONFIG_ESP32_WIFI_DYNAMIC_RX_BUFFER_NUM`
+ - :ref:`CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM`
     This parameter indicates the number of RX buffer in the Wi-Fi layer. Increasing this parameter will improve the performance of packet reception. This parameter needs to match the RX buffer size of the LwIP layer.
 
- - :ref:`CONFIG_ESP32_WIFI_RX_BA_WIN`
-    This parameter indicates the size of the AMPDU BA Window at the receiving end. This parameter should be configured to the smaller value between twice of :ref:`CONFIG_ESP32_WIFI_STATIC_RX_BUFFER_NUM` and :ref:`CONFIG_ESP32_WIFI_DYNAMIC_RX_BUFFER_NUM`.
+ - :ref:`CONFIG_ESP_WIFI_RX_BA_WIN`
+    This parameter indicates the size of the AMPDU BA Window at the receiving end. This parameter should be configured to the smaller value between twice of :ref:`CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM` and :ref:`CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM`.
 
  - :ref:`CONFIG_LWIP_TCP_WND_DEFAULT`
     This parameter represents the RX buffer size of the LwIP layer for each TCP stream. Its value should be configured to the value of WIFI_DYNAMIC_RX_BUFFER_NUM (KB) to reach a high and stable performance. Meanwhile, in case of multiple streams, this value needs to be reduced proportionally.
 
 **TX direction:**
 
- - :ref:`CONFIG_ESP32_WIFI_TX_BUFFER`
+ - :ref:`CONFIG_ESP_WIFI_TX_BUFFER`
     This parameter indicates the type of TX buffer, it is recommended to configure it as a dynamic buffer, which can make full use of memory.
 
- - :ref:`CONFIG_ESP32_WIFI_DYNAMIC_TX_BUFFER_NUM`
+ - :ref:`CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM`
     This parameter indicates the number of TX buffer on the Wi-Fi layer. Increasing this parameter will improve the performance of packet sending. The parameter value needs to match the TX buffer size of the LwIP layer.
 
  - :ref:`CONFIG_LWIP_TCP_SND_BUF_DEFAULT`
@@ -1983,14 +2440,25 @@ Increasing the size or number of the buffers mentioned above properly can improv
 
 .. only:: esp32 or esp32s2
 
-    - :ref:`CONFIG_ESP32_WIFI_IRAM_OPT`
+    - :ref:`CONFIG_ESP_WIFI_IRAM_OPT`
         If this option is enabled, some Wi-Fi functions are moved to IRAM, improving throughput. This increases IRAM usage by 15 kB.
 
-    - :ref:`CONFIG_ESP32_WIFI_RX_IRAM_OPT`
+    - :ref:`CONFIG_ESP_WIFI_RX_IRAM_OPT`
         If this option is enabled, some Wi-Fi RX functions are moved to IRAM, improving throughput. This increases IRAM usage by 16 kB.
 
  - :ref:`CONFIG_LWIP_IRAM_OPTIMIZATION`
     If this option is enabled, some LwIP functions are moved to IRAM, improving throughput. This increases IRAM usage by 13 kB.
+
+.. only:: esp32c6
+
+    - :ref:`CONFIG_ESP_WIFI_IRAM_OPT`
+        If this option is enabled, some Wi-Fi functions are moved to IRAM, improving throughput. This increases IRAM usage by 13 kB.
+
+    - :ref:`CONFIG_ESP_WIFI_RX_IRAM_OPT`
+        If this option is enabled, some Wi-Fi RX functions are moved to IRAM, improving throughput. This increases IRAM usage by 7 kB.
+
+ - :ref:`CONFIG_LWIP_IRAM_OPTIMIZATION`
+    If this option is enabled, some LwIP functions are moved to IRAM, improving throughput. This increases IRAM usage by 14 kB.
 
 .. only:: esp32s2
 
@@ -2332,6 +2800,124 @@ The parameters not mentioned in the following table should be set to the default
           - 44.5
           - 44.2
 
+.. only:: esp32c6
+
+     .. list-table::
+        :header-rows: 1
+        :widths: 10 10 10 15
+
+        * - Rank
+          - Iperf
+          - Default
+          - Minimum
+        * - Available memory (KB)
+          - 223
+          - 276
+          - 299
+        * - WIFI_STATIC_RX_BUFFER_NUM
+          - 20
+          - 8
+          - 3
+        * - WIFI_DYNAMIC_RX_BUFFER_NUM
+          - 40
+          - 16
+          - 6
+        * - WIFI_DYNAMIC_TX_BUFFER_NUM
+          - 40
+          - 16
+          - 6
+        * - WIFI_RX_BA_WIN
+          - 32
+          - 16
+          - 6
+        * - TCP_SND_BUF_DEFAULT (KB)
+          - 40
+          - 16
+          - 6
+        * - TCP_WND_DEFAULT (KB)
+          - 40
+          - 16
+          - 6
+        * - LWIP_IRAM_OPTIMIZATION
+          - 13
+          - 13
+          - 0
+        * - TCP TX throughput (Mbit/s)
+          - 30.5
+          - 25.9
+          - 16.4
+        * - TCP RX throughput (Mbit/s)
+          - 27.8
+          - 21.6
+          - 14.3
+        * - UDP TX throughput (Mbit/s)
+          - 37.8
+          - 36.1
+          - 34.6
+        * - UDP RX throughput (Mbit/s)
+          - 41.5
+          - 36.8
+          - 36.7
+
+.. only:: esp32c2
+
+     .. list-table::
+        :header-rows: 1
+        :widths: 10 10 10 15
+
+        * - Rank
+          - Iperf
+          - Default
+          - Minimum
+        * - Available memory (KB)
+          - 37
+          - 56
+          - 84
+        * - WIFI_STATIC_RX_BUFFER_NUM
+          - 14
+          - 7
+          - 3
+        * - WIFI_DYNAMIC_RX_BUFFER_NUM
+          - 18
+          - 14
+          - 6
+        * - WIFI_DYNAMIC_TX_BUFFER_NUM
+          - 18
+          - 14
+          - 6
+        * - WIFI_RX_BA_WIN
+          - 16
+          - 12
+          - 6
+        * - TCP_SND_BUF_DEFAULT (KB)
+          - 18
+          - 14
+          - 6
+        * - TCP_WND_DEFAULT (KB)
+          - 18
+          - 14
+          - 6
+        * - LWIP_IRAM_OPTIMIZATION
+          - 13
+          - 13
+          - 0
+        * - TCP TX throughput (Mbit/s)
+          - 21.6
+          - 21.4
+          - 14.3
+        * - TCP RX throughput (Mbit/s)
+          - 19.1
+          - 17.9
+          - 12.4
+        * - UDP TX throughput (Mbit/s)
+          - 26.4
+          - 26.3
+          - 25.0
+        * - UDP RX throughput (Mbit/s)
+          - 32.3
+          - 31.5
+          - 27.7
+
 .. only:: esp32s3
 
      .. list-table::
@@ -2429,6 +3015,18 @@ The parameters not mentioned in the following table should be set to the default
         The test was performed with a single stream in a shielded box using an ASUS RT-N66U router.
         {IDF_TARGET_NAME}'s CPU is single core with 160 MHz. {IDF_TARGET_NAME}'s flash is in QIO mode with 80 MHz.
 
+.. only:: esp32c6
+
+    .. note::
+        The test was performed with a single stream in a shielded box using an XIAOMI AX-6000 router.
+        {IDF_TARGET_NAME}'s CPU is single core with 160 MHz. {IDF_TARGET_NAME}'s flash is in QIO mode with 80 MHz.
+
+.. only:: esp32c2
+
+    .. note::
+        The test was performed with a single stream in a shielded box using an Redmi RM2100 router.
+        {IDF_TARGET_NAME}'s CPU is single core with 120 MHz. {IDF_TARGET_NAME}'s flash is in QIO mode with 60 MHz.
+
 .. only:: esp32
 
     **Ranks:**
@@ -2467,7 +3065,7 @@ The parameters not mentioned in the following table should be set to the default
      - **Minimum rank**
         This is the minimum configuration rank of {IDF_TARGET_NAME}. The protocol stack only uses the necessary memory for running. It is suitable for scenarios where there is no requirement for performance and the application requires lots of space.
 
-.. only:: esp32c3 or esp32s3
+.. only:: esp32c3 or esp32s3 or esp32c6
 
     **Ranks:**
 
@@ -2480,12 +3078,12 @@ The parameters not mentioned in the following table should be set to the default
      - **Minimum rank**
         This is the minimum configuration rank of {IDF_TARGET_NAME}. The protocol stack only uses the necessary memory for running. It is suitable for scenarios where there is no requirement for performance and the application requires lots of space.
 
-.. only:: esp32 or esp32s2 or esp32s3
+.. only:: SOC_SPIRAM_SUPPORTED
 
     Using PSRAM
     ++++++++++++++++++++++++++++
 
-    PSRAM is generally used when the application takes up a lot of memory. In this mode, the :ref:`CONFIG_ESP32_WIFI_TX_BUFFER` is forced to be static. :ref:`CONFIG_ESP32_WIFI_STATIC_TX_BUFFER_NUM` indicates the number of DMA buffers at the hardware layer, and increasing this parameter can improve performance.
+    PSRAM is generally used when the application takes up a lot of memory. In this mode, the :ref:`CONFIG_ESP_WIFI_TX_BUFFER` is forced to be static. :ref:`CONFIG_ESP_WIFI_STATIC_TX_BUFFER_NUM` indicates the number of DMA buffers at the hardware layer, and increasing this parameter can improve performance.
     The following are the recommended ranks for using PSRAM:
 
     .. only:: esp32

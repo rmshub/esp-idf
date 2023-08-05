@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2020-2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2020-2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -17,7 +17,9 @@
 #elif __riscv
 #include "riscv/rv_utils.h"
 #endif
+#include "esp_intr_alloc.h"
 #include "esp_err.h"
+#include "esp_attr.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -34,7 +36,7 @@ typedef uint32_t esp_cpu_cycle_count_t;
  * @brief CPU interrupt type
  */
 typedef enum {
-    ESP_CPU_INTR_TYPE_LEVEL,
+    ESP_CPU_INTR_TYPE_LEVEL = 0,
     ESP_CPU_INTR_TYPE_EDGE,
     ESP_CPU_INTR_TYPE_NA,
 } esp_cpu_intr_type_t;
@@ -231,6 +233,20 @@ FORCE_INLINE_ATTR void esp_cpu_intr_set_ivt_addr(const void *ivt_addr)
 #endif
 }
 
+#if CONFIG_IDF_TARGET_ESP32P4
+//TODO: IDF-7863
+//"MTVT is only implemented in RISC-V arch"
+/**
+ * @brief Set the base address of the current CPU's Interrupt Vector Table (MTVT)
+ *
+ * @param ivt_addr Interrupt Vector Table's base address
+ */
+FORCE_INLINE_ATTR void esp_cpu_intr_set_mtvt_addr(const void *mtvt_addr)
+{
+    rv_utils_set_mtvt((uint32_t)mtvt_addr);
+}
+#endif  //#if CONFIG_IDF_TARGET_ESP32P4
+
 #if SOC_CPU_HAS_FLEXIBLE_INTC
 /**
  * @brief Set the interrupt type of a particular interrupt
@@ -412,9 +428,9 @@ FORCE_INLINE_ATTR void esp_cpu_intr_edge_ack(int intr_num)
 {
     assert(intr_num >= 0 && intr_num < SOC_CPU_INTR_NUM);
 #ifdef __XTENSA__
-    xthal_set_intclear(1 << intr_num);
+    xthal_set_intclear((unsigned) (1 << intr_num));
 #else
-    rv_utils_intr_edge_ack(intr_num);
+    rv_utils_intr_edge_ack((unsigned) intr_num);
 #endif
 }
 
@@ -511,6 +527,29 @@ FORCE_INLINE_ATTR void esp_cpu_dbgr_break(void)
 #endif
 }
 
+// ---------------------- Instructions -------------------------
+
+/**
+ * @brief Given the return address, calculate the address of the preceding call instruction
+ * This is typically used to answer the question "where was the function called from?"
+ * @param return_address  The value of the return address register.
+ *                        Typically set to the value of __builtin_return_address(0).
+ * @return Address of the call instruction preceding the return address.
+ */
+FORCE_INLINE_ATTR intptr_t esp_cpu_get_call_addr(intptr_t return_address)
+{
+    /* Both Xtensa and RISC-V have 2-byte instructions, so to get this right we
+     * should decode the preceding instruction as if it is 2-byte, check if it is a call,
+     * else treat it as 3 or 4 byte one. However for the cases where this function is
+     * used, being off by one instruction is usually okay, so this is kept simple for now.
+     */
+#ifdef __XTENSA__
+    return return_address - 3;
+#else
+    return return_address - 4;
+#endif
+}
+
 /* ------------------------------------------------------ Misc ---------------------------------------------------------
  *
  * ------------------------------------------------------------------------------------------------------------------ */
@@ -525,32 +564,15 @@ FORCE_INLINE_ATTR void esp_cpu_dbgr_break(void)
  */
 bool esp_cpu_compare_and_set(volatile uint32_t *addr, uint32_t compare_value, uint32_t new_value);
 
-/* ---------------------------------------------------- Deprecate ------------------------------------------------------
- *
- * ------------------------------------------------------------------------------------------------------------------ */
-
-/*
-[refactor-todo] Make these deprecated inline
-*/
-typedef esp_cpu_cycle_count_t           esp_cpu_ccount_t;
-#define esp_cpu_get_ccount()            esp_cpu_get_cycle_count()
-#define esp_cpu_set_ccount(ccount)      esp_cpu_set_cycle_count(ccount)
-
+#if SOC_BRANCH_PREDICTOR_SUPPORTED
 /**
- * @brief Returns true if a JTAG debugger is attached to CPU OCD (on chip debug) port.
- *
- * [refactor-todo]  See if this can be replaced with esp_cpu_dbgr_is_attached directly
- *
- * @note Always returns false if CONFIG_ESP_DEBUG_OCDAWARE is not enabled
+ * @brief Enable branch prediction
  */
-FORCE_INLINE_ATTR bool esp_cpu_in_ocd_debug_mode(void)
+FORCE_INLINE_ATTR void esp_cpu_branch_prediction_enable(void)
 {
-#if CONFIG_ESP_DEBUG_OCDAWARE
-    return esp_cpu_dbgr_is_attached();
-#else  // CONFIG_ESP_DEBUG_OCDAWARE
-    return false; // Always return false if "OCD aware" is disabled
-#endif // CONFIG_ESP_DEBUG_OCDAWARE
+    rv_utils_en_branch_predictor();
 }
+#endif  //#if SOC_BRANCH_PREDICTOR_SUPPORTED
 
 #ifdef __cplusplus
 }

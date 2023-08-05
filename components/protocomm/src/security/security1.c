@@ -9,24 +9,20 @@
 #include <string.h>
 #include <esp_err.h>
 #include <esp_log.h>
+#include <inttypes.h>
 
-/* ToDo - Remove this once appropriate solution is available.
-We need to define this for the file as ssl_misc.h uses private structures from mbedtls,
-which are undefined if the following flag is not defined */
-/* Many APIs in the file make use of this flag instead of `MBEDTLS_PRIVATE` */
-/* ToDo - Replace them with proper getter-setter once they are added */
-#define MBEDTLS_ALLOW_PRIVATE_ACCESS
-
-/* ToDo - Remove this once appropriate solution is available.
- * Currently MBEDTLS_LEGACY_CONTEXT is enabled by default for MBEDTLS_ECP_RESTARTABLE
+/* TODO: Currently MBEDTLS_ECDH_LEGACY_CONTEXT is enabled by default
+ * when MBEDTLS_ECP_RESTARTABLE is enabled.
  * This is a temporary workaround to allow that.
- * The LEGACY option is soon going to be removed in future mbedtls
- * once it is removed we can remove the workaround.
+ *
+ * The legacy option is soon going to be removed in future mbedtls
+ * versions and this workaround will be removed once the appropriate
+ * solution is available.
  */
 #ifdef CONFIG_MBEDTLS_ECDH_LEGACY_CONTEXT
-#define ACCESS_ECDH(S, var) S->var
+#define ACCESS_ECDH(S, var) S->MBEDTLS_PRIVATE(var)
 #else
-#define ACCESS_ECDH(S, var) S->ctx.mbed_ecdh.var
+#define ACCESS_ECDH(S, var) S->MBEDTLS_PRIVATE(ctx).MBEDTLS_PRIVATE(mbed_ecdh).MBEDTLS_PRIVATE(var)
 #endif
 
 #include <mbedtls/aes.h>
@@ -36,7 +32,6 @@ which are undefined if the following flag is not defined */
 #include <mbedtls/ecdh.h>
 #include <mbedtls/error.h>
 #include <mbedtls/constant_time.h>
-#include <ssl_misc.h>
 
 #include <protocomm_security.h>
 #include <protocomm_security1.h>
@@ -46,6 +41,13 @@ which are undefined if the following flag is not defined */
 #include "constants.pb-c.h"
 
 static const char* TAG = "security1";
+
+/*NOTE: As both the security schemes share the events,
+ * we need to define the event base only once.
+ */
+#ifndef CONFIG_ESP_PROTOCOMM_SUPPORT_SECURITY_VERSION_2
+ESP_EVENT_DEFINE_BASE(PROTOCOMM_SECURITY_SESSION_EVENT);
+#endif
 
 #define PUBLIC_KEY_LEN  32
 #define SZ_RANDOM       16
@@ -132,6 +134,9 @@ static esp_err_t handle_session_command1(session_t *cur_session,
                                  sizeof(cur_session->device_pubkey)) != 0) {
         ESP_LOGE(TAG, "Key mismatch. Close connection");
         mbedtls_aes_free(&cur_session->ctx_aes);
+        if (esp_event_post(PROTOCOMM_SECURITY_SESSION_EVENT, PROTOCOMM_SECURITY_SESSION_CREDENTIALS_MISMATCH, NULL, 0, portMAX_DELAY) != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to post credential mismatch event");
+        }
         return ESP_FAIL;
     }
 
@@ -183,6 +188,10 @@ static esp_err_t handle_session_command1(session_t *cur_session,
     resp->sec1 = out;
 
     cur_session->state = SESSION_STATE_DONE;
+    if (esp_event_post(PROTOCOMM_SECURITY_SESSION_EVENT, PROTOCOMM_SECURITY_SESSION_SETUP_OK, NULL, 0, portMAX_DELAY) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to post secure session setup success event");
+    }
+
     ESP_LOGD(TAG, "Secure session established successfully");
     return ESP_OK;
 }
@@ -207,6 +216,9 @@ static esp_err_t handle_session_command0(session_t *cur_session,
 
     if (in->sc0->client_pubkey.len != PUBLIC_KEY_LEN) {
         ESP_LOGE(TAG, "Invalid public key length");
+        if (esp_event_post(PROTOCOMM_SECURITY_SESSION_EVENT, PROTOCOMM_SECURITY_SESSION_INVALID_SECURITY_PARAMS, NULL, 0, portMAX_DELAY) != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to post secure session invalid security params event");
+        }
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -249,7 +261,7 @@ static esp_err_t handle_session_command0(session_t *cur_session,
         goto exit_cmd0;
     }
 
-    mbed_err = mbedtls_mpi_write_binary(ACCESS_ECDH(&ctx_server, Q).X,
+    mbed_err = mbedtls_mpi_write_binary(ACCESS_ECDH(&ctx_server, Q).MBEDTLS_PRIVATE(X),
                                         cur_session->device_pubkey,
                                         PUBLIC_KEY_LEN);
     if (mbed_err != 0) {
@@ -266,7 +278,7 @@ static esp_err_t handle_session_command0(session_t *cur_session,
     hexdump("Device pubkey", dev_pubkey, PUBLIC_KEY_LEN);
     hexdump("Client pubkey", cli_pubkey, PUBLIC_KEY_LEN);
 
-    mbed_err = mbedtls_mpi_lset(ACCESS_ECDH(&ctx_server, Qp).Z, 1);
+    mbed_err = mbedtls_mpi_lset(ACCESS_ECDH(&ctx_server, Qp).MBEDTLS_PRIVATE(Z), 1);
     if (mbed_err != 0) {
         ESP_LOGE(TAG, "Failed at mbedtls_mpi_lset with error code : -0x%x", -mbed_err);
         ret = ESP_FAIL;
@@ -274,7 +286,7 @@ static esp_err_t handle_session_command0(session_t *cur_session,
     }
 
     flip_endian(cur_session->client_pubkey, PUBLIC_KEY_LEN);
-    mbed_err = mbedtls_mpi_read_binary(ACCESS_ECDH(&ctx_server, Qp).X, cli_pubkey, PUBLIC_KEY_LEN);
+    mbed_err = mbedtls_mpi_read_binary(ACCESS_ECDH(&ctx_server, Qp).MBEDTLS_PRIVATE(X), cli_pubkey, PUBLIC_KEY_LEN);
     flip_endian(cur_session->client_pubkey, PUBLIC_KEY_LEN);
     if (mbed_err != 0) {
         ESP_LOGE(TAG, "Failed at mbedtls_mpi_read_binary with error code : -0x%x", -mbed_err);
@@ -465,7 +477,7 @@ static esp_err_t sec1_new_session(protocomm_security_handle_t handle, uint32_t s
 
     if (cur_session->id != -1) {
         /* Only one session is allowed at a time */
-        ESP_LOGE(TAG, "Closing old session with id %u", cur_session->id);
+        ESP_LOGE(TAG, "Closing old session with id %" PRIu32, cur_session->id);
         sec1_close_session(cur_session, session_id);
     }
 
@@ -509,7 +521,7 @@ static esp_err_t sec1_decrypt(protocomm_security_handle_t handle,
     }
 
     if (!cur_session || cur_session->id != session_id) {
-        ESP_LOGE(TAG, "Session with ID %d not found", session_id);
+        ESP_LOGE(TAG, "Session with ID %" PRId32 "not found", session_id);
         return ESP_ERR_INVALID_STATE;
     }
 
@@ -548,7 +560,7 @@ static esp_err_t sec1_req_handler(protocomm_security_handle_t handle,
     }
 
     if (session_id != cur_session->id) {
-        ESP_LOGE(TAG, "Invalid session ID : %d (expected %d)", session_id, cur_session->id);
+        ESP_LOGE(TAG, "Invalid session ID:%" PRId32 "(expected %" PRId32 ")", session_id, cur_session->id);
         return ESP_ERR_INVALID_STATE;
     }
 

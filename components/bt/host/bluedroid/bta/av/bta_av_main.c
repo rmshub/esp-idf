@@ -474,6 +474,7 @@ static void bta_av_api_sink_enable(tBTA_AV_DATA *p_data)
     APPL_TRACE_DEBUG("bta_av_api_sink_enable %d \n", activate_sink)
     char p_service_name[BTA_SERVICE_NAME_LEN + 1];
     BCM_STRNCPY_S(p_service_name, BTIF_AVK_SERVICE_NAME, BTA_SERVICE_NAME_LEN);
+    p_service_name[BTA_SERVICE_NAME_LEN] = '\0';
 
     if (activate_sink) {
         AVDT_SINK_Activate();
@@ -537,6 +538,7 @@ static void bta_av_api_register(tBTA_AV_DATA *p_data)
     UINT8           index = 0;
     char p_avk_service_name[BTA_SERVICE_NAME_LEN + 1];
     BCM_STRNCPY_S(p_avk_service_name, BTIF_AVK_SERVICE_NAME, BTA_SERVICE_NAME_LEN);
+    p_avk_service_name[BTA_SERVICE_NAME_LEN] = '\0';
 
     memset(&cs, 0, sizeof(tAVDT_CS));
 
@@ -583,10 +585,10 @@ static void bta_av_api_register(tBTA_AV_DATA *p_data)
                                 (UINT8)(bta_av_cb.sec_mask & (~BTA_SEC_AUTHORIZE)), BTA_ID_AV);
                 if (p_data->api_reg.tsep == AVDT_TSEP_SRC) {
                     bta_ar_reg_avrc(UUID_SERVCLASS_AV_REM_CTRL_TARGET, "AV Remote Control Target\n", NULL,
-                                p_bta_av_cfg->avrc_src_tg_cat, BTA_ID_AV);
+                                p_bta_av_cfg->avrc_src_tg_cat, BTA_ID_AV, p_bta_av_cfg->avrc_br);
                 } else {
                     bta_ar_reg_avrc(UUID_SERVCLASS_AV_REM_CTRL_TARGET, "AV Remote Control Target\n", NULL,
-                                p_bta_av_cfg->avrc_snk_tg_cat, BTA_ID_AV);
+                                p_bta_av_cfg->avrc_snk_tg_cat, BTA_ID_AV, p_bta_av_cfg->avrc_br);
                 }
 #endif
             }
@@ -651,7 +653,7 @@ static void bta_av_api_register(tBTA_AV_DATA *p_data)
             if (bta_av_cb.features & BTA_AV_FEAT_DELAY_RPT) {
                 cs.cfg.psc_mask |= AVDT_PSC_DELAY_RPT;
                 a2d_set_avdt_sdp_ver(AVDT_VERSION_SYNC);
-                a2d_set_a2dp_sdp_ver(A2D_VERSION_SYC);
+                a2d_set_a2dp_sdp_ver(A2D_VERSION_1_4);
             }
 
             /* keep the configuration in the stream control block */
@@ -719,10 +721,10 @@ static void bta_av_api_register(tBTA_AV_DATA *p_data)
                     /* create an SDP record as AVRC CT. */
                     if (p_data->api_reg.tsep == AVDT_TSEP_SRC) {
                         bta_ar_reg_avrc(UUID_SERVCLASS_AV_REMOTE_CONTROL, "AV Remote Control Controller\n", NULL,
-                                    p_bta_av_cfg->avrc_src_ct_cat, BTA_ID_AV);
+                                    p_bta_av_cfg->avrc_src_ct_cat, BTA_ID_AV, p_bta_av_cfg->avrc_br);
                     } else {
                         bta_ar_reg_avrc(UUID_SERVCLASS_AV_REMOTE_CONTROL, "AV Remote Control Controller\n", NULL,
-                                    p_bta_av_cfg->avrc_snk_ct_cat, BTA_ID_AV);
+                                    p_bta_av_cfg->avrc_snk_ct_cat, BTA_ID_AV, p_bta_av_cfg->avrc_br);
                     }
 #endif
                 }
@@ -1249,9 +1251,11 @@ BOOLEAN bta_av_hdl_event(BT_HDR *p_msg)
     } else {
         APPL_TRACE_VERBOSE("handle=0x%x\n", p_msg->layer_specific);
         tBTA_AV_SCB *p_scb = bta_av_hndl_to_scb(p_msg->layer_specific);
-        p_scb->disc_rsn = p_msg->offset;
-        /* stream state machine events */
-        bta_av_ssm_execute(p_scb, p_msg->event, (tBTA_AV_DATA *) p_msg);
+        if (p_scb) {
+            p_scb->disc_rsn = p_msg->offset;
+            /* stream state machine events */
+            bta_av_ssm_execute(p_scb, p_msg->event, (tBTA_AV_DATA *) p_msg);
+        }
     }
     return TRUE;
 }

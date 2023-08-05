@@ -24,6 +24,7 @@
 #include "hal/assert.h"
 #include "hal/spi_types.h"
 #include "hal/spi_flash_types.h"
+#include "hal/misc.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -314,6 +315,17 @@ static inline void spimem_flash_ll_program_page(spi_mem_dev_t *dev, const void *
 static inline void spimem_flash_ll_user_start(spi_mem_dev_t *dev)
 {
     dev->cmd.usr = 1;
+}
+
+/**
+ * In user mode, it is set to indicate that program/erase operation will be triggered.
+ * This function is combined with `spimem_flash_ll_user_start`. The pe_bit will be cleared automatically once the operation done.
+ *
+ * @param dev Beginning address of the peripheral registers.
+ */
+static inline void spimem_flash_ll_set_pe_bit(spi_mem_dev_t *dev)
+{
+    dev->cmd.flash_pe = 1;
 }
 
 /**

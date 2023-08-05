@@ -2,7 +2,6 @@ TEST_PROGRAM=test_nvs
 all: $(TEST_PROGRAM)
 
 SOURCE_FILES = \
-	esp_error_check_stub.cpp \
 	$(addprefix ../src/, \
 		nvs_types.cpp \
 		nvs_api.cpp \
@@ -22,15 +21,11 @@ SOURCE_FILES = \
 	test_spi_flash_emulation.cpp \
 	test_intrusive_list.cpp \
 	test_nvs.cpp \
-	test_partition_manager.cpp \
-	test_nvs_handle.cpp \
-	test_nvs_storage.cpp \
 	test_nvs_partition.cpp \
-	test_nvs_cxx_api.cpp \
-	test_nvs_initialization.cpp \
+	test_partition_manager.cpp \
 	main.cpp
 
-SOURCE_FILES_C = ../../esp_rom/linux/esp_rom_crc.c
+SOURCE_FILES_C = ../../esp_rom/linux/esp_rom_crc.c ../../esp_common/src/esp_err_check_linux.c
 
 ifeq ($(shell $(CC) -v 2>&1 | grep -c "clang version"), 1)
 COMPILER := clang
@@ -38,10 +33,14 @@ else
 COMPILER := gcc
 endif
 
-CPPFLAGS += -I../private_include -I../include -I../src -I../../esp_rom/include -I../../esp_rom/include/linux -I../../log/include -I./ -I../../esp_common/include -I../../esp32/include -I ../../mbedtls/mbedtls/include -I ../../spi_flash/include -I ../../hal/include -I ../../xtensa/include -I ../../../tools/catch -fprofile-arcs -ftest-coverage -g2 -ggdb
-CFLAGS += -fprofile-arcs -ftest-coverage -DLINUX_TARGET
-CXXFLAGS += -std=c++11 -Wall -Werror -DLINUX_TARGET
+CPPFLAGS += -I../private_include -I../include -I../src -I../../esp_rom/include -I../../esp_rom/include/linux -I../../log/include -I./ -I../../esp_common/include -I../../esp32/include -I ../../mbedtls/mbedtls/include -I ../../spi_flash/include -I ../../esp_partition/include -I ../../hal/include -I ../../xtensa/include -I ../../soc/linux/include -I ../../../tools/catch -fprofile-arcs -ftest-coverage -g2 -ggdb
+CFLAGS += -fprofile-arcs -ftest-coverage -DLINUX_TARGET -DLINUX_HOST_LEGACY_TEST
+CXXFLAGS += -std=c++11 -Wall -Werror -DLINUX_TARGET -DLINUX_HOST_LEGACY_TEST
 LDFLAGS += -lstdc++ -Wall -fprofile-arcs -ftest-coverage
+
+ifeq ($(shell uname -s),Linux)
+LDFLAGS += -lbsd
+endif
 
 ifeq ($(COMPILER),clang)
 CFLAGS += -fsanitize=address
@@ -53,13 +52,16 @@ OBJ_FILES = $(SOURCE_FILES:.cpp=.o)
 OBJ_FILES_C = $(SOURCE_FILES_C:.c=.o)
 
 COVERAGE_FILES = $(OBJ_FILES:.o=.gc*)
+MBEDTLS_LIB := ../../mbedtls/mbedtls/library/libmbedcrypto.a
 
 $(OBJ_FILES): %.o: %.cpp
 $(OBJ_FILES_C): %.c: %.c
 
-$(TEST_PROGRAM): clean-coverage $(OBJ_FILES) $(OBJ_FILES_C)
+$(MBEDTLS_LIB):
 	$(MAKE) -C ../../mbedtls/mbedtls/ lib
-	g++ $(LDFLAGS) -o $(TEST_PROGRAM) $(OBJ_FILES) $(OBJ_FILES_C) ../../mbedtls/mbedtls/library/libmbedcrypto.a
+
+$(TEST_PROGRAM): $(OBJ_FILES) $(OBJ_FILES_C) $(MBEDTLS_LIB) | clean-coverage
+	g++ -o $@ $^ $(LDFLAGS)
 
 $(OUTPUT_DIR):
 	mkdir -p $(OUTPUT_DIR)
@@ -91,10 +93,14 @@ clean: clean-coverage
 	rm -f ../nvs_partition_generator/partition_single_page.bin
 	rm -f ../nvs_partition_generator/partition_multipage_blob.bin
 	rm -f ../nvs_partition_generator/partition_encrypted.bin
+	rm -f ../nvs_partition_generator/partition_encrypted_hmac.bin
 	rm -f ../nvs_partition_generator/partition_encrypted_using_keygen.bin
 	rm -f ../nvs_partition_generator/partition_encrypted_using_keyfile.bin
+	rm -f ../nvs_partition_generator/partition_encrypted_using_keygen_hmac.bin
 	rm -f ../nvs_partition_generator/partition_decrypted.bin
+	rm -f ../nvs_partition_generator/partition_decrypted_hmac.bin
 	rm -f ../nvs_partition_generator/partition_encoded.bin
+	rm -f ../nvs_partition_generator/Test-1-partition-encrypted-hmac.bin
 	rm -f ../nvs_partition_generator/Test-1-partition-encrypted.bin
 	rm -f ../nvs_partition_generator/Test-1-partition.bin
 	rm -f ../../../tools/mass_mfg/samples/sample_values_multipage_blob_created.csv

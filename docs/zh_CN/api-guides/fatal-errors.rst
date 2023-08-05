@@ -17,7 +17,7 @@
       - :doc:`中断看门狗 <../api-reference/system/wdts>` 超时
       - :doc:`任务看门狗 <../api-reference/system/wdts>` 超时（只有开启 :ref:`CONFIG_ESP_TASK_WDT_PANIC` 后才会触发严重错误）
       - 高速缓存访问错误
-      :CONFIG_ESP_SYSTEM_MEMPROT_FEATURE: - 内存保护故障
+      :SOC_MEMPROT_SUPPORTED: - 内存保护故障
       - 掉电检测事件
       - 堆栈溢出
       - 堆栈粉碎保护检查
@@ -78,6 +78,8 @@
 - 如果 :ref:`CONFIG_ESP_PANIC_HANDLER_IRAM` 被禁用（默认情况下禁用），紧急处理程序的代码会放置在 flash 而不是 IRAM 中。这意味着，如果 ESP-IDF 在 flash 高速缓存禁用时崩溃，在运行 GDB Stub 和内核转储之前紧急处理程序会自动重新使能 flash 高速缓存。如果 flash 高速缓存也崩溃了，这样做会增加一些小风险。
 
   如果使能了该选项，紧急处理程序的代码（包括所需的 UART 函数）会放置在 IRAM 中，导致 SRAM 中的可用内存空间变小。当禁用 flash 高速缓存（如写入 SPI flash）时或触发异常导致 flash 高速缓存崩溃时，可用此选项调试一些复杂的崩溃问题。
+
+- 如果启用 :ref:`CONFIG_ESP_SYSTEM_PANIC_REBOOT_DELAY_SECONDS` （默认为禁用）并将其配置为大于 0 的数字，紧急处理程序将基于该数字延迟重启的时间，单位为秒。如果用于监测串行输出的工具不支持停止和检查串行输出，可启用该选项。在这种情况下，借助延迟重启，用户可以在延迟期间检查和调试紧急处理程序的输出（例如回溯）。延迟结束后，设备将重新启动，并记录重置原因。
 
 下图展示了紧急处理程序的行为：
 
@@ -279,6 +281,21 @@ GDB Stub
 
 在 GDB 会话中，我们可以检查 CPU 寄存器，本地和静态变量以及内存中任意位置的值。但是不支持设置断点，改变 PC 值或者恢复程序的运行。若要复位程序，请退出 GDB 会话，在 IDF 监视器 中连续输入 Ctrl-T Ctrl-R，或者按下开发板上的复位按键也可以重新运行程序。
 
+.. _RTC-Watchdog-Timeout:
+
+RTC 看门狗超时
+----------------
+{IDF_TARGET_RTCWDT_RTC_RESET:default="Not updated", esp32="RTCWDT_RTC_RESET", esp32s2="RTCWDT_RTC_RST", esp32s3="RTCWDT_RTC_RST", esp32c3="RTCWDT_RTC_RST", esp32c2="RTCWDT_RTC_RST", esp32c6="LP_WDT_SYS", esp32h2="LP_WDT_SYS"}
+
+RTC 看门狗在启动代码中用于跟踪执行时间，也有助于防止由于电源不稳定引起的锁定。RTC 看门狗默认启用，参见 :ref:`CONFIG_BOOTLOADER_WDT_ENABLE`。如果执行时间超时，RTC 看门狗将自动重启系统。此时，ROM 引导加载程序将打印消息 ``RTC Watchdog Timeout`` 说明重启原因。
+
+::
+
+    rst:0x10 ({IDF_TARGET_RTCWDT_RTC_RESET})
+
+
+RTC 看门狗涵盖了从一级引导程序（ROM 引导程序）到应用程序启动的执行时间，最初在 ROM 引导程序中设置，而后在引导程序中使用 :ref:`CONFIG_BOOTLOADER_WDT_TIME_MS` 选项进行配置（默认 9000 ms）。在应用初始化阶段，由于慢速时钟源可能已更改，RTC 看门狗将被重新配置，最后在调用 ``app_main()`` 之前被禁用。可以使用选项 :ref:`CONFIG_BOOTLOADER_WDT_DISABLE_IN_USER_CODE` 以保证 RTC 看门狗在调用 ``app_main`` 之前不被禁用，而是保持运行状态，用户需要在应用代码中定期“喂狗”。
+
 .. _Guru-Meditation-Errors:
 
 Guru Meditation 错误
@@ -344,11 +361,7 @@ Guru Meditation 错误
     Unhandled debug exception
     ^^^^^^^^^^^^^^^^^^^^^^^^^
 
-    这后面通常会再跟一条消息::
-
-        Debug exception reason: Stack canary watchpoint triggered (task_name)
-
-    此错误表示应用程序写入的位置越过了 ``task_name`` 任务堆栈的末尾，请注意，并非每次堆栈溢出都会触发此错误。任务有可能会绕过堆栈金丝雀（stack canary）的位置访问内存，在这种情况下，监视点就不会被触发。
+    执行指令 ``BREAK`` 时，会发生此 CPU 异常。
 
 .. only:: CONFIG_IDF_TARGET_ARCH_RISCV
 
@@ -365,7 +378,7 @@ Guru Meditation 错误
     Breakpoint
     ^^^^^^^^^^
 
-    当执行 ``EBREAK`` 指令时，会发生此 CPU 异常。
+    执行 ``EBREAK`` 指令时，会发生此 CPU 异常。请参见 :ref:`FreeRTOS-End-Of-Stack-Watchpoint`。
 
     Load address misaligned, Store address misaligned
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -382,7 +395,7 @@ Interrupt wdt timeout on CPU0 / CPU1
 
 在某些情况下，ESP-IDF 会暂时禁止通过高速缓存访问外部 SPI flash 和 SPI RAM，例如在使用 spi_flash API 读取/写入/擦除/映射 SPI flash 的时候。在这些情况下，任务会被挂起，并且未使用 ``ESP_INTR_FLAG_IRAM`` 注册的中断处理程序会被禁用。请确保任何使用此标志注册的中断处理程序所访问的代码和数据分别位于 IRAM 和 DRAM 中。更多详细信息请参阅 :ref:`SPI flash API 文档 <iram-safe-interrupt-handlers>`。
 
-.. only:: CONFIG_ESP_SYSTEM_MEMPROT_FEATURE
+.. only:: SOC_MEMPROT_SUPPORTED
 
     Memory protection fault
     ^^^^^^^^^^^^^^^^^^^^^^^
@@ -423,6 +436,64 @@ ESP-IDF 堆的实现包含许多运行时的堆结构检查，可以在 menuconf
 
 更多详细信息，请查阅 :doc:`堆内存调试 <../api-reference/system/heap_debug>` 文档。
 
+|STACK_OVERFLOW|
+^^^^^^^^^^^^^^^^
+
+.. only:: SOC_ASSIST_DEBUG_SUPPORTED
+
+    硬件堆栈保护
+    """"""""""""""""""""
+
+    {IDF_TARGET_NAME} 集成了辅助调试模块，支持监测堆栈指针 (SP) 寄存器，确保其值位于已分配给堆栈的内存范围内。发生中断处理或 FreeRTOS 切换上下文时，辅助调试模块都会设置新的堆栈监测范围。注意，该操作会对性能产生一定影响。
+
+    以下为辅助调试模块的部分相关特性：
+
+    - 采用硬件实现
+    - 支持监测堆栈指针寄存器的值
+    - 无需占用额外 CPU 时间或内存，即可监测堆栈内存范围
+
+    当辅助调试模块检测到堆栈溢出时，将触发紧急处理程序并打印类似如下信息：
+
+    .. parsed-literal::
+
+        Guru Meditation Error: Core 0 panic'ed (Stack protection fault).
+
+    可以通过 :ref:`CONFIG_ESP_SYSTEM_HW_STACK_GUARD` 选项，禁用硬件堆栈保护。
+
+.. _FreeRTOS-End-Of-Stack-Watchpoint:
+
+FreeRTOS 任务堆栈末尾监视点
+""""""""""""""""""""""""""""""""
+
+ESP-IDF 支持基于监视点的 FreeRTOS 堆栈溢出检测机制。每次 FreeRTOS 切换任务上下文时，都会设置一个监视点，用于监视堆栈的最后 32 字节。
+
+通常，该设置会提前触发监视点，触发点可能会比预期提前多达 28 字节。基于 FreeRTOS 中堆栈金丝雀的大小为 20 字节，故将观察范围设置为 32 字节，确保可以在堆栈金丝雀遭到破坏前及时触发监测点。
+
+.. note::
+    并非每次堆栈溢出都能触发监视点。如果任务绕过堆栈金丝雀的位置访问堆栈，则无法触发监视点。
+
+监视点触发后，将打印类似如下信息：
+
+.. only:: CONFIG_IDF_TARGET_ARCH_XTENSA
+
+    ::
+
+        Debug exception reason: Stack canary watchpoint triggered (task_name)
+
+.. only:: CONFIG_IDF_TARGET_ARCH_RISCV
+
+    ::
+
+        Guru Meditation Error: Core  0 panic'ed (Breakpoint). Exception was unhandled.
+
+可以通过 :ref:`CONFIG_FREERTOS_WATCHPOINT_END_OF_STACK` 选项启用该功能。
+
+
+FreeRTOS 堆栈检查
+"""""""""""""""""""""
+
+请参见 :ref:`CONFIG_FREERTOS_CHECK_STACKOVERFLOW`。
+
 堆栈粉碎
 ^^^^^^^^^^
 
@@ -440,16 +511,18 @@ ESP-IDF 堆的实现包含许多运行时的堆结构检查，可以在 menuconf
 .. only:: CONFIG_IDF_TARGET_ARCH_XTENSA
 
     .. |CPU_EXCEPTIONS_LIST| replace:: 非法指令，加载/存储时的内存对齐错误，加载/存储时的访问权限错误，双重异常。
-    .. |ILLEGAL_INSTR_MSG| replace:: IllegalInstruction
-    .. |CACHE_ERR_MSG| replace:: Cache disabled but cached memory region accessed
+    .. |ILLEGAL_INSTR_MSG| replace:: 非法指令
+    .. |CACHE_ERR_MSG| replace:: cache 已禁用，但仍可访问缓存内存区域
+    .. |STACK_OVERFLOW| replace:: 堆栈溢出
 
 .. only:: CONFIG_IDF_TARGET_ARCH_RISCV
 
     .. |CPU_EXCEPTIONS_LIST| replace:: 非法指令，加载/存储时的内存对齐错误，加载/存储时的访问权限错误。
-    .. |ILLEGAL_INSTR_MSG| replace:: Illegal instruction
-    .. |CACHE_ERR_MSG| replace:: Cache error
+    .. |ILLEGAL_INSTR_MSG| replace:: 非法指令
+    .. |CACHE_ERR_MSG| replace:: cache 错误
+    .. |STACK_OVERFLOW| replace:: 堆栈溢出
 
-未定义行为清理器（UBSAN）检查
+未定义行为清理器 (UBSAN) 检查
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 未定义行为清理器 (UBSAN) 是一种编译器功能，它会为可能不正确的操作添加运行时检查，例如：

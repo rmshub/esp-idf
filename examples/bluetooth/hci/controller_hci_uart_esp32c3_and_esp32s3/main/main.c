@@ -221,8 +221,8 @@ void uhci_uart_install(void)
     };
     ESP_ERROR_CHECK(gdma_new_channel(&rx_channel_config, &s_rx_channel));
 
-    gdma_connect(s_tx_channel, GDMA_MAKE_TRIGGER(GDMA_TRIG_PERIPH_UART, 0));
-    gdma_connect(s_rx_channel, GDMA_MAKE_TRIGGER(GDMA_TRIG_PERIPH_UART, 0));
+    gdma_connect(s_tx_channel, GDMA_MAKE_TRIGGER(GDMA_TRIG_PERIPH_UHCI, 0));
+    gdma_connect(s_rx_channel, GDMA_MAKE_TRIGGER(GDMA_TRIG_PERIPH_UHCI, 0));
 
     gdma_strategy_config_t strategy_config = {
         .auto_update_desc = false,
@@ -279,7 +279,7 @@ void app_main(void)
         return;
     }
 
-    ESP_LOGI(tag, "HCI messages can be communicated over UART%d: \n"
+    ESP_LOGI(tag, "HCI messages can be communicated over UART%d:\n"
              "--PINs: TxD %d, RxD %d, RTS %d, CTS %d\n"
              "--Baudrate: %d", UART_HCI_NUM,
              GPIO_UART_TXD_OUT, GPIO_UART_RXD_IN, GPIO_UART_RTS_OUT, GPIO_UART_CTS_IN,

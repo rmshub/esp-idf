@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2020-2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2020-2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -16,13 +16,16 @@
 #pragma once
 
 #include "soc/soc_caps.h"
+#if SOC_I2S_SUPPORTED
 #include "hal/i2s_types.h"
 #include "hal/i2s_ll.h"
+#endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+#if SOC_I2S_SUPPORTED
 /**
  * @brief General slot configuration information
  * @note It is a general purpose struct, not supposed to be used directly by user
@@ -37,7 +40,7 @@ typedef struct {
             i2s_std_slot_mask_t     slot_mask;          /*!< Select the left, right or both slot */
             uint32_t                ws_width;           /*!< WS signal width (i.e. the number of bclk ticks that ws signal is high) */
             bool                    ws_pol;             /*!< WS signal polarity, set true to enable high lever first */
-            bool                    bit_shift;          /*!< Set to enbale bit shift in Philip mode */
+            bool                    bit_shift;          /*!< Set to enbale bit shift in Philips mode */
 #if SOC_I2S_HW_VERSION_1    // For esp32/esp32-s2
             bool                    msb_right;          /*!< Set to place right channel data at the MSB in the FIFO */
 #else
@@ -53,7 +56,7 @@ typedef struct {
             i2s_tdm_slot_mask_t     slot_mask;          /*!< Slot mask. Activating slots by setting 1 to corresponding bits. When the activated slots is not consecutive, those data in unactivated slots will be ignored */
             uint32_t                ws_width;           /*!< WS signal width ((i.e. the number of bclk ticks that ws signal is high)) */
             bool                    ws_pol;             /*!< WS signal polarity, set true to enable high lever first */
-            bool                    bit_shift;          /*!< Set true to enable bit shift in Philip mode */
+            bool                    bit_shift;          /*!< Set true to enable bit shift in Philips mode */
 
             bool                    left_align;         /*!< Set true to enable left alignment */
             bool                    big_endian;         /*!< Set true to enable big endian */
@@ -67,19 +70,28 @@ typedef struct {
 #if SOC_I2S_SUPPORTS_PDM_TX
         /* PDM TX configurations */
         struct {
+#if SOC_I2S_HW_VERSION_1
+            i2s_pdm_slot_mask_t     slot_mask;          /*!< Slot mask to choose left or right slot */
+#endif
             uint32_t                sd_prescale;        /*!< Sigma-delta filter prescale */
             i2s_pdm_sig_scale_t     sd_scale;           /*!< Sigma-delta filter scaling value */
             i2s_pdm_sig_scale_t     hp_scale;           /*!< High pass filter scaling value */
             i2s_pdm_sig_scale_t     lp_scale;           /*!< Low pass filter scaling value */
             i2s_pdm_sig_scale_t     sinc_scale;         /*!< Sinc filter scaling value */
 #if SOC_I2S_HW_VERSION_2
-            bool                    sd_en;              /*!< Sigma-delta filter enable */
+            i2s_pdm_tx_line_mode_t  line_mode;          /*!< PDM TX line mode, on-line codec, one-line dac, two-line dac mode can be selected */
             bool                    hp_en;              /*!< High pass filter enable */
             float                   hp_cut_off_freq_hz; /*!< High pass filter cut-off frequency, range 23.3Hz ~ 185Hz, see cut-off frequency sheet above */
             uint32_t                sd_dither;          /*!< Sigma-delta filter dither */
             uint32_t                sd_dither2;         /*!< Sigma-delta filter dither2 */
 #endif // SOC_I2S_HW_VERSION_2
         } pdm_tx;                                       /*!< Specific configurations for PDM TX mode */
+#endif
+#if SOC_I2S_SUPPORTS_PDM_RX
+        /* PDM TX configurations */
+        struct {
+            i2s_pdm_slot_mask_t     slot_mask;          /*!< Choose the slots to activate */
+        } pdm_rx;                                       /*!< Specific configurations for PDM TX mode */
 #endif
     };
 
@@ -110,6 +122,15 @@ typedef struct {
  * @param port_id The I2S port number, the max port number is (SOC_I2S_NUM -1)
  */
 void i2s_hal_init(i2s_hal_context_t *hal, int port_id);
+
+/**
+ * @brief Helper function for calculating the precise mclk division by sclk and mclk
+ *
+ * @param sclk      system clock
+ * @param mclk      module clock
+ * @param mclk_div  mclk division coefficients, including integer part and decimal part
+ */
+void i2s_hal_calc_mclk_precise_division(uint32_t sclk, uint32_t mclk, i2s_ll_mclk_div_t *mclk_div);
 
 /**
  * @brief Set tx channel clock
@@ -435,6 +456,8 @@ void i2s_hal_tdm_enable_rx_channel(i2s_hal_context_t *hal);
  */
 #define i2s_hal_get_in_eof_des_addr(hal, addr) i2s_ll_rx_get_eof_des_addr((hal)->dev, addr)
 #endif
+
+#endif // SOC_I2S_SUPPORTED
 
 #ifdef __cplusplus
 }

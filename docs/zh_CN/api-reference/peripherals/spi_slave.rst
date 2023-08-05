@@ -1,32 +1,16 @@
 SPI 从机驱动程序
 ================
 
-SPI 从机驱动程序控制在 {IDF_TARGET_NAME} 中作为从机的 SPI 外设。
+:link_to_translation:`en:[English]`
 
+SPI 从机驱动程序控制在 {IDF_TARGET_NAME} 中作为从机的 GP-SPI 外设。
 
-{IDF_TARGET_NAME} 中 SPI 外设概述
------------------------------------------------
-
-.. only:: esp32 or esp32s2 or esp32s3
-
-    {IDF_TARGET_NAME} 集成了 2 个通用的 SPI 控制器，可用作片外 SPI 主机驱动的从机节点。
-
-    .. only:: esp32
-
-        - SPI2，有时也称为 HSPI
-        - SPI3，有时也称为 VSPI
-
-    SPI2 和 SPI3 各自具有一个与之同名的独立总线信号。
-
-.. only:: esp32c3 or esp32c2
-
-    {IDF_TARGET_NAME} 集成了 1 个通用的 SPI 控制器，可用作片外 SPI 主机驱动的从机节点。该控制器为 SPI2，具有一个与之同名的独立总线信号。
-
+有关 GP-SPI 硬件相关信息，请参考 *{IDF_TARGET_NAME} 技术参考手册* > *SPI 控制器* [`PDF <{IDF_TARGET_TRM_CN_URL}#spi>`__]。
 
 术语
 -----------
 
-下表为 SPI 主机驱动的相关术语。
+下表为 SPI 从机驱动的相关术语。
 
 .. list-table::
    :widths: 30 70
@@ -69,6 +53,7 @@ SPI 从机驱动程序控制在 {IDF_TARGET_NAME} 中作为从机的 SPI 外设�
 
 SPI 从机驱动程序允许将 SPI 外设作为全双工设备使用。驱动程序可以发送/接收长度不超过 {IDF_TARGET_MAX_DATA_BUF} 字节的传输事务，或者利用 DMA 来发送/接收更长的传输事务。然而，存在一些与 DMA 有关的 :ref:`已知问题 <spi_dma_known_issues>`。
 
+SPI 从机驱动程序支持将 SPI ISR 注册至指定 CPU 内核。如果多个任务同时尝试访问一个 SPI 设备，建议您重构应用程序，以使每个 SPI 外设一次只由一个任务访问。此外，请使用 :cpp:member:`spi_bus_config_t::isr_cpu_id` 将 SPI ISR 注册至与 SPI 外设相关任务相同的内核，确保线程安全。
 
 SPI 传输事务
 ----------------
@@ -77,7 +62,7 @@ SPI 传输事务
 
 传输事务的属性由作为从机设备的 SPI 外设的配置结构体 :cpp:type:`spi_slave_interface_config_t` 和传输事务配置结构体 :cpp:type:`spi_slave_transaction_t` 决定。
 
-由于并非每次传输事务都需要写入和读取数据，您可以选择配置 :cpp:type:`spi_transaction_t` 为仅 TX、仅 RX 或同时 TX 和 RX 传输事务。如果将 :cpp:member:`spi_slave_transaction_t::rx_buffer` 设置为 NULL，读取阶段将被跳过。如果将 :cpp:member:`spi_slave_transaction_t::tx_buffer` 设置为 NULL，则写入阶段将被跳过。
+由于并非每次传输事务都需要写入和读取数据，您可以选择配置 :cpp:type:`spi_transaction_t` 为仅 TX、仅 RX 或同时 TX 和 RX 传输事务。如果将 :cpp:member:`spi_slave_transaction_t::rx_buffer` 设置为 NULL，读取阶段将被跳过。与之类似，如果将 :cpp:member:`spi_slave_transaction_t::tx_buffer` 设置为 NULL，则写入阶段将被跳过。
 
 .. note::
 
@@ -91,7 +76,7 @@ SPI 传输事务
 
 .. only:: esp32
 
-    如果传输事务的数据大于 32 字节，需要将参数 ``dma_chan`` 分别设置为 ``1`` 或 ``2`` 以使能 DMA 通道 1 或通道 2。若数据小于 32 字节，则应将 ``dma_chan`` 设为 ``0``。
+    如果传输事务的数据大于 32 字节，需要将参数 ``dma_chan`` 分别设置为 ``1`` 或 ``2`` 以使能 DMA 通道 1 或通道 2，否则应将 ``dma_chan`` 设为 ``0``。
 
 .. only:: esp32s2
 
@@ -111,16 +96,14 @@ SPI 传输事务
 
 如果传输长度超过缓存区长度，则只有在 :cpp:member:`spi_slave_transaction_t::length` 中指定的初始比特数会被发送和接收。此时， :cpp:member:`spi_slave_transaction_t::trans_len` 被设置为 :cpp:member:`spi_slave_transaction_t::length` 而非实际传输事务长度。若需满足实际传输事务长度的要求，请将 :cpp:member:`spi_slave_transaction_t::length` 设置为大于 :cpp:member:`spi_slave_transaction_t::trans_len` 预期最大值的值。如果传输长度短于缓存区长度，则只传输与缓存区长度相等的数据。
 
-.. only:: esp32
+GPIO 交换矩阵和 IO_MUX
+----------------------
 
-    GPIO 交换矩阵和 IO_MUX
-    ----------------------
+.. only:: esp32
 
     {IDF_TARGET_NAME} 的大多数外设信号都直接连接到其专用的 IO_MUX 管脚。不过，也可以使用 GPIO 交换矩阵，将信号路由到任何可用的其他管脚。
 
-    如果通过 GPIO 交换矩阵路由了至少一个信号，则所有信号都将通过 GPIO 交换矩阵路由。GPIO 交换矩阵以 80 MHz 的频率对所有信号进行采样，并在 GPIO 和外设之间进行传输。
-
-    如果已经配置过驱动程序，所有的 SPI 信号都已路由到专用的 IO_MUX 管脚，或者根本没有连接到任何管脚，那么 GPIO 交换矩阵将被绕过。
+    如果通过 GPIO 交换矩阵路由了至少一个信号，则所有信号都将通过 GPIO 交换矩阵路由。如果已经配置过驱动程序，所有 SPI 信号都已路由到专用 IO_MUX 管脚，或者没有连接到任何管脚，那么 GPIO 交换矩阵将被绕过。
 
     GPIO 交换矩阵提高了信号传输的灵活性，但也增大了 MISO 信号的输入延迟，导致违反 MISO 设置时间的可能性更高。如需 SPI 高速运行，请使用专用的 IO_MUX 管脚。
 
@@ -130,35 +113,65 @@ SPI 传输事务
 
     下表列出了 SPI 总线的 IO_MUX 管脚。
 
-    .. only:: esp32
+    .. list-table::
+       :widths: 40 30 30
+       :header-rows: 1
 
-        .. list-table::
-           :widths: 40 30 30
-           :header-rows: 1
+       * - 管脚名称
+         - GPIO 编号 (SPI2)
+         - GPIO 编号 (SPI3)
+       * - CS0*
+         - 15
+         - 5
+       * - SCLK
+         - 14
+         - 18
+       * - MISO
+         - 12
+         - 19
+       * - MOSI
+         - 13
+         - 23
+       * - QUADWP
+         - 2
+         - 22
+       * - QUADHD
+         - 4
+         - 21
 
-           * - 管脚名称
-             - GPIO 编号 (SPI2)
-             - GPIO 编号 (SPI3)
-           * - CS0*
-             - 15
-             - 5
-           * - SCLK
-             - 14
-             - 18
-           * - MISO
-             - 12
-             - 19
-           * - MOSI
-             - 13
-             - 23
-           * - QUADWP
-             - 2
-             - 22
-           * - QUADHD
-             - 4
-             - 21
+.. only:: not esp32
 
-    * 只有连接到总线上的第一个从机设备可以使用 CS0 管脚。
+    {IDF_TARGET_SPI2_IOMUX_PIN_CS:default="N/A",   esp32s2="10", esp32s3="10", esp32c2="10", esp32c3="10", esp32c6="16", esp32h2="1"}
+    {IDF_TARGET_SPI2_IOMUX_PIN_CLK:default="N/A",  esp32s2="12", esp32s3="12", esp32c2="6",  esp32c3="6",  esp32c6="6",  esp32h2="4"}
+    {IDF_TARGET_SPI2_IOMUX_PIN_MOSI:default="N/A", esp32s2="11"  esp32s3="11", esp32c2="7"   esp32c3="7",  esp32c6="7",  esp32h2="5"}
+    {IDF_TARGET_SPI2_IOMUX_PIN_MISO:default="N/A", esp32s2="13"  esp32s3="13", esp32c2="2"   esp32c3="2",  esp32c6="2",  esp32h2="0"}
+    {IDF_TARGET_SPI2_IOMUX_PIN_HD:default="N/A",   esp32s2="9"   esp32s3="9",  esp32c2="4"   esp32c3="4",  esp32c6="4",  esp32h2="3"}
+    {IDF_TARGET_SPI2_IOMUX_PIN_WP:default="N/A",   esp32s2="14"  esp32s3="14", esp32c2="5"   esp32c3="5",  esp32c6="5",  esp32h2="2"}
+
+    {IDF_TARGET_NAME} 的大多数外设信号都直接连接到其专用的 IO_MUX 管脚。不过，也可以使用 GPIO 交换矩阵，将信号路由到任何可用的其他管脚。如果通过 GPIO 交换矩阵路由了至少一个信号，则所有信号都将通过 GPIO 交换矩阵路由。
+
+    当 SPI 主机频率配置为 80 MHz 或更低时，则通过 GPIO 交换矩阵或 IO_MUX 路由 SPI 管脚效果相同。
+
+    下表列出了 SPI 总线的 IO_MUX 管脚。
+
+    .. list-table::
+       :widths: 40 30
+       :header-rows: 1
+
+       * - 管脚名称
+         - GPIO 编号 (SPI2)
+       * - CS0
+         - {IDF_TARGET_SPI2_IOMUX_PIN_CS}
+       * - SCLK
+         - {IDF_TARGET_SPI2_IOMUX_PIN_CLK}
+       * - MISO
+         - {IDF_TARGET_SPI2_IOMUX_PIN_MISO}
+       * - MOSI
+         - {IDF_TARGET_SPI2_IOMUX_PIN_MOSI}
+       * - QUADWP
+         - {IDF_TARGET_SPI2_IOMUX_PIN_WP}
+       * - QUADHD
+         - {IDF_TARGET_SPI2_IOMUX_PIN_HD}
 
 
 速度与时钟
@@ -179,7 +192,7 @@ SPI 传输事务
 时钟频率要求
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-{IDF_TARGET_MAX_FREQ:default="60", esp32="10", esp32s2="40"}
+{IDF_TARGET_MAX_FREQ:default="60", esp32="10", esp32s2="40", esp32c6="40", esp32h2="32"}
 
 SPI 从机的工作频率最高可达 {IDF_TARGET_MAX_FREQ} MHz。如果时钟频率过快或占空比不足 50%，数据就无法被正确识别或接收。
 
@@ -196,7 +209,7 @@ SPI 从机的工作频率最高可达 {IDF_TARGET_MAX_FREQ} MHz。如果时钟�
         .. list-table::
            :widths: 30 40 40
            :header-rows: 1
-        
+
            * - /
              - MISO 输出延迟 (ns)
              - 频率限制 (MHz)

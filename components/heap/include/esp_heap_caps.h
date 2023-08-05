@@ -11,9 +11,16 @@
 #include "multi_heap.h"
 #include <sdkconfig.h>
 #include "esp_err.h"
+#include "esp_attr.h"
 
 #ifdef __cplusplus
 extern "C" {
+#endif
+
+#if CONFIG_HEAP_PLACE_FUNCTION_INTO_FLASH
+#define HEAP_IRAM_ATTR
+#else
+#define HEAP_IRAM_ATTR IRAM_ATTR
 #endif
 
 /**
@@ -33,7 +40,7 @@ extern "C" {
 #define MALLOC_CAP_INTERNAL         (1<<11) ///< Memory must be internal; specifically it should not disappear when flash/spiram cache is switched off
 #define MALLOC_CAP_DEFAULT          (1<<12) ///< Memory can be returned in a non-capability-specific memory allocation (e.g. malloc(), calloc()) call
 #define MALLOC_CAP_IRAM_8BIT        (1<<13) ///< Memory must be in IRAM and allow unaligned access
-#define MALLOC_CAP_RETENTION        (1<<14)
+#define MALLOC_CAP_RETENTION        (1<<14) ///< Memory must be able to accessed by retention DMA
 #define MALLOC_CAP_RTCRAM           (1<<15) ///< Memory must be in RTC fast memory
 
 #define MALLOC_CAP_INVALID          (1<<31) ///< Memory can't be used / list end marker
@@ -53,12 +60,30 @@ typedef void (*esp_alloc_failed_hook_t) (size_t size, uint32_t caps, const char 
  */
 esp_err_t heap_caps_register_failed_alloc_callback(esp_alloc_failed_hook_t callback);
 
+#ifdef CONFIG_HEAP_USE_HOOKS
+/**
+ * @brief callback called after every allocation
+ * @param ptr the allocated memory
+ * @param size in bytes of the allocation
+ * @param caps Bitwise OR of MALLOC_CAP_* flags indicating the type of memory allocated.
+ * @note this hook is called on the same thread as the allocation, which may be within a low level operation.
+ * You should refrain from doing heavy work, logging, flash writes, or any locking.
+ */
+__attribute__((weak)) HEAP_IRAM_ATTR void esp_heap_trace_alloc_hook(void* ptr, size_t size, uint32_t caps);
+
+/**
+ * @brief callback called after every free
+ * @param ptr the memory that was freed
+ * @note this hook is called on the same thread as the allocation, which may be within a low level operation.
+ * You should refrain from doing heavy work, logging, flash writes, or any locking.
+ */
+__attribute__((weak)) HEAP_IRAM_ATTR void esp_heap_trace_free_hook(void* ptr);
+#endif
+
 /**
  * @brief Allocate a chunk of memory which has the given capabilities
  *
  * Equivalent semantics to libc malloc(), for capability-aware memory.
- *
- * In IDF, ``malloc(p)`` is equivalent to ``heap_caps_malloc(p, MALLOC_CAP_8BIT)``.
  *
  * @param size Size, in bytes, of the amount of memory to allocate
  * @param caps        Bitwise OR of MALLOC_CAP_* flags indicating the type
@@ -254,6 +279,9 @@ void heap_caps_print_heap_info( uint32_t caps );
  *
  * @param print_errors Print specific errors if heap corruption is found.
  *
+ * @note Please increase the value of `CONFIG_ESP_INT_WDT_TIMEOUT_MS` when using this API
+ * with PSRAM enabled.
+ *
  * @return True if all heaps are valid, False if at least one heap is corrupt.
  */
 bool heap_caps_check_integrity_all(bool print_errors);
@@ -271,6 +299,9 @@ bool heap_caps_check_integrity_all(bool print_errors);
  * @param caps        Bitwise OR of MALLOC_CAP_* flags indicating the type
  *                    of memory
  * @param print_errors Print specific errors if heap corruption is found.
+ *
+ * @note Please increase the value of `CONFIG_ESP_INT_WDT_TIMEOUT_MS` when using this API
+ * with PSRAM capability flag.
  *
  * @return True if all heaps are valid, False if at least one heap is corrupt.
  */

@@ -1,3 +1,4 @@
+
 # Core Components
 
 ## Overview
@@ -42,7 +43,7 @@ This can also contain files provided by the architecture vendor.
 Example:
 
 - `xt_set_exception_handler`
-- `riscv_global_interrupts_enable`
+- `rv_utils_intr_enable`
 - `ERI_PERFMON_MAX`
 
 #### `esp_common`
@@ -100,6 +101,18 @@ Example:
 
 - `malloc` is implemented in terms of the component `heap`'s functions
 - `gettimeofday` is implemented in terms of system time in `esp_system`
+
+#### `esp_mm`
+
+Memory management. Currently, this encompasses:
+
+- Memory mapping for MMU supported memories
+- Memory synchronisation via Cache
+- Utils such as APIs to convert between virtual address and physical address
+
+#### `esp_psram`
+
+Contains implementation of PSRAM services
 
 #### `esp_system`
 

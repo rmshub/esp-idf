@@ -32,12 +32,13 @@ void ble_mesh_register_server(void)
 int ble_mesh_module_publish_message(int argc, char **argv)
 {
     esp_err_t err;
+    esp_ble_mesh_elem_t *element = NULL;
     esp_ble_mesh_model_t *model = NULL;
     uint8_t *data = NULL;
     uint8_t device_role = ROLE_NODE;
     uint16_t length = 0;
 
-    ESP_LOGD(TAG, "enter %s \n", __func__);
+    ESP_LOGD(TAG, "enter %s", __func__);
 
     int nerrors = arg_parse(argc, argv, (void **) &msg_publish);
     if (nerrors != 0) {
@@ -46,10 +47,27 @@ int ble_mesh_module_publish_message(int argc, char **argv)
     }
 
     data = malloc(strlen(msg_publish.data->sval[0]));
-    get_value_string((char *)msg_publish.data->sval[0], (char *) data);
+    if (data == NULL) {
+        ESP_LOGE(TAG, "ble mesh malloc failed, %d", __LINE__);
+        return ESP_ERR_NO_MEM;
+    } else {
+        get_value_string((char *)msg_publish.data->sval[0], (char *) data);
+    }
 
     arg_int_to_value(msg_publish.role, device_role, "device role");
-    model = ble_mesh_get_model(msg_publish.model->ival[0]);
+
+    element = esp_ble_mesh_find_element(esp_ble_mesh_get_primary_element_address());
+    if (!element) {
+        ESP_LOGE(TAG, "Element 0x%04x not exists", esp_ble_mesh_get_primary_element_address());
+        return ESP_FAIL;
+    }
+
+    model = esp_ble_mesh_find_sig_model(element, msg_publish.model->ival[0]);
+    if (!model) {
+        ESP_LOGE(TAG, "MsgPublish：Load Model Fail");
+        return ESP_FAIL;
+    }
+
     if (msg_publish.role->count != 0) {
         device_role = msg_publish.role->ival[0];
     }
@@ -69,14 +87,17 @@ int ble_mesh_module_publish_message(int argc, char **argv)
     if (msg_publish.data->count != 0) {
         length = strlen(msg_publish.data->sval[0]);
         data = malloc((length + 1) * sizeof(uint8_t));
-        if (data != NULL) {
-            err = get_value_string((char *)msg_publish.data->sval[0], (char *) data);
+        if (data == NULL) {
+            ESP_LOGE(TAG, "ble mesh malloc failed, %d", __LINE__);
+            return ESP_ERR_NO_MEM;
+        } else {
+            get_value_string((char *)msg_publish.data->sval[0], (char *) data);
         }
     }
 
     err = esp_ble_mesh_model_publish(model, msg_publish.opcode->ival[0], length, data, device_role);
 
-    ESP_LOGD(TAG, "exit %s \n", __func__);
+    ESP_LOGD(TAG, "exit %s", __func__);
     free(data);
     return err;
 }

@@ -6,7 +6,7 @@ ESP-IDF is the development framework for Espressif SoCs supported on Windows, Li
 
 # ESP-IDF Release Support Schedule
 
-![Support Schedule](https://dl.espressif.com/dl/esp-idf/support-periods.svg)
+![Support Schedule](https://dl.espressif.com/dl/esp-idf/support-periods.svg?v=1)
 
 - Please read [the support policy](SUPPORT_POLICY.md) and [the documentation](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/versions.html) for more information about ESP-IDF versions.
 - Please see the [End-of-Life Advisories](https://www.espressif.com/en/support/documents/advisories?keys=&field_type_of_advisory_tid%5B%5D=817) for information about ESP-IDF releases with discontinued support.
@@ -15,14 +15,15 @@ ESP-IDF is the development framework for Espressif SoCs supported on Windows, Li
 
 The following table shows ESP-IDF support of Espressif SoCs where ![alt text][preview] and ![alt text][supported] denote preview status and support, respectively. The preview support is usually limited in time and intended for beta versions of chips. Please use an ESP-IDF release where the desired SoC is already supported.
 
-|Chip         |          v4.1         |          v4.2          |         v4.3           |          v4.4          |          v5.0          |                                                                                      |
-|:----------- |:---------------------:| :---------------------:| :---------------------:| :---------------------:| :---------------------:|:------------------------------------------------------------------------------------ |
-|ESP32        |![alt text][supported] | ![alt text][supported] | ![alt text][supported] | ![alt text][supported] | ![alt text][supported] |                                                                                      |
-|ESP32-S2     |                       | ![alt text][supported] | ![alt text][supported] | ![alt text][supported] | ![alt text][supported] |                                                                                      |
-|ESP32-C3     |                       |                        | ![alt text][supported] | ![alt text][supported] | ![alt text][supported] |                                                                                      |
-|ESP32-S3     |                       |                        |                        | ![alt text][supported] | ![alt text][supported] | [Announcement](https://www.espressif.com/en/news/ESP32_S3)                           |
-|ESP32-C2     |                       |                        |                        |                        | ![alt text][supported] | [Announcement](https://blog.espressif.com/esp32-c2-and-why-it-matter-s-bcf4d7d0b2c6) |
-|ESP32-H2     |                       |                        |                        | ![alt text][preview]   | ![alt text][preview]   | [Announcement](https://www.espressif.com/en/news/ESP32_H2)                           |
+|Chip         |          v4.2          |         v4.3           |          v4.4          |          v5.0          |         v5.1           |                                                            |
+|:----------- | :---------------------:| :---------------------:| :---------------------:| :---------------------:| :--------------------: | :----------------------------------------------------------|
+|ESP32        | ![alt text][supported] | ![alt text][supported] | ![alt text][supported] | ![alt text][supported] | ![alt text][supported] |                                                            |
+|ESP32-S2     | ![alt text][supported] | ![alt text][supported] | ![alt text][supported] | ![alt text][supported] | ![alt text][supported] |                                                            |
+|ESP32-C3     |                        | ![alt text][supported] | ![alt text][supported] | ![alt text][supported] | ![alt text][supported] |                                                            |
+|ESP32-S3     |                        |                        | ![alt text][supported] | ![alt text][supported] | ![alt text][supported] | [Announcement](https://www.espressif.com/en/news/ESP32_S3) |
+|ESP32-C2     |                        |                        |                        | ![alt text][supported] | ![alt text][supported] | [Announcement](https://www.espressif.com/en/news/ESP32-C2) |
+|ESP32-C6     |                        |                        |                        |                        | ![alt text][supported] | [Announcement](https://www.espressif.com/en/news/ESP32_C6) |
+|ESP32-H2     |                        |                        |                        |                        | ![alt text][supported] | [Announcement](https://www.espressif.com/en/news/ESP32_H2) |
 
 [supported]: https://img.shields.io/badge/-supported-green "supported"
 [preview]: https://img.shields.io/badge/-preview-orange "preview"
@@ -88,7 +89,7 @@ You don't need to run `idf.py build` before running `idf.py flash`, `idf.py flas
 
 ## Viewing Serial Output
 
-The `idf.py monitor` target uses the [idf_monitor tool](https://docs.espressif.com/projects/esp-idf/en/latest/get-started/idf-monitor.html) to display serial output from Espressif SoCs. idf_monitor also has a range of features to decode crash output and interact with the device. [Check the documentation page for details](https://docs.espressif.com/projects/esp-idf/en/latest/get-started/idf-monitor.html).
+The `idf.py monitor` target uses the [esp-idf-monitor tool](https://github.com/espressif/esp-idf-monitor) to display serial output from Espressif SoCs. esp-idf-monitor also has a range of features to decode crash output and interact with the device. [Check the documentation page for details](https://docs.espressif.com/projects/esp-idf/en/latest/get-started/idf-monitor.html).
 
 Exit the monitor by typing Ctrl-].
 

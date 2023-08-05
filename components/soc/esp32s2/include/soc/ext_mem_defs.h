@@ -43,7 +43,7 @@ extern "C" {
 #define DPORT_CACHE_ADDRESS_HIGH      	0x3f800000
 
 #define BUS_SIZE(bus_name)                 (bus_name##_ADDRESS_HIGH - bus_name##_ADDRESS_LOW)
-#define ADDRESS_IN_BUS(bus_name, vaddr)    ((vaddr) >= bus_name##_ADDRESS_LOW && (vaddr) <= bus_name##_ADDRESS_HIGH)
+#define ADDRESS_IN_BUS(bus_name, vaddr)    ((vaddr) >= bus_name##_ADDRESS_LOW && (vaddr) < bus_name##_ADDRESS_HIGH)
 
 #define ADDRESS_IN_IRAM0(vaddr)            ADDRESS_IN_BUS(IRAM0, vaddr)
 #define ADDRESS_IN_IRAM0_CACHE(vaddr)      ADDRESS_IN_BUS(IRAM0_CACHE, vaddr)
@@ -98,9 +98,6 @@ extern "C" {
 #define MMU_ACCESS_FLASH                BIT(15)
 #define MMU_ACCESS_SPIRAM               BIT(16)
 
-#define FLASH_MMU_TABLE ((volatile uint32_t*) DR_REG_MMU_TABLE)
-#define FLASH_MMU_TABLE_SIZE (ICACHE_MMU_SIZE/sizeof(uint32_t))
-
 /**
  * MMU entry valid bit mask for mapping value. For an entry:
  * valid bit + value bits
@@ -109,7 +106,7 @@ extern "C" {
 #define MMU_VALID_VAL_MASK 0x3fff
 /**
  * Max MMU available paddr page num.
- * `MMU_MAX_PADDR_PAGE_NUM * CONFIG_MMU_PAGE_SIZE` means the max paddr address supported by the MMU. e.g.:
+ * `MMU_MAX_PADDR_PAGE_NUM * SOC_MMU_PAGE_SIZE` means the max paddr address supported by the MMU. e.g.:
  * 16384 * 64KB, means MMU can support 1GB paddr at most
  */
 #define MMU_MAX_PADDR_PAGE_NUM    16384
@@ -136,6 +133,39 @@ extern "C" {
 #define CACHE_MEMORY_BANK1_ADDR        0x3FFB2000
 #define CACHE_MEMORY_BANK2_ADDR        0x3FFB4000
 #define CACHE_MEMORY_BANK3_ADDR        0x3FFB6000
+
+
+#define SOC_MMU_DBUS_VADDR_BASE               0x3E000000
+#define SOC_MMU_IBUS_VADDR_BASE               0x40000000
+
+/*------------------------------------------------------------------------------
+ * MMU Linear Address
+ *----------------------------------------------------------------------------*/
+/**
+ * - 64KB MMU page size: the last 0xFFFF, which is the offset
+ * - 384 MMU entries, needs 0x1FF to hold it.
+ *
+ * Therefore, 0x1FF,FFFF
+ */
+#define SOC_MMU_LINEAR_ADDR_MASK              0x1FFFFFF
+
+#define SOC_MMU_IRAM0_LINEAR_ADDRESS_LOW      (IRAM0_CACHE_ADDRESS_LOW & SOC_MMU_LINEAR_ADDR_MASK)
+#define SOC_MMU_IRAM0_LINEAR_ADDRESS_HIGH     (IRAM0_CACHE_ADDRESS_HIGH & SOC_MMU_LINEAR_ADDR_MASK)
+
+#define SOC_MMU_IRAM1_LINEAR_ADDRESS_LOW      (IRAM1_ADDRESS_LOW & SOC_MMU_LINEAR_ADDR_MASK)
+#define SOC_MMU_IRAM1_LINEAR_ADDRESS_HIGH     (IRAM1_ADDRESS_HIGH & SOC_MMU_LINEAR_ADDR_MASK)
+
+#define SOC_MMU_DROM0_LINEAR_ADDRESS_LOW      (DROM0_ADDRESS_LOW & SOC_MMU_LINEAR_ADDR_MASK)
+#define SOC_MMU_DROM0_LINEAR_ADDRESS_HIGH     (DROM0_ADDRESS_HIGH & SOC_MMU_LINEAR_ADDR_MASK)
+
+#define SOC_MMU_DPORT_LINEAR_ADDRESS_LOW      (DPORT_CACHE_ADDRESS_LOW & SOC_MMU_LINEAR_ADDR_MASK)
+#define SOC_MMU_DPORT_LINEAR_ADDRESS_HIGH     (DPORT_CACHE_ADDRESS_HIGH & SOC_MMU_LINEAR_ADDR_MASK)
+
+#define SOC_MMU_DRAM1_LINEAR_ADDRESS_LOW      (DRAM1_ADDRESS_LOW & SOC_MMU_LINEAR_ADDR_MASK)
+#define SOC_MMU_DRAM1_LINEAR_ADDRESS_HIGH     (DRAM1_ADDRESS_HIGH & SOC_MMU_LINEAR_ADDR_MASK)
+
+#define SOC_MMU_DRAM0_LINEAR_ADDRESS_LOW      (DRAM0_CACHE_ADDRESS_LOW & SOC_MMU_LINEAR_ADDR_MASK)
+#define SOC_MMU_DRAM0_LINEAR_ADDRESS_HIGH     (DRAM0_CACHE_ADDRESS_HIGH & SOC_MMU_LINEAR_ADDR_MASK)
 
 #ifdef __cplusplus
 }

@@ -1,30 +1,40 @@
 /*
- * SPDX-FileCopyrightText: 2020-2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2020-2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
 #include <stdio.h>
 
-#include "esp_spi_flash.h"
+#include "spi_flash_mmap.h"
 
+#if CONFIG_IDF_TARGET_ESP32P4
+#include "soc/cache_reg.h"
+#else
 #include "soc/extmem_reg.h"
+#endif
 #include "esp_private/panic_internal.h"
 #include "esp_private/panic_reason.h"
 #include "riscv/rvruntime-frames.h"
+#include "riscv/rv_utils.h"
 #include "esp_private/cache_err_int.h"
+#include "soc/timer_periph.h"
 
 #if CONFIG_ESP_SYSTEM_MEMPROT_FEATURE
-#if CONFIG_IDF_TARGET_ESP32C2
-#include "esp32c2/memprot.h"
-#else
 #include "esp_private/esp_memprot_internal.h"
 #include "esp_memprot.h"
-#endif
 #endif
 
 #if CONFIG_ESP_SYSTEM_USE_EH_FRAME
 #include "esp_private/eh_frame_parser.h"
+#include "esp_private/cache_utils.h"
+#endif
+
+#if CONFIG_ESP_SYSTEM_HW_STACK_GUARD
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "esp_cpu.h"
+#include "esp_private/hw_stack_guard.h"
 #endif
 
 
@@ -75,6 +85,7 @@ static inline bool test_and_print_register_bits(const uint32_t status,
  */
 static inline void print_cache_err_details(const void *frame)
 {
+#if !CONFIG_IDF_TARGET_ESP32C6 && !CONFIG_IDF_TARGET_ESP32H2 && !CONFIG_IDF_TARGET_ESP32P4 // ESP32P4-TODO, ESP32C6-TODO, ESP32H2-TODO: IDF-5657
     /* Define the array that contains the status (bits) to test on the register
      * EXTMEM_CORE0_ACS_CACHE_INT_ST_REG. each bit is accompanied by a small
      * message.
@@ -147,8 +158,37 @@ static inline void print_cache_err_details(const void *frame)
             panic_print_str("\r\n");
         }
     }
+#endif
 }
 
+#if CONFIG_ESP_SYSTEM_HW_STACK_GUARD
+static inline void print_assist_debug_details(const void *frame)
+{
+    uint32_t core_id = esp_cpu_get_core_id();
+    uint32_t sp_min, sp_max;
+    const char *task_name = pcTaskGetName(xTaskGetCurrentTaskHandleForCPU(core_id));
+    esp_hw_stack_guard_get_bounds(&sp_min, &sp_max);
+
+    panic_print_str("\r\n");
+    if (!esp_hw_stack_guard_is_fired()) {
+        panic_print_str("ASSIST_DEBUG is not triggered BUT interrupt occured!\r\n\r\n");
+    }
+
+    panic_print_str("Detected in task \"");
+    panic_print_str(task_name);
+    panic_print_str("\" at 0x");
+    panic_print_hex((int) esp_hw_stack_guard_get_pc());
+    panic_print_str("\r\n");
+    panic_print_str("Stack pointer: 0x");
+    panic_print_hex((int) ((RvExcFrame *)frame)->sp);
+    panic_print_str("\r\n");
+    panic_print_str("Stack bounds: 0x");
+    panic_print_hex((int) sp_min);
+    panic_print_str(" - 0x");
+    panic_print_hex((int) sp_max);
+    panic_print_str("\r\n\r\n");
+}
+#endif // CONFIG_ESP_SYSTEM_HW_STACK_GUARD
 
 /**
  * Function called when a memory protection error occurs (PMS). It prints details such as the
@@ -159,9 +199,11 @@ static inline void print_cache_err_details(const void *frame)
 static esp_memp_intr_source_t s_memp_intr = {MEMPROT_TYPE_INVALID, -1};
 
 #define PRINT_MEMPROT_ERROR(err) \
-        panic_print_str("N/A (error "); \
-        panic_print_str(esp_err_to_name(err)); \
-        panic_print_str(")");
+        do { \
+            panic_print_str("N/A (error "); \
+            panic_print_str(esp_err_to_name(err)); \
+            panic_print_str(")"); \
+        } while(0)
 
 static inline void print_memprot_err_details(const void *frame __attribute__((unused)))
 {
@@ -176,40 +218,40 @@ static inline void print_memprot_err_details(const void *frame __attribute__((un
 
     panic_print_str("\r\n  faulting address: ");
     void *faulting_addr;
-    esp_err_t res = esp_mprot_get_violate_addr(s_memp_intr.mem_type, &faulting_addr, &s_memp_intr.core);
+    esp_err_t res = esp_mprot_get_violate_addr(s_memp_intr.mem_type, &faulting_addr, s_memp_intr.core);
     if (res == ESP_OK) {
         panic_print_str("0x");
         panic_print_hex((int)faulting_addr);
     } else {
-        PRINT_MEMPROT_ERROR(res)
+        PRINT_MEMPROT_ERROR(res);
     }
 
     panic_print_str( "\r\n  world: ");
     esp_mprot_pms_world_t world;
-    res = esp_mprot_get_violate_world(s_memp_intr.mem_type, &world, &s_memp_intr.core);
+    res = esp_mprot_get_violate_world(s_memp_intr.mem_type, &world, s_memp_intr.core);
     if (res == ESP_OK) {
         panic_print_str(esp_mprot_pms_world_to_str(world));
     } else {
-        PRINT_MEMPROT_ERROR(res)
+        PRINT_MEMPROT_ERROR(res);
     }
 
     panic_print_str( "\r\n  operation type: ");
     uint32_t operation;
-    res = esp_mprot_get_violate_operation(s_memp_intr.mem_type, &operation, &s_memp_intr.core);
+    res = esp_mprot_get_violate_operation(s_memp_intr.mem_type, &operation, s_memp_intr.core);
     if (res == ESP_OK) {
         panic_print_str(esp_mprot_oper_type_to_str(operation));
     } else {
-        PRINT_MEMPROT_ERROR(res)
+        PRINT_MEMPROT_ERROR(res);
     }
 
     if (esp_mprot_has_byte_enables(s_memp_intr.mem_type)) {
         panic_print_str("\r\n  byte-enables: " );
         uint32_t byte_enables;
-        res = esp_mprot_get_violate_byte_enables(s_memp_intr.mem_type, &byte_enables, &s_memp_intr.core);
+        res = esp_mprot_get_violate_byte_enables(s_memp_intr.mem_type, &byte_enables, s_memp_intr.core);
         if (res == ESP_OK) {
             panic_print_hex(byte_enables);
         } else {
-            PRINT_MEMPROT_ERROR(res)
+            PRINT_MEMPROT_ERROR(res);
         }
     }
 
@@ -255,20 +297,7 @@ void panic_soc_fill_info(void *f, panic_info_t *info)
 {
     RvExcFrame *frame = (RvExcFrame *) f;
 
-    /* Please keep in sync with PANIC_RSN_* defines */
-    static const char *pseudo_reason[PANIC_RSN_COUNT] = {
-        "Unknown reason",
-        "Interrupt wdt timeout on CPU0",
-#if SOC_CPU_NUM > 1
-        "Interrupt wdt timeout on CPU1",
-#endif
-        "Cache error",
-#if CONFIG_ESP_SYSTEM_MEMPROT_FEATURE
-        "Memory protection fault",
-#endif
-    };
-
-    info->reason = pseudo_reason[0];
+    info->reason = "Unknown reason";
     info->addr = (void *) frame->mepc;
 
     /* The mcause has been set by the CPU when the panic occured.
@@ -281,10 +310,10 @@ void panic_soc_fill_info(void *f, panic_info_t *info)
          * about why the error happened. */
 
         info->core = esp_cache_err_get_cpuid();
-        info->reason = pseudo_reason[PANIC_RSN_CACHEERR];
+        info->reason = "Cache error";
         info->details = print_cache_err_details;
 
-    } else if (frame->mcause == ETS_T1_WDT_INUM) {
+    } else if (frame->mcause == ETS_INT_WDT_INUM) {
         /* Watchdog interrupt occured, get the core on which it happened
          * and update the reason/message accordingly. */
 
@@ -293,14 +322,24 @@ void panic_soc_fill_info(void *f, panic_info_t *info)
         info->exception = PANIC_EXCEPTION_IWDT;
 
 #if SOC_CPU_NUM > 1
+#error "TODO: define PANIC_RSN_INTWDT_CPU1 in panic_reason.h"
         _Static_assert(PANIC_RSN_INTWDT_CPU0 + 1 == PANIC_RSN_INTWDT_CPU1,
                        "PANIC_RSN_INTWDT_CPU1 must be equal to PANIC_RSN_INTWDT_CPU0 + 1");
+        info->reason = core == 0 ? "Interrupt wdt timeout on CPU0" : "Interrupt wdt timeout on CPU1";
+#else
+        info->reason = "Interrupt wdt timeout on CPU0";
 #endif
-        info->reason = pseudo_reason[PANIC_RSN_INTWDT_CPU0 + core];
     }
+#if CONFIG_ESP_SYSTEM_HW_STACK_GUARD
+    else if (frame->mcause == ETS_ASSIST_DEBUG_INUM) {
+        info->core = esp_cache_err_get_cpuid();
+        info->reason = "Stack protection fault";
+        info->details = print_assist_debug_details;
+    }
+#endif
 #if CONFIG_ESP_SYSTEM_MEMPROT_FEATURE
     else if (frame->mcause == ETS_MEMPROT_ERR_INUM) {
-        info->reason = pseudo_reason[PANIC_RSN_MEMPROT];
+        info->reason = "Memory protection fault";
         info->details = print_memprot_err_details;
         info->core = esp_mprot_get_active_intr(&s_memp_intr) == ESP_OK ? s_memp_intr.core : -1;
     }
@@ -310,10 +349,9 @@ void panic_soc_fill_info(void *f, panic_info_t *info)
 void panic_arch_fill_info(void *frame, panic_info_t *info)
 {
     RvExcFrame *regs = (RvExcFrame *) frame;
-    info->core = 0;
+    info->core = rv_utils_get_core_id();
     info->exception = PANIC_EXCEPTION_FAULT;
 
-    //Please keep in sync with PANIC_RSN_* defines
     static const char *reason[] = {
         "Instruction address misaligned",
         "Instruction access fault",
@@ -342,7 +380,6 @@ void panic_arch_fill_info(void *frame, panic_info_t *info)
     info->description = "Exception was unhandled.";
 
     info->addr = (void *) regs->mepc;
-    info->frame = &regs;
 }
 
 static void panic_print_basic_backtrace(const void *frame, int core)
